@@ -1,0 +1,73 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">CW 04B: External Referral Form</div>
+  <div class="conf">CONFIDENTIAL</div>
+  <p class="muted">To be completed in all instances where a client is referred to an external service provider. Provide client with original copy of referral and keep a copy on the client's file or Referral file.</p>
+  <table>
+    <tr><th style="width:22%;">Case referred from</th><td>{{ org_name }}</td><th style="width:22%;">Case referred to (Organisation name)</th><td></td></tr>
+    <tr><th>Service Point</th><td></td><th>Physical Address</th><td></td></tr>
+    <tr><th>Tel / E-mail</th><td></td><th>Tel / E-mail</th><td></td></tr>
+  </table>
+  <h3 class="sub">Referral linked to (mark X where applicable)</h3>
+  <div class="half">
+    <div>
+      <div class="lbl">Social Welfare Services (Focus areas)</div>
+      <div class="fld"><span class="chk"></span>Poverty alleviation</div>
+      <div class="fld"><span class="chk"></span>Social integration</div>
+      <div class="fld"><span class="chk"></span>Family preservation</div>
+      <div class="fld"><span class="chk"></span>Social Crime Prevention</div>
+      <div class="fld"><span class="chk"></span>Victim Empowerment</div>
+      <div class="fld"><span class="chk"></span>Care and protection of Vulnerable Groups - Children</div>
+      <div class="fld"><span class="chk"></span>- Persons with Disabilities</div>
+      <div class="fld"><span class="chk"></span>- Older Persons</div>
+      <div class="fld"><span class="chk"></span>Prevention, Care &amp; Support of Substance abuse</div>
+      <div class="fld"><span class="chk"></span>Prevention, Care &amp; Support of HIV and Aids</div>
+      <div class="fld"><span class="chk"></span>Mental Health/Psychosocial</div>
+    </div>
+    <div>
+      <div class="lbl">Other services</div>
+      <div class="fld"><span class="chk"></span>Grants</div>
+      <div class="fld"><span class="chk"></span>Food and nutrition</div>
+      <div class="fld"><span class="chk"></span>Education</div>
+      <div class="fld"><span class="chk"></span>Health</div>
+      <div class="fld"><span class="chk"></span>Shelter for victims of violence</div>
+      <div class="fld"><span class="chk"></span>Police</div>
+      <div class="fld"><span class="chk"></span>Legal assistance</div>
+      <div class="fld"><span class="chk"></span>HIV services</div>
+      <div class="fld"><span class="chk"></span>Other (specify) ____________</div>
+    </div>
+  </div>
+  <h3 class="sub">Details of the client</h3>
+  <table>
+    <tr><th style="width:22%;">Client name</th><td>{{ cg.name }} {{ cg.surname }}</td><th style="width:22%;">DSD Reference Number</th><td>{{ hh.org_household_number }}</td></tr>
+    <tr><th>Gender</th><td><span class="chk">{% if cg.sex == 'Male' %}X{% endif %}</span>Male <span class="chk">{% if cg.sex == 'Female' %}X{% endif %}</span>Female</td>
+        <th>Date of Birth</th><td>{{ cg.date_of_birth|date:"Y-m-d" }}</td></tr>
+    <tr><th>Identity no</th><td>{{ cg.id_number }}</td><th>Contact number/s</th><td>{{ cg.cell_number }}</td></tr>
+    <tr><th>Address, including district</th><td colspan="3">{{ hh.street }} {{ hh.town }}, {{ hh.district }}, {{ hh.province }}</td></tr>
+  </table>
+  <div class="fld"><span class="lbl">Risk Level:</span>
+    <span class="chk"></span>Emergency (24-48 hrs) <span class="chk"></span>High (1 week) <span class="chk"></span>Mild (3 weeks)</div>
+</div>
+
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="conf">CW 04B: EXTERNAL REFERRAL FORM | CONFIDENTIAL</div>
+  <h3 class="sub">Consent and information sharing</h3>
+  <div class="q">Describe preferred way to contact the client and any restrictions on contacting the client.</div>
+  <div class="ans" style="min-height:30px;"></div>
+  <div class="fld">Has the client consented to share information with the service provider?
+    <span class="chk"></span>Yes <span class="chk"></span>No &nbsp; If yes, add signature: ________________</div>
+  <div class="q">Briefly describe service required and any relevant information the client consented to share.</div>
+  <div class="ans" style="min-height:80px;"></div>
+  <div class="fld">Feedback required from service provider: <span class="chk"></span>Yes <span class="chk"></span>No
+    &nbsp;<span class="lbl">Date Feedback required:</span> ____________</div>
+  <table style="margin-top:10px;">
+    <tr><th>SW/SAW Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>{{ user.get_full_name|default:user.username }}</td><td>&nbsp;</td><td></td><td></td></tr>
+  </table>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

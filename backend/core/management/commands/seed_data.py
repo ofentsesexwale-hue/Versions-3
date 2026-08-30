@@ -1,0 +1,206 @@
+"""Seed groups, demo users, and fictional (AI-generated) test data.
+
+ALL data produced here is fictional. No real beneficiary information is used.
+Household numbers are prefixed with "TEST" to make this unmistakable.
+"""
+import random
+from datetime import date, timedelta
+
+from django.contrib.auth.models import Group, User
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+from faker import Faker
+
+from core import choices
+from core.models import (
+    Caregiver,
+    CaseFileChecklistItem,
+    Household,
+    HouseholdMember,
+)
+
+fake = Faker('en_US')
+
+DEMO_USERS = [
+    ('admin', 'admin123', 'admin', 'Amina', 'Ndlovu', True),
+    ('supervisor', 'supervisor123', 'supervisor', 'Sipho', 'Khumalo', False),
+    ('caseworker', 'caseworker123', 'case-worker', 'Cindy', 'Mokoena', False),
+    ('caseworker2', 'caseworker123', 'case-worker', 'Thabo', 'Zulu', False),
+    ('capturer', 'capturer123', 'data-capturer', 'Cathy', 'Dlamini', False),
+]
+
+SA_SURNAMES = ['Nkosi', 'Dlamini', 'Mokoena', 'Khumalo', 'Ndlovu', 'Zulu', 'Sithole',
+               'Mthembu', 'Mahlangu', 'Botha', 'Van der Merwe', 'Naidoo', 'Pillay',
+               'Adams', 'Jacobs', 'Molefe', 'Radebe', 'Mabaso', 'Tshabalala', 'Cele']
+PROVINCES = ['KwaZulu-Natal', 'Gauteng', 'Eastern Cape', 'Limpopo', 'Mpumalanga',
+             'Western Cape', 'North West', 'Free State', 'Northern Cape']
+TOWNS = ['Umlazi', 'Soweto', 'Mthatha', 'Polokwane', 'Nelspruit', 'Khayelitsha',
+         'Mahikeng', 'Bloemfontein', 'Kimberley', 'Pietermaritzburg']
+LANGUAGES = ['isiZulu', 'isiXhosa', 'Sepedi', 'Setswana', 'English', 'Afrikaans', 'Sesotho']
+RELATIONSHIPS = ['Son', 'Daughter', 'Grandchild', 'Niece', 'Nephew', 'Foster child', 'Sibling']
+
+
+def luhn_check_digit(number_str):
+    digits = [int(d) for d in number_str]
+    total = 0
+    for i, d in enumerate(reversed(digits)):
+        if i % 2 == 0:
+            d = d * 2
+            if d > 9:
+                d -= 9
+        total += d
+    return (10 - (total % 10)) % 10
+
+
+def sa_id_number(dob, sex):
+    yy = dob.strftime('%y')
+    mm = dob.strftime('%m')
+    dd = dob.strftime('%d')
+    seq = random.randint(5000, 9999) if sex == 'Male' else random.randint(0, 4999)
+    seq_str = f'{seq:04d}'
+    citizen = '0'
+    a = '8'
+    partial = f'{yy}{mm}{dd}{seq_str}{citizen}{a}'
+    check = luhn_check_digit(partial)
+    return f'{partial}{check}'
+
+
+class Command(BaseCommand):
+    help = 'Seed groups, demo users, and fictional test data.'
+
+    def add_arguments(self, parser):
+        parser.add_argument('--force', action='store_true',
+                            help='Wipe existing households and reseed.')
+        parser.add_argument('--count', type=int, default=60)
+
+    def handle(self, *args, **options):
+        self.stdout.write('Creating groups...')
+        for role in choices_all_roles():
+            Group.objects.get_or_create(name=role)
+
+        self.stdout.write('Creating demo users...')
+        users_by_role = {}
+        for username, password, role, first, last, is_super in DEMO_USERS:
+            user, created = User.objects.get_or_create(
+                username=username,
+                defaults={'first_name': first, 'last_name': last,
+                          'is_staff': is_super, 'is_superuser': is_super},
+            )
+            user.first_name = first
+            user.last_name = last
+            user.is_staff = is_super
+            user.is_superuser = is_super
+            user.set_password(password)
+            user.save()
+            user.groups.clear()
+            user.groups.add(Group.objects.get(name=role))
+            users_by_role[role] = user
+            self.stdout.write(f'  {username} / {password}  ({role})')
+
+        admin_user = users_by_role['admin']
+        caseworker = users_by_role['case-worker']
+
+        if options['force']:
+            self.stdout.write('Wiping existing households...')
+            Household.objects.all().delete()
+
+        if Household.objects.exists():
+            self.stdout.write(self.style.WARNING(
+                'Households already exist; skipping data seed. Use --force to reseed.'))
+            self.stdout.write(self.style.SUCCESS('Done.'))
+            return
+
+        count = options['count']
+        self.stdout.write(f'Creating {count} fictional households...')
+        cat_keys = [c[0] for c in choices.CATEGORY_CHOICES]
+
+        for i in range(1, count + 1):
+            surname = random.choice(SA_SURNAMES)
+            hh = Household.objects.create(
+                org_household_number=f'TEST-{i:04d}',
+                house_number=str(random.randint(1, 250)),
+                street=fake.street_name(),
+                town=random.choice(TOWNS),
+                province=random.choice(PROVINCES),
+                district=f'{random.choice(TOWNS)} District',
+                municipality=f'{random.choice(TOWNS)} Local Municipality',
+                ward=f'Ward {random.randint(1, 40)}',
+                date_registered=date.today() - timedelta(days=random.randint(0, 900)),
+            )
+
+            # Caregiver (Head of Household)
+            cg_sex = random.choice(['Male', 'Female'])
+            cg_dob = fake.date_between(start_date='-70y', end_date='-25y')
+            cg = Caregiver(
+                household=hh,
+                id_type='SA ID Number',
+                id_number=sa_id_number(cg_dob, cg_sex),
+                name=fake.first_name_male() if cg_sex == 'Male' else fake.first_name_female(),
+                surname=surname,
+                known_as='',
+                nationality='South African',
+                date_of_birth=cg_dob,
+                sex=cg_sex,
+                race=random.choice(['African', 'African', 'African', 'Coloured', 'White', 'Indian']),
+                marital_status=random.choice([c[0] for c in choices.MARITAL_STATUS_CHOICES]),
+                disability=random.random() < 0.08,
+                cell_number=f'0{random.randint(60, 84)}{random.randint(1000000, 9999999)}',
+                home_language=random.choice(LANGUAGES),
+                headship_type=random.choice([c[0] for c in choices.HEADSHIP_TYPE_CHOICES]),
+                date_joined=hh.date_registered,
+            )
+            self._apply_confirm_flags(cg, admin_user)
+            cg.save()
+
+            # Members (children)
+            for _ in range(random.randint(1, 4)):
+                m_sex = random.choice(['Male', 'Female'])
+                m_dob = fake.date_between(start_date='-18y', end_date='-1y')
+                mem = HouseholdMember(
+                    household=hh,
+                    id_type=random.choice(['SA ID Number', 'SA ID Number', 'Passport Number']),
+                    id_number=sa_id_number(m_dob, m_sex),
+                    name=fake.first_name_male() if m_sex == 'Male' else fake.first_name_female(),
+                    surname=surname,
+                    nationality='South African',
+                    date_of_birth=m_dob,
+                    sex=m_sex,
+                    race=cg.race,
+                    disability=random.random() < 0.06,
+                    relationship_to_head=random.choice(RELATIONSHIPS),
+                    date_joined=hh.date_registered,
+                )
+                self._apply_confirm_flags(mem, admin_user)
+                mem.save()
+
+            # Checklist rows
+            for cat_key, sub_item in choices.CHECKLIST_TEMPLATE:
+                has = random.choice(['Yes', 'Yes', 'No', ''])
+                CaseFileChecklistItem.objects.create(
+                    household=hh,
+                    category=cat_key,
+                    sub_item=sub_item,
+                    has_evidence=has,
+                )
+
+            # Assign ~25% of households to the demo case-worker
+            if random.random() < 0.25:
+                hh.assigned_to.add(caseworker)
+
+        self.stdout.write(self.style.SUCCESS(
+            f'Seeded {count} households. Case-worker "{caseworker.username}" has '
+            f'{caseworker.assigned_households.count()} assigned.'))
+
+    def _apply_confirm_flags(self, person, admin_user):
+        now = timezone.now()
+        for field in ['surname', 'id_number', 'date_of_birth']:
+            confirmed = random.random() < 0.6
+            setattr(person, f'{field}_confirmed', confirmed)
+            if confirmed:
+                setattr(person, f'{field}_confirmed_by', admin_user)
+                setattr(person, f'{field}_confirmed_at', now)
+
+
+def choices_all_roles():
+    from django.conf import settings
+    return settings.ALL_ROLES

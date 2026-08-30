@@ -1,0 +1,31 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  <div class="orghead"><div class="on">{{ org_name }}</div><div>Educational Progress Record</div></div>
+  <table class="nb">
+    <tr><td class="nb"><span class="lbl">Year:</span> {{ now|date:"Y" }}</td>
+        <td class="nb"><span class="lbl">Family name:</span> {{ cg.surname }}</td>
+        <td class="nb"><span class="lbl">Household:</span> {{ hh.org_household_number }}</td></tr>
+  </table>
+  <table>
+    <tr>
+      <th>Surname</th><th>Name</th><th>Sex</th><th>Age</th><th>School</th><th>Grade</th>
+      <th>T1 Days Absent</th><th>T1 Avg</th><th>T2 Days Absent</th><th>T2 Avg</th>
+      <th>T3 Days Absent</th><th>T3 Avg</th><th>T4 Days Absent</th><th>T4 Avg</th>
+      <th>Progressing to next grade</th><th>Intervention needed</th>
+    </tr>
+    {% for m in hh.member_list %}
+    <tr>
+      <td>{{ m.surname }}</td><td>{{ m.name }}</td><td>{{ m.sex|slice:":1" }}</td><td>{{ m.age }}</td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td style="text-align:center;"><span class="chk"></span>Y <span class="chk"></span>N</td>
+      <td style="text-align:center;"><span class="chk"></span></td>
+    </tr>
+    {% endfor %}
+    <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+  </table>
+  <div class="sigrow"><div><div class="sigline">Practitioner name &amp; Signature</div></div><div><div class="sigline">Date</div></div></div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

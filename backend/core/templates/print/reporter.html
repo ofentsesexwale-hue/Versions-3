@@ -1,0 +1,63 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">CW 02: Reporter Form</div>
+  <h2 class="sec">Section 1: Details of person reporting a case</h2>
+  <p class="muted">Indicate to the reporter that the information shared will be confidential and that the reporter can choose to remain anonymous.</p>
+  <div class="fld">Select anonymity preference of reporter &mdash; Reporter wishes to remain anonymous:
+    <span class="chk"></span>Yes <span class="chk"></span>No</div>
+  <div class="fld"><span class="lbl">Reasons for preference (if relevant)</span></div>
+  <div class="ans" style="min-height:24px;"></div>
+  <div class="fld"><span class="lbl">Relationship with client:</span>
+    <span class="chk"></span>Relative <span class="chk"></span>Neighbor / Family friend <span class="chk"></span>Teacher
+    <span class="chk"></span>Health Professional <span class="chk"></span>Community Based Organisation representative
+    <span class="chk"></span>Other, specify ______________</div>
+  <table>
+    <tr><td style="width:50%;"><span class="lbl">Name and Surname of reporter (if not anonymous)</span></td><td></td></tr>
+    <tr><td><span class="lbl">Contact details (telephone/address)</span></td><td></td></tr>
+    <tr><td><span class="lbl">Name of organization (if applicable)</span></td><td></td></tr>
+  </table>
+
+  <h2 class="sec">Section 2: Details of case / client</h2>
+  <p class="muted">Complete all available information. If information is not known write "not known" in relevant section.</p>
+  <table>
+    <tr><td style="width:25%;"><span class="lbl">First Name(s)</span></td><td>{{ cg.name }}</td>
+        <td style="width:25%;"><span class="lbl">Surname</span></td><td>{{ cg.surname }}</td></tr>
+    <tr><td><span class="lbl">Date of birth (or age)</span></td><td>{{ cg.date_of_birth|date:"Y-m-d" }}</td>
+        <td><span class="lbl">Address</span></td><td>{{ hh.street }} {{ hh.town }}</td></tr>
+    <tr><td><span class="lbl">Gender</span></td>
+        <td><span class="chk">{% if cg.sex == 'Male' %}X{% endif %}</span>Male <span class="chk">{% if cg.sex == 'Female' %}X{% endif %}</span>Female</td>
+        <td><span class="lbl">Nationality</span></td>
+        <td><span class="chk">{% if cg.nationality == 'South African' %}X{% endif %}</span>South African <span class="chk"></span>Other</td></tr>
+    <tr><td><span class="lbl">Racial Group</span></td><td colspan="3">
+        <span class="chk">{% if cg.race == 'African' %}X{% endif %}</span>Black
+        <span class="chk">{% if cg.race == 'Coloured' %}X{% endif %}</span>Coloured
+        <span class="chk">{% if cg.race == 'Indian' %}X{% endif %}</span>Asian
+        <span class="chk">{% if cg.race == 'White' %}X{% endif %}</span>White
+        <span class="chk">{% if cg.race == 'Other' %}X{% endif %}</span>Other</td></tr>
+  </table>
+
+  <h2 class="sec">Section 3: Relevant information about the issue provided by the reporter</h2>
+  <div class="ans" style="min-height:90px;"></div>
+
+  <h2 class="sec">Section 4: Action taken</h2>
+  <div class="fld"><span class="chk"></span>Internal referral &mdash; Referred to: ______________________</div>
+  <div class="fld"><span class="chk"></span>Referral to external organisation &mdash; Name: ______________________</div>
+  <div class="fld"><span class="chk"></span>Other, please specify: ______________________</div>
+  <table style="margin-top:10px;">
+    <tr><th>SSP Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>{{ user.get_full_name|default:user.username }}</td><td>&nbsp;</td><td></td><td></td></tr>
+  </table>
+  <div class="fld" style="margin-top:8px;"><span class="lbl">Recommendation / Comments by Intake Officer / Supervisor</span></div>
+  <div class="ans"></div>
+  <table>
+    <tr><th>Supervisor / Intake Officer Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+  </table>
+  <div class="fld"><span class="lbl">Case allocated to / Case Manager. Instruction to Registry:</span>
+    <span class="chk"></span>Open file <span class="chk"></span>Other, specify ____________</div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

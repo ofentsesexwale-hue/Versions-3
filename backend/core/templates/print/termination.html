@@ -1,0 +1,40 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">CW 13: Termination Report</div>
+  <div class="conf">CONFIDENTIAL</div>
+  <p class="muted">A Termination report should be completed only once an evaluation has been done and it has been found that the intervention should be terminated.</p>
+  <table>
+    <tr><th style="width:22%;">Client Surname</th><td>{{ cg.surname }}</td><th style="width:22%;">Client First name</th><td>{{ cg.name }}</td></tr>
+    <tr><th>Client ID Number</th><td>{{ cg.id_number }}</td><th>File No</th><td>{{ hh.org_household_number }}</td></tr>
+  </table>
+  <h3 class="sub">Were all planned interventions implemented as per Planning and Contracting? If no, please explain</h3>
+  <div class="ans" style="min-height:44px;"></div>
+  <h3 class="sub">Reasons for terminating the service (select relevant reason and describe below)</h3>
+  <div class="fld"><span class="chk"></span>Intervention completed <span class="chk"></span>Client declined service
+    <span class="chk"></span>Client unavailable <span class="chk"></span>Other</div>
+  <div class="ans" style="min-height:36px;"></div>
+  <h3 class="sub">If intervention completed, was client informed and did they consent to terminating service?</h3>
+  <div class="fld"><span class="chk"></span>Client informed and consented</div>
+  <div class="fld"><span class="chk"></span>Client informed but did not consent. Please explain below</div>
+  <div class="fld"><span class="chk"></span>Client not informed. Please explain below</div>
+  <div class="ans" style="min-height:30px;"></div>
+  <table>
+    <tr><th>Client Name and Surname</th><th>Signature</th><th>Date</th></tr>
+    <tr><td>{{ cg.name }} {{ cg.surname }}</td><td>&nbsp;</td><td></td></tr>
+  </table>
+  <table>
+    <tr><th>SSP Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>{{ user.get_full_name|default:user.username }}</td><td>&nbsp;</td><td></td><td></td></tr>
+  </table>
+  <div class="fld"><span class="lbl">Supervisor Comments:</span></div>
+  <div class="ans" style="min-height:30px;"></div>
+  <table>
+    <tr><th>Supervisor Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+  </table>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

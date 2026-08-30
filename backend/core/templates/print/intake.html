@@ -1,0 +1,87 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">CW 05: Intake Form</div>
+  <div class="conf">CONFIDENTIAL &nbsp;|&nbsp; To be completed by Social Worker</div>
+  <p class="muted">Briefly explain at the start of the interview your name, title, mandate of the organization and the purpose of the interview, as well as the client's rights in the process including participation, confidentiality and their right to services and information, dignity and respect.</p>
+  <table>
+    <tr><td style="width:25%;"><span class="lbl">Primary Client Surname</span></td><td style="width:25%;">{{ cg.surname }}</td>
+        <td style="width:25%;"><span class="lbl">Intake Ref Number</span></td><td style="width:25%;">{{ hh.org_household_number }}</td></tr>
+    <tr><td><span class="lbl">Primary Client First name</span></td><td>{{ cg.name }}</td>
+        <td><span class="lbl">Primary Client ID Number / Date of Birth</span></td><td>{{ cg.id_number }}{% if cg.date_of_birth %} / {{ cg.date_of_birth|date:"Y-m-d" }}{% endif %}</td></tr>
+  </table>
+  <p class="muted">If client is a child, add details of caregiver(s) below</p>
+  <table>
+    <tr><td style="width:25%;"><span class="lbl">Caregiver Surname</span></td><td style="width:25%;"></td>
+        <td style="width:25%;"><span class="lbl">Caregiver First name</span></td><td style="width:25%;"></td></tr>
+    <tr><td><span class="lbl">Caregiver ID Number / Date of Birth</span></td><td colspan="3"></td></tr>
+  </table>
+
+  <h3 class="sub">Presenting problem(s) and expectations of the client</h3>
+  <p class="muted">Ask the client to explain their main concerns, expectations and coping skills applied</p>
+  <div class="ans" style="min-height:80px;"></div>
+
+  <h3 class="sub">Preliminary/Initial Assessment by the social worker</h3>
+  <div class="half">
+    <div><span class="lbl">Primary Problem Code (see CW 06)</span><div class="ans" style="min-height:18px;"></div></div>
+    <div><span class="lbl">Other Problem Codes</span><div class="ans" style="min-height:18px;"></div></div>
+  </div>
+  <div class="fld"><span class="lbl">Risk Level &amp; Response required within:</span>
+    <span class="chk"></span>Emergency (24-48 hours)
+    <span class="chk"></span>High (1 week)
+    <span class="chk"></span>Mild (3 weeks)
+  </div>
+
+  <h3 class="sub">Intake Action (select relevant, can choose multiple)</h3>
+  <div class="fld"><span class="chk"></span>Emergency Action</div>
+  <div class="fld"><span class="chk"></span>Referral for comprehensive Assessment Internally (refer to CW 08)</div>
+  <div class="fld"><span class="chk"></span>Case consultation (with Supervisor)</div>
+  <div class="fld"><span class="chk"></span>Internal referral to departmental programme (complete CW 4A)</div>
+  <div class="fld"><span class="chk"></span>External referral (complete CW 4B &amp; C)</div>
+  <div class="fld"><span class="chk"></span>Issue resolved (complete CW 10 &amp; CW 12), no follow-up required</div>
+  <div class="fld"><span class="chk"></span>Comprehensive assessment not required</div>
+</div>
+
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="conf">CW 05: INTAKE FORM &nbsp;|&nbsp; CONFIDENTIAL</div>
+  <h3 class="sub">Consent</h3>
+  <div class="fld">Do you consent to the recommended Intake Action above?
+    <span class="chk"></span>Yes <span class="chk"></span>No</div>
+  <div class="fld">Do you consent to sharing your information with other service providers (if necessary)?
+    <span class="chk"></span>Not applicable <span class="chk"></span>Yes <span class="chk"></span>No</div>
+  <div class="fld"><span class="lbl">Client / Caregiver consent: signature or thumbprint</span></div>
+  <div class="ans" style="min-height:36px;"></div>
+
+  <h3 class="sub">Details of key people to be interviewed for assessment purposes</h3>
+  <table>
+    <tr><th>Name(s)</th><th>Contact details</th><th>Relationship</th></tr>
+    <tr><td>&nbsp;</td><td></td><td></td></tr>
+    <tr><td>&nbsp;</td><td></td><td></td></tr>
+    <tr><td>&nbsp;</td><td></td><td></td></tr>
+  </table>
+
+  <h3 class="sub">Intake completed by</h3>
+  <table>
+    <tr><th>SSP Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>{{ user.get_full_name|default:user.username }}</td><td>&nbsp;</td><td></td><td></td></tr>
+  </table>
+
+  <h3 class="sub">Recommendation by Supervisor</h3>
+  <div class="fld">Intake Action Supported: <span class="chk"></span>Yes <span class="chk"></span>No
+    &nbsp;&nbsp;<span class="lbl">Return Date for Intake Action:</span> ______________</div>
+  <div class="fld"><span class="lbl">Comments from supervisor</span></div>
+  <div class="ans"></div>
+  <table>
+    <tr><th>Supervisor Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+    <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+  </table>
+
+  <h3 class="sub">Case allocated to / Case Manager</h3>
+  <div class="fld"><span class="lbl">Instruction to Registry (if relevant):</span>
+    <span class="chk"></span>Open file <span class="chk"></span>Other, specify ______________</div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

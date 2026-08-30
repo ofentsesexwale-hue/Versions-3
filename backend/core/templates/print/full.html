@@ -1,0 +1,51 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  <div class="orghead"><div class="on">{{ org_name }}</div><div>Case File &mdash; Cover Sheet</div></div>
+  <table>
+    <tr><th style="width:22%;">Household Number</th><td>{{ hh.org_household_number }}</td>
+        <th style="width:22%;">Date Registered</th><td>{{ hh.date_registered|date:"Y-m-d" }}</td></tr>
+    <tr><th>Head of Household</th><td>{{ cg.name }} {{ cg.surname }}</td><th>ID Number</th><td>{{ cg.id_number }}</td></tr>
+    <tr><th>Headship Type</th><td>{{ cg.headship_type }}</td><th>Cell Number</th><td>{{ cg.cell_number }}</td></tr>
+    <tr><th>Address</th><td colspan="3">{{ hh.house_number }} {{ hh.street }}, {{ hh.town }}, {{ hh.municipality }}, {{ hh.district }}, {{ hh.province }}</td></tr>
+  </table>
+  <h3 class="sub">Household members ({{ hh.member_list|length }})</h3>
+  <table>
+    <tr><th>Name</th><th>Surname</th><th>Sex</th><th>Age</th><th>Relationship to head</th><th>ID Number</th></tr>
+    {% for m in hh.member_list %}
+    <tr><td>{{ m.name }}</td><td>{{ m.surname }}</td><td>{{ m.sex }}</td><td>{{ m.age }}</td><td>{{ m.relationship_to_head }}</td><td>{{ m.id_number }}</td></tr>
+    {% endfor %}
+  </table>
+  <h3 class="sub">Case File Completeness</h3>
+  <table>
+    <tr><th style="width:54%;">Category / Document</th><th style="width:9%;">Yes</th><th style="width:9%;">No</th><th style="width:28%;">Comments</th></tr>
+    {% for label, items in hh.cl_groups %}
+      <tr><td colspan="4" style="font-weight:700;background:#e6e6e6;">{{ forloop.counter }}. {{ label }}</td></tr>
+      {% for it in items %}
+      <tr><td style="padding-left:14px;">{{ it.sub_item }}</td>
+          <td style="text-align:center;"><span class="chk">{% if it.has_evidence == 'Yes' %}X{% endif %}</span></td>
+          <td style="text-align:center;"><span class="chk">{% if it.has_evidence == 'No' %}X{% endif %}</span></td>
+          <td>{{ it.comments }}</td></tr>
+      {% endfor %}
+    {% endfor %}
+  </table>
+</div>
+
+{% for n in hh.notes_list %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">CW 11: Case Work Process Note</div>
+  <table>
+    <tr><th style="width:22%;">Client Surname</th><td>{{ n.client_surname|default:cg.surname }}</td><th style="width:22%;">First name</th><td>{{ n.client_first_name|default:cg.name }}</td></tr>
+    <tr><th>File No</th><td>{{ n.file_no|default:hh.org_household_number }}</td><th>Type of Engagement</th><td>{{ n.get_type_of_engagement_display }}</td></tr>
+  </table>
+  <h3 class="sub">Purpose of engagement and what transpired</h3>
+  <div class="ans" style="min-height:50px;">{{ n.purpose_and_what_transpired|linebreaksbr }}</div>
+  <h3 class="sub">Outcome and Follow-up</h3>
+  <div class="ans" style="min-height:40px;">{{ n.outcome_and_follow_up|linebreaksbr }}</div>
+  <div class="fld"><span class="lbl">By:</span> {{ n.ssp_name|default:n.created_by }} &nbsp; <span class="lbl">Date:</span> {{ n.created_at|date:"Y-m-d" }}</div>
+</div>
+{% endfor %}
+{% endwith %}{% endfor %}
+{% endblock %}

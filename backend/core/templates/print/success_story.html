@@ -1,0 +1,22 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  <div class="orghead"><div class="on">{{ org_name }}</div><div>Success Story</div></div>
+  <table class="nb">
+    <tr><td class="nb"><span class="lbl">Family name:</span> {{ cg.surname }}</td>
+        <td class="nb"><span class="lbl">Household:</span> {{ hh.org_household_number }}</td>
+        <td class="nb"><span class="lbl">Date:</span> {{ now|date:"Y-m-d" }}</td></tr>
+  </table>
+  <h3 class="sub">Title of the story</h3>
+  <div class="ans" style="min-height:22px;"></div>
+  <h3 class="sub">Background / situation before intervention</h3>
+  <div class="ans" style="min-height:90px;"></div>
+  <h3 class="sub">Intervention / support provided</h3>
+  <div class="ans" style="min-height:90px;"></div>
+  <h3 class="sub">Outcome / change achieved</h3>
+  <div class="ans" style="min-height:90px;"></div>
+  <div class="sigrow"><div><div class="sigline">Practitioner name &amp; Signature</div></div><div><div class="sigline">Date</div></div></div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

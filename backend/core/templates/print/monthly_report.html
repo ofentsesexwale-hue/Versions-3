@@ -1,0 +1,33 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  <div class="orghead"><div class="on">{{ org_name }}</div><div>C06: Monthly Household Services Report (v2.0)</div></div>
+  <h3 class="sub">Head of Household Details</h3>
+  <table>
+    <tr><th style="width:14%;">First Name</th><td>{{ cg.name }}</td><th style="width:14%;">Surname</th><td>{{ cg.surname }}</td>
+        <th style="width:10%;">Org #</th><td>{{ hh.org_household_number }}</td></tr>
+    <tr><th>ID #</th><td>{{ cg.id_number }}</td><th>CCG Name</th><td>{{ user.get_full_name|default:user.username }}</td>
+        <th>Month</th><td>{{ now|date:"M Y" }}</td></tr>
+  </table>
+  <h3 class="sub">Number of services received</h3>
+  <table>
+    <tr>
+      <th style="width:4%;">#</th><th>First Name</th><th>Surname</th>
+      <th>Food parcels</th><th>Home visits</th><th>Blankets</th><th>Education supplies</th>
+      <th>Food Garden</th><th>Health</th><th>Attend Support groups</th>
+      <th>Income project</th><th>Inheritance</th><th>Awareness Campaigns</th><th>Group Therapy</th>
+    </tr>
+    {% if cg %}<tr><td>1</td><td>{{ cg.name }}</td><td>{{ cg.surname }}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>{% endif %}
+    {% for m in hh.member_list %}
+    <tr><td>{{ forloop.counter|add:1 }}</td><td>{{ m.name }}</td><td>{{ m.surname }}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    {% endfor %}
+  </table>
+  <div class="fld" style="margin-top:14px;"><span class="lbl">Household Head Signature:</span> _________________________</div>
+  <table style="margin-top:8px;">
+    <tr><th>Date Captured</th><td></td><th>Name of Data Capturer</th><td></td><th>Signature</th><td>&nbsp;</td></tr>
+    <tr><th>Date Validated</th><td></td><th>Name of Quality Assurer</th><td></td><th>Signature</th><td>&nbsp;</td></tr>
+  </table>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

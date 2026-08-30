@@ -1,0 +1,43 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}
+<div class="sheet">
+  <div class="ftitle">Case Management: NPO Check List</div>
+  <table class="nb" style="margin-bottom:8px;">
+    <tr><td class="nb" colspan="2"><span class="lbl">Name of the Organisation:</span> {{ org_name }}</td></tr>
+    <tr>
+      <td class="nb"><span class="lbl">Practitioner's name and surname:</span> {{ user.get_full_name|default:user.username }}</td>
+      <td class="nb" style="text-align:right;"><span class="lbl">Date:</span> {{ now|date:"Y-m-d" }}</td>
+    </tr>
+    <tr><td class="nb" colspan="2"><span class="lbl">Household Number:</span> {{ hh.org_household_number }}</td></tr>
+  </table>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:54%;">Does the organization have the following documents, in their beneficiary files</th>
+        <th style="width:9%;text-align:center;">Is there evidence Yes</th>
+        <th style="width:9%;text-align:center;">Is there evidence No</th>
+        <th style="width:28%;">Comments</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for label, items in hh.cl_groups %}
+      <tr><td colspan="4" style="font-weight:700;background:#e6e6e6;">{{ forloop.counter }}. {{ label }}</td></tr>
+      {% for it in items %}
+      <tr>
+        <td style="padding-left:16px;">{{ it.sub_item }}</td>
+        <td style="text-align:center;"><span class="chk">{% if it.has_evidence == 'Yes' %}X{% endif %}</span></td>
+        <td style="text-align:center;"><span class="chk">{% if it.has_evidence == 'No' %}X{% endif %}</span></td>
+        <td>{{ it.comments }}</td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+  <div style="margin-top:26px;">
+    <span class="lbl">Practitioners Signature:</span> _________________________________
+    &nbsp;&nbsp;&nbsp;<span class="lbl">Date:</span> ___________________
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

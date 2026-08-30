@@ -1,0 +1,64 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+{% if hh.notes_list %}
+  {% for n in hh.notes_list %}
+  <div class="sheet">
+    {% include 'print/_gov.html' %}
+    <div class="ftitle">CW 11: Case Work Process Note</div>
+    <div class="conf">CONFIDENTIAL</div>
+    <p class="muted">The process note must be completed for each engagement with a client(s), whether in person or telephonically.</p>
+    <table>
+      <tr><th style="width:22%;">Client(s) Surname</th><td>{{ n.client_surname|default:cg.surname }}</td>
+          <th style="width:22%;">Client(s) First name</th><td>{{ n.client_first_name|default:cg.name }}</td></tr>
+      <tr><th>Client(s) ID Number</th><td>{{ n.client_id_number|default:cg.id_number }}</td>
+          <th>File No</th><td>{{ n.file_no|default:hh.org_household_number }}</td></tr>
+      <tr><th>Name and Contact details of person(s) engaged</th><td colspan="3">{{ n.person_engaged_name }} {% if n.person_engaged_contact %}&mdash; {{ n.person_engaged_contact }}{% endif %}</td></tr>
+      <tr><th>Problem Code</th><td>{{ n.problem_code }}</td><th>Intervention Code</th><td>{{ n.intervention_code }}</td></tr>
+      <tr><th>Type of Engagement</th><td colspan="3">
+        <span class="chk">{% if n.type_of_engagement == 'Office' %}X{% endif %}</span>Office
+        <span class="chk">{% if n.type_of_engagement == 'Home' %}X{% endif %}</span>Home
+        <span class="chk">{% if n.type_of_engagement == 'School' %}X{% endif %}</span>School
+        <span class="chk">{% if n.type_of_engagement == 'Court' %}X{% endif %}</span>Court
+        <span class="chk">{% if n.type_of_engagement == 'Telephone' %}X{% endif %}</span>Telephone
+        <span class="chk">{% if n.type_of_engagement == 'Other' %}X{% endif %}</span>Other</td></tr>
+    </table>
+    <h3 class="sub">Purpose of engagement and what transpired</h3>
+    <div class="ans" style="min-height:70px;">{{ n.purpose_and_what_transpired|linebreaksbr }}</div>
+    <h3 class="sub">Outcome and Follow-up</h3>
+    <div class="ans" style="min-height:50px;">{{ n.outcome_and_follow_up|linebreaksbr }}</div>
+    <h3 class="sub">Evaluation / reflection of engagement</h3>
+    <div class="ans" style="min-height:50px;">{{ n.evaluation_reflection|linebreaksbr }}</div>
+    <div class="fld"><span class="lbl">Date of next follow up:</span> {{ n.date_of_next_follow_up|date:"Y-m-d" }}</div>
+    <table style="margin-top:8px;">
+      <tr><th>SSP Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+      <tr><td>{{ n.ssp_name|default:n.created_by }}</td><td>&nbsp;</td><td>{{ n.ssp_sacssp_number }}</td><td>{{ n.ssp_date|date:"Y-m-d" }}</td></tr>
+    </table>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="sheet">
+    {% include 'print/_gov.html' %}
+    <div class="ftitle">CW 11: Case Work Process Note</div>
+    <div class="conf">CONFIDENTIAL</div>
+    <table>
+      <tr><th style="width:22%;">Client(s) Surname</th><td>{{ cg.surname }}</td><th style="width:22%;">Client(s) First name</th><td>{{ cg.name }}</td></tr>
+      <tr><th>Client(s) ID Number</th><td>{{ cg.id_number }}</td><th>File No</th><td>{{ hh.org_household_number }}</td></tr>
+      <tr><th>Name and Contact details of person(s) engaged</th><td colspan="3"></td></tr>
+      <tr><th>Problem Code</th><td></td><th>Intervention Code</th><td></td></tr>
+      <tr><th>Type of Engagement</th><td colspan="3">
+        <span class="chk"></span>Office <span class="chk"></span>Home <span class="chk"></span>School
+        <span class="chk"></span>Court <span class="chk"></span>Telephone <span class="chk"></span>Other</td></tr>
+    </table>
+    <h3 class="sub">Purpose of engagement and what transpired</h3><div class="ans" style="min-height:70px;"></div>
+    <h3 class="sub">Outcome and Follow-up</h3><div class="ans" style="min-height:50px;"></div>
+    <h3 class="sub">Evaluation / reflection of engagement</h3><div class="ans" style="min-height:50px;"></div>
+    <div class="fld"><span class="lbl">Date of next follow up:</span> ______________</div>
+    <table style="margin-top:8px;">
+      <tr><th>SSP Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
+      <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+    </table>
+  </div>
+{% endif %}
+{% endwith %}{% endfor %}
+{% endblock %}

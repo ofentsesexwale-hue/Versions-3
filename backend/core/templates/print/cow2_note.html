@@ -1,0 +1,32 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">COW 2: Community Work Process Note</div>
+  <table>
+    <tr><th style="width:20%;">Ref No</th><td>{{ hh.org_household_number }}</td>
+        <th style="width:22%;">Date of Community work session</th><td></td></tr>
+    <tr><th>Name of Community</th><td>{{ hh.town }}</td><th>Problem / Intervention Code</th><td></td></tr>
+    <tr><th>Type of Engagement</th><td colspan="3">
+        <span class="chk"></span>Office <span class="chk"></span>Telephone <span class="chk"></span>Community <span class="chk"></span>Other</td></tr>
+    <tr><th>Who participated</th><td colspan="3"></td></tr>
+  </table>
+  <h2 class="sec">Process</h2>
+  <div class="fld"><span class="chk"></span>Needs identification <span class="chk"></span>Planning <span class="chk"></span>Intervention <span class="chk"></span>Evaluation</div>
+  <h3 class="sub">Topic covered (e.g. name or theme of content covered in session)</h3>
+  <div class="ans" style="min-height:30px;"></div>
+  <h3 class="sub">Description of the process (what transpired, observations, materials used)</h3>
+  <div class="ans" style="min-height:90px;"></div>
+  <h3 class="sub">Evaluation of the session (results)</h3>
+  <div class="ans" style="min-height:50px;"></div>
+  <h3 class="sub">Planning for the next session</h3>
+  <div class="ans" style="min-height:50px;"></div>
+  <h3 class="sub">Social Service Practitioner completing Process Note</h3>
+  <table>
+    <tr><th>Name</th><td>{{ user.get_full_name|default:user.username }}</td><th>SACSSP No</th><td></td></tr>
+    <tr><th>Signature</th><td>&nbsp;</td><th>Date</th><td></td></tr>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

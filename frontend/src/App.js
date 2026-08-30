@@ -1,0 +1,63 @@
+import "@/App.css";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/context/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AppShell } from "@/components/AppShell";
+import Login from "@/pages/Login";
+import Dashboard from "@/pages/Dashboard";
+import HouseholdDetail from "@/pages/HouseholdDetail";
+import HouseholdForm from "@/pages/HouseholdForm";
+import CaregiverForm from "@/pages/CaregiverForm";
+import MemberForm from "@/pages/MemberForm";
+import DocumentUpload from "@/pages/DocumentUpload";
+import Checklist from "@/pages/Checklist";
+import AuditLog from "@/pages/AuditLog";
+import Verification from "@/pages/Verification";
+import MyHouseholds from "@/pages/MyHouseholds";
+import Reassign from "@/pages/Reassign";
+
+function App() {
+  return (
+    <div className="App">
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Dashboard />} />
+              <Route path="my-households" element={<MyHouseholds />} />
+              <Route path="reassign" element={<Reassign />} />
+              <Route path="verification" element={<Verification />} />
+              <Route path="households/new" element={<HouseholdForm />} />
+              <Route path="households/:id" element={<HouseholdDetail />} />
+              <Route path="households/:id/edit" element={<HouseholdForm />} />
+              <Route path="households/:id/caregiver" element={<CaregiverForm />} />
+              <Route path="households/:id/members/new" element={<MemberForm />} />
+              <Route path="members/:id/edit" element={<MemberForm />} />
+              <Route path="households/:id/checklist" element={<Checklist />} />
+              <Route path="documents/upload" element={<DocumentUpload />} />
+              <Route
+                path="audit"
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <AuditLog />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+        <Toaster position="top-right" richColors />
+      </AuthProvider>
+    </div>
+  );
+}
+
+export default App;
