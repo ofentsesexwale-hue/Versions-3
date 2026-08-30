@@ -9,6 +9,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { HouseholdRow } from "@/components/HouseholdRow";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const CSV_COLUMNS = [
+  ["date", "Date"],
+  ["household", "Household Number"],
+  ["beneficiary", "Beneficiary"],
+  ["service_type", "Service Type"],
+  ["delivered_by", "Delivered By"],
+  ["notes", "Notes"],
+];
 
 function KpiCard({ icon: Icon, label, value, testId, accent, onClick }) {
   return (
@@ -117,12 +128,16 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [missed, setMissed] = useState([]);
   const [reminders, setReminders] = useState([]);
+  const [dobMissing, setDobMissing] = useState([]);
+  const [csvCols, setCsvCols] = useState(CSV_COLUMNS.map((c) => c[0]));
+  const [csvOpen, setCsvOpen] = useState(false);
 
   const isSup = user?.role === "supervisor" || user?.role === "admin";
 
-  const exportCsv = async () => {
+  const exportCsv = async (columns) => {
     try {
-      const res = await api.get("/services/export/", { responseType: "blob" });
+      const params = columns && columns.length ? { columns: columns.join(",") } : {};
+      const res = await api.get("/services/export/", { responseType: "blob", params });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
@@ -146,6 +161,7 @@ export default function Dashboard() {
     api.get("/services/stats/").then((r) => setStats(r.data)).catch(() => {});
     api.get("/services/monthly_detail/").then((r) => setMissed(r.data.missed || [])).catch(() => {});
     api.get("/services/beneficiary_reminders/").then((r) => setReminders(r.data || [])).catch(() => {});
+    api.get("/members/missing_dob/").then((r) => setDobMissing(r.data || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -200,14 +216,38 @@ export default function Dashboard() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Monthly service delivery{stats?.month ? ` \u00b7 ${stats.month}` : ""}</CardTitle>
               {isSup && (
-                <Button size="sm" variant="outline" className="gap-1" onClick={exportCsv} data-testid="export-service-csv-button">
-                  <Download className="h-3.5 w-3.5" /> CSV
-                </Button>
+                <Dialog open={csvOpen} onOpenChange={setCsvOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="gap-1" data-testid="export-service-csv-button">
+                      <Download className="h-3.5 w-3.5" /> CSV
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent data-testid="csv-column-picker">
+                    <DialogHeader><DialogTitle>Export service report (CSV)</DialogTitle></DialogHeader>
+                    <p className="text-sm text-slate-600">Choose the columns to include for donor reporting:</p>
+                    <div className="space-y-2 py-2">
+                      {CSV_COLUMNS.map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2" data-testid={`csv-col-${key}`}>
+                          <Checkbox checked={csvCols.includes(key)} onCheckedChange={(v) => setCsvCols((c) => (v ? [...c, key] : c.filter((x) => x !== key)))} />
+                          <span className="text-sm text-slate-800">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <DialogFooter>
+                      <Button onClick={() => { exportCsv(csvCols); setCsvOpen(false); }} disabled={!csvCols.length} className="bg-slate-900 hover:bg-slate-800" data-testid="csv-download-button">
+                        Download CSV
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               )}
             </CardHeader>
             <CardContent className="space-y-4">
               {stats?.staff && (
                 <ProgressBar label="You have served" served={stats.staff.served} total={stats.staff.total} percent={stats.staff.percent} testId="staff-progress-bar" />
+              )}
+              {stats?.staff?.goal > 0 && (
+                <ProgressBar label="Your monthly goal" served={stats.staff.delivered} total={stats.staff.goal} percent={stats.staff.goal_percent} testId="staff-goal-bar" />
               )}
               {isSup && stats?.org && (
                 <ProgressBar label="Organisation has served" served={stats.org.served} total={stats.org.total} percent={stats.org.percent} testId="org-progress-bar" />
@@ -221,13 +261,25 @@ export default function Dashboard() {
                 <div className="space-y-2 border-t border-slate-100 pt-3" data-testid="staff-ranking">
                   <p className="text-xs font-medium text-slate-600">Staff performance</p>
                   {stats.ranking.map((r, i) => (
-                    <div key={r.user_id} className="flex items-center gap-2" data-testid={`ranking-row-${r.user_id}`}>
-                      <span className="w-4 text-xs text-slate-400">{i + 1}.</span>
-                      <span className="w-36 truncate text-sm text-slate-700">{r.name}</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                        <div className={`h-full ${barColor(r.percent)}`} style={{ width: `${Math.min(r.percent, 100)}%` }} />
+                    <div key={r.user_id} className="space-y-1" data-testid={`ranking-row-${r.user_id}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-4 text-xs text-slate-400">{i + 1}.</span>
+                        <span className="w-36 truncate text-sm text-slate-700">{r.name}</span>
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                          <div className={`h-full ${barColor(r.percent)}`} style={{ width: `${Math.min(r.percent, 100)}%` }} />
+                        </div>
+                        <span className="w-16 text-right text-xs tabular-nums text-slate-600">{r.served}/{r.total}</span>
                       </div>
-                      <span className="w-16 text-right text-xs tabular-nums text-slate-600">{r.served}/{r.total}</span>
+                      {r.goal > 0 && (
+                        <div className="flex items-center gap-2" data-testid={`ranking-goal-${r.user_id}`}>
+                          <span className="w-4" />
+                          <span className="w-36 text-[10px] text-slate-400">Goal {r.delivered}/{r.goal}</span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                            <div className={`h-full ${barColor(r.goal_percent)}`} style={{ width: `${Math.min(r.goal_percent, 100)}%` }} />
+                          </div>
+                          <span className="w-16 text-right text-[10px] tabular-nums text-slate-500">{r.goal_percent}%</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -258,6 +310,26 @@ export default function Dashboard() {
                   {r.dob_missing && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" data-testid={`reminder-dob-missing-${i}`}>DOB missing</span>}
                 </span>
                 <span className="text-xs text-slate-500">{r.service_type} — {r.last_service_date ? `last ${r.last_service_date}` : "never"}</span>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Children missing date of birth — nudge staff to capture DOB */}
+      {!q && !band && dobMissing.length > 0 && (
+        <Card data-testid="dob-missing-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-amber-700">
+              <CalendarClock className="h-4 w-4" /> Children missing date of birth ({dobMissing.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-xs text-slate-500">Capture each child's date of birth so beneficiary reminders stay accurate.</p>
+            {dobMissing.slice(0, 8).map((m) => (
+              <button key={m.id} onClick={() => navigate(`/members/${m.id}/edit`)} className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left hover:border-slate-400" data-testid={`dob-missing-row-${m.id}`}>
+                <span className="text-sm text-slate-800">{m.name} · {m.org_household_number}</span>
+                <span className="text-xs font-medium text-amber-700">Add DOB</span>
               </button>
             ))}
           </CardContent>

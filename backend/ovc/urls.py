@@ -28,6 +28,7 @@ api_patterns = [
     path('users/', views.UsersListView.as_view()),
     path('organisation/', views.OrganisationView.as_view()),
     path('site-config/', views.SiteConfigView.as_view()),
+    path('service-targets/', views.ServiceTargetView.as_view()),
     path('branding/', views.BrandingView.as_view()),
     path('print/timeline/', print_views.print_timeline),
     path('print/service-report/', print_views.print_service_report),

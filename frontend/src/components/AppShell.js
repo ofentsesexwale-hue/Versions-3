@@ -15,6 +15,7 @@ import {
   Search,
   Shield,
   ShieldCheck,
+  Target,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const NAV = [
   { key: "reassign", label: "Reassign Caseload", to: "/reassign", icon: Users, roles: ["admin", "supervisor"] },
   { key: "print-center", label: "Print Center", to: "/print-center", icon: Printer, roles: ["admin", "supervisor"] },
   { key: "signoffs", label: "Sign-off History", to: "/signoffs", icon: ShieldCheck, roles: ["admin", "supervisor"] },
+  { key: "targets", label: "Service Targets", to: "/settings/targets", icon: Target, roles: ["admin", "supervisor"] },
   { key: "org-settings", label: "Organisation", to: "/settings/organisation", icon: Building2, adminOnly: true },
   { key: "upload", label: "Upload Document", to: "/documents/upload", icon: FileText },
   { key: "audit", label: "Audit Log", to: "/audit", icon: Shield, adminOnly: true },

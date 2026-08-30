@@ -21,6 +21,7 @@ import AssessmentForm from "@/pages/AssessmentForm";
 import OrgSettings from "@/pages/OrgSettings";
 import SignoffHistory from "@/pages/SignoffHistory";
 import ServiceLog from "@/pages/ServiceLog";
+import ServiceTargets from "@/pages/ServiceTargets";
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
               <Route path="print-center" element={<PrintCenter />} />
               <Route path="signoffs" element={<SignoffHistory />} />
               <Route path="settings/organisation" element={<OrgSettings />} />
+              <Route path="settings/targets" element={<ServiceTargets />} />
               <Route path="households/:id/assessment" element={<AssessmentForm />} />
               <Route path="verification" element={<Verification />} />
               <Route path="households/new" element={<HouseholdForm />} />

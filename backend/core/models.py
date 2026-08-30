@@ -300,6 +300,18 @@ class SiteConfig(models.Model):
         return 'Site configuration'
 
 
+class ServiceTarget(models.Model):
+    """A case worker's monthly service-delivery goal (set by supervisors/admin)."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='service_target'
+    )
+    monthly_goal = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.user}: {self.monthly_goal}/month'
+
+
 class ServiceDelivery(models.Model):
     """A single service delivered to a household (optionally a named beneficiary)."""
     household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='services')

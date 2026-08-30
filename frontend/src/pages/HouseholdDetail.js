@@ -291,7 +291,7 @@ export default function HouseholdDetail() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-medium text-slate-900">{m.name} {m.surname}</p>
-                    <p className="text-sm text-slate-600">{m.relationship_to_head || "\u2014"} · {formatDate(m.date_of_birth)}</p>
+                    <p className="text-sm text-slate-600">{m.relationship_to_head || "\u2014"} · {m.date_of_birth ? formatDate(m.date_of_birth) : <span className="font-medium text-amber-700" data-testid={`member-dob-missing-${m.id}`}>Add date of birth</span>}</p>
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/members/${m.id}/edit`)} data-testid={`edit-member-${m.id}`}>

@@ -28,6 +28,7 @@ from .models import (
     Organisation,
     ProcessNote,
     ServiceDelivery,
+    ServiceTarget,
     SiteConfig,
     SupportingDocument,
 )
@@ -400,6 +401,18 @@ class HouseholdMemberViewSet(_PersonViewSet):
     serializer_class = HouseholdMemberSerializer
     label = 'Household member'
 
+    @action(detail=False, methods=['get'])
+    def missing_dob(self, request):
+        """Members (in scope) with no date of birth captured yet."""
+        qs = self.get_queryset().filter(date_of_birth__isnull=True).select_related('household')
+        data = [{
+            'id': m.id,
+            'name': f'{m.name} {m.surname}'.strip(),
+            'household_id': m.household_id,
+            'org_household_number': m.household.org_household_number,
+        } for m in qs]
+        return Response(data)
+
 
 # ------------------------------ Supporting documents ------------------------------
 class SupportingDocumentViewSet(viewsets.ModelViewSet):
@@ -711,19 +724,32 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
         ).values('service_type').annotate(c=Count('id')):
             by_type[row['service_type']] = row['c']
         staff['by_type'] = by_type
+        staff_delivered = ServiceDelivery.objects.filter(
+            delivered_by=request.user, service_date__gte=start, service_date__lt=nxt).count()
+        staff_goal = getattr(getattr(request.user, 'service_target', None), 'monthly_goal', 0)
+        staff['delivered'] = staff_delivered
+        staff['goal'] = staff_goal
+        staff['goal_percent'] = round(staff_delivered * 100 / staff_goal) if staff_goal else None
 
         org = None
         ranking = []
         if role in ('admin', 'supervisor'):
             org = bar(Household.objects.all())
+            delivered_map = {r['delivered_by']: r['c'] for r in ServiceDelivery.objects.filter(
+                service_date__gte=start, service_date__lt=nxt).values('delivered_by').annotate(c=Count('id'))}
+            targets = {t.user_id: t.monthly_goal for t in ServiceTarget.objects.all()}
             workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct()
             for w in workers:
                 b = bar(Household.objects.filter(assigned_to=w))
                 if b['total'] == 0:
                     continue
+                dv = delivered_map.get(w.id, 0)
+                g = targets.get(w.id, 0)
                 ranking.append({
                     'user_id': w.id,
                     'name': w.get_full_name() or w.username,
+                    'delivered': dv, 'goal': g,
+                    'goal_percent': round(dv * 100 / g) if g else None,
                     **b,
                 })
             ranking.sort(key=lambda r: r['percent'], reverse=True)
@@ -800,16 +826,33 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
         qs = ServiceDelivery.objects.filter(
             household__in=scoped, service_date__gte=start, service_date__lt=nxt,
         ).select_related('household', 'delivered_by').order_by('service_date')
+
+        def _beneficiary(s):
+            b = s.beneficiary
+            return f'{b.name} {b.surname}'.strip() if b else 'Whole household'
+
+        def _delivered_by(s):
+            return (s.delivered_by.get_full_name() or s.delivered_by.username) if s.delivered_by else ''
+
+        COLUMNS = {
+            'date': ('Date', lambda s: s.service_date.strftime('%Y-%m-%d')),
+            'household': ('Household Number', lambda s: s.household.org_household_number),
+            'beneficiary': ('Beneficiary', _beneficiary),
+            'service_type': ('Service Type', lambda s: s.service_type),
+            'delivered_by': ('Delivered By', _delivered_by),
+            'notes': ('Notes', lambda s: s.notes),
+        }
+        requested = request.query_params.get('columns')
+        keys = [k for k in requested.split(',') if k in COLUMNS] if requested else list(COLUMNS)
+        if not keys:
+            keys = list(COLUMNS)
+
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="service_report_{start:%Y_%m}.csv"'
         writer = csv.writer(response)
-        writer.writerow(['Date', 'Household Number', 'Beneficiary', 'Service Type', 'Delivered By', 'Notes'])
+        writer.writerow([COLUMNS[k][0] for k in keys])
         for s in qs:
-            b = s.beneficiary
-            bname = f'{b.name} {b.surname}'.strip() if b else 'Whole household'
-            dby = (s.delivered_by.get_full_name() or s.delivered_by.username) if s.delivered_by else ''
-            writer.writerow([s.service_date.strftime('%Y-%m-%d'), s.household.org_household_number,
-                             bname, s.service_type, dby, s.notes])
+            writer.writerow([COLUMNS[k][1](s) for k in keys])
         log_action(request.user, 'downloaded', f'Service report CSV export ({start:%Y-%m})')
         return response
 
@@ -976,6 +1019,39 @@ class SiteConfigView(APIView):
         serializer.save()
         log_action(request.user, 'edited', 'Updated site configuration')
         return Response(serializer.data)
+
+
+class ServiceTargetView(APIView):
+    """Per-worker monthly service goals (supervisor/admin only)."""
+    permission_classes = [IsAuthenticated, IsStaffRole]
+
+    def get(self, request):
+        if user_role(request.user) not in (ROLE_ADMIN, 'supervisor'):
+            return Response({'detail': 'Only supervisors/administrators may view service targets.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        targets = {t.user_id: t.monthly_goal for t in ServiceTarget.objects.all()}
+        workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct().order_by('username')
+        return Response([{
+            'user_id': w.id,
+            'name': w.get_full_name() or w.username,
+            'username': w.username,
+            'monthly_goal': targets.get(w.id, 0),
+        } for w in workers])
+
+    def put(self, request):
+        if user_role(request.user) not in (ROLE_ADMIN, 'supervisor'):
+            return Response({'detail': 'Only supervisors/administrators may set service targets.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        uid = request.data.get('user_id')
+        try:
+            goal = max(0, int(request.data.get('monthly_goal') or 0))
+        except (TypeError, ValueError):
+            return Response({'detail': 'monthly_goal must be a number.'}, status=400)
+        if not User.objects.filter(pk=uid, groups__name=ROLE_CASE_WORKER).exists():
+            return Response({'detail': 'Targets can only be set for case workers.'}, status=404)
+        ServiceTarget.objects.update_or_create(user_id=uid, defaults={'monthly_goal': goal})
+        log_action(request.user, 'edited', f'Set monthly service target ({goal}) for user #{uid}')
+        return Response({'user_id': uid, 'monthly_goal': goal})
 
 
 class OrganisationView(APIView):

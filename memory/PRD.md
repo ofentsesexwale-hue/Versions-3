@@ -61,6 +61,11 @@ Offline case-management system for South African NPOs serving Orphans & Vulnerab
 - **CSV Service Export**: `GET /api/services/export/?month=YYYY-MM` (supervisor/admin only; 403 otherwise) → text/csv monthly service report for donor reporting; dashboard `export-service-csv-button` (axios blob download).
 - **Race-Safe Versioning**: `HouseholdViewSet.update` wraps the read-compare-save in `transaction.atomic()` + `select_for_update()`, so two concurrent writers on the same row are serialised (still 409 on stale version, +1 on success).
 
+### Enhancements (2026-06, round 8) — tested 27/27 backend + frontend (iteration_8.json)
+- **Require DOB Prompt**: `GET /api/members/missing_dob/` lists in-scope members without a date of birth. Dashboard `dob-missing-card` (shown when any exist) links each to `/members/<id>/edit`; household-detail member rows show an amber "Add date of birth" nudge. Keeps beneficiary reminders accurate.
+- **Service Targets**: `ServiceTarget` (OneToOne user → monthly_goal). `GET/PUT /api/service-targets/` (supervisor/admin only; targets settable only for case workers). Page `/settings/targets`. `/api/services/stats/` ranking rows now carry `delivered/goal/goal_percent`; dashboard shows a per-worker goal bar (`ranking-goal-<uid>`) and the current worker's own `staff-goal-bar`.
+- **CSV Column Picker**: dashboard CSV button opens a dialog to choose columns; `GET /api/services/export/?columns=date,service_type` returns only those columns (falls back to all 6 when omitted/invalid). Supervisor/admin only.
+
 ## Backlog / next
 - P1: add remaining DSD reference forms (CW06 problem codes, CW10 intervention codes as pickers in Process Note dialog; COW1 Planning, CW12 Evaluation, GRW group-work forms).
 - P2: batch "Print Center" page (print one form across a district or a worker's caseload).
