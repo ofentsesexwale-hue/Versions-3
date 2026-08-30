@@ -23,6 +23,12 @@ Offline case-management system for South African NPOs serving Orphans & Vulnerab
 - **Household Timeline**: activity timeline from audit log; `GET /api/households/<id>/timeline/`.
 - Fixed: function-based `@api_view` views failed under ASGI (`.accepted_renderer not set`) → converted to APIView classes. Fixed M2M `assigned_to` filter lookup.
 
+### Enhancements (2026-06, round 2)
+- **Code Pickers**: CW06 problem codes (96) & CW10 intervention codes (57) exposed via `/api/choices/`; CW11 Process Note editor uses dropdowns.
+- **Print Center** (`/print-center`, admin/supervisor): batch-print any DSD form across all households, a case worker's caseload, or a district (via `?household_ids=`).
+- **Structured Assessment (CW09)**: `Assessment` model + `/api/assessments/`; in-app editor at `/households/:id/assessment`; prints pre-filled on the official CW09 form.
+- **Checklist Sign-off**: supervisor stamps name/SACSSP/date via `POST /api/households/<id>/sign_checklist/`; printed Case File Checklist shows the stamp; action logged to audit/timeline.
+
 ## Backlog / next
 - P1: add remaining DSD reference forms (CW06 problem codes, CW10 intervention codes as pickers in Process Note dialog; COW1 Planning, CW12 Evaluation, GRW group-work forms).
 - P2: batch "Print Center" page (print one form across a district or a worker's caseload).

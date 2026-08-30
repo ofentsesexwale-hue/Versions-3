@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  Printer,
   Search,
   Shield,
   ShieldCheck,
@@ -27,6 +28,7 @@ const NAV = [
   { key: "verification", label: "Verification", to: "/verification?field=id_number", icon: AlertTriangle, roles: ["admin", "supervisor"], badgeKey: "verification" },
   { key: "my-households", label: "My Households", to: "/my-households", icon: Briefcase },
   { key: "reassign", label: "Reassign Caseload", to: "/reassign", icon: Users, roles: ["admin", "supervisor"] },
+  { key: "print-center", label: "Print Center", to: "/print-center", icon: Printer, roles: ["admin", "supervisor"] },
   { key: "upload", label: "Upload Document", to: "/documents/upload", icon: FileText },
   { key: "audit", label: "Audit Log", to: "/audit", icon: Shield, adminOnly: true },
 ];

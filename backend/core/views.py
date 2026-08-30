@@ -17,6 +17,7 @@ from . import choices
 from .audit import log_action
 from .models import (
     AuditLogEntry,
+    Assessment,
     Caregiver,
     CaseFileChecklistItem,
     Household,
@@ -32,6 +33,7 @@ from .permissions import (
     user_role,
 )
 from .serializers import (
+    AssessmentSerializer,
     AuditLogSerializer,
     CaregiverSerializer,
     ChecklistItemSerializer,
@@ -209,6 +211,21 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         )[:200]
         log_action(request.user, 'viewed', f'Timeline for Household #{instance.pk}')
         return Response(AuditLogSerializer(entries, many=True).data)
+
+    @action(detail=True, methods=['post'])
+    def sign_checklist(self, request, pk=None):
+        """Supervisor/admin stamps their sign-off on the case-file checklist."""
+        if not can_signoff_checklist(request.user):
+            return Response({'detail': 'Only supervisors/administrators may sign off the checklist.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        instance = self.get_object()
+        instance.checklist_signed_by = request.user
+        instance.checklist_signed_name = request.user.get_full_name() or request.user.username
+        instance.checklist_signed_sacssp = request.data.get('sacssp', '')
+        instance.checklist_signed_at = timezone.now()
+        instance.save()
+        log_action(request.user, 'confirmed', f'Signed off checklist for Household #{instance.pk}')
+        return Response(HouseholdDetailSerializer(instance).data)
 
     @action(detail=False, methods=['get'])
     def verification_count(self, request):
@@ -514,6 +531,28 @@ class ProcessNoteViewSet(viewsets.ModelViewSet):
         log_action(self.request.user, 'deleted', f'Process note for Household #{hid}')
 
 
+class AssessmentViewSet(viewsets.ModelViewSet):
+    """CW 09 assessments, scoped to households the user can see."""
+    permission_classes = [IsAuthenticated, IsStaffRole]
+    serializer_class = AssessmentSerializer
+
+    def get_queryset(self):
+        households = scoped_household_qs(self.request.user)
+        qs = Assessment.objects.filter(household__in=households).select_related('created_by')
+        household_id = self.request.query_params.get('household')
+        if household_id:
+            qs = qs.filter(household_id=household_id)
+        return qs
+
+    def perform_create(self, serializer):
+        obj = serializer.save(created_by=self.request.user)
+        log_action(self.request.user, 'created', f'Assessment for Household #{obj.household_id}')
+
+    def perform_update(self, serializer):
+        obj = serializer.save()
+        log_action(self.request.user, 'edited', f'Assessment for Household #{obj.household_id}')
+
+
 # ------------------------------ Users (for assignment dropdowns) ------------------------------
 def users_list(request):
     users = User.objects.filter(is_active=True).order_by('username')
@@ -579,6 +618,9 @@ def choices_view(request):
         'headship_type': [c[0] for c in choices.HEADSHIP_TYPE_CHOICES],
         'category': [{'value': c[0], 'label': c[1]} for c in choices.CATEGORY_CHOICES],
         'has_evidence': ['Yes', 'No', ''],
+        'problem_codes': [{'value': c[0], 'label': c[1]} for c in choices.PROBLEM_CODES],
+        'intervention_codes': [{'value': c[0], 'label': c[1]} for c in choices.INTERVENTION_CODES],
+        'risk_level': [{'value': c[0], 'label': c[1]} for c in choices.RISK_LEVEL_CHOICES],
     })
 
 

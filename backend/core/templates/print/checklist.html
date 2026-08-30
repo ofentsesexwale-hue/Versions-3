@@ -35,8 +35,15 @@
     </tbody>
   </table>
   <div style="margin-top:26px;">
-    <span class="lbl">Practitioners Signature:</span> _________________________________
-    &nbsp;&nbsp;&nbsp;<span class="lbl">Date:</span> ___________________
+    {% if hh.checklist_signed_at %}
+      <span class="lbl">Practitioners Signature:</span> <i>{{ hh.checklist_signed_name }}</i>
+      {% if hh.checklist_signed_sacssp %}(SACSSP {{ hh.checklist_signed_sacssp }}){% endif %}
+      &nbsp;&nbsp;&nbsp;<span class="lbl">Date:</span> {{ hh.checklist_signed_at|date:"Y-m-d" }}
+      <div class="muted" style="margin-top:4px;">Signed off electronically by {{ hh.checklist_signed_name }}.</div>
+    {% else %}
+      <span class="lbl">Practitioners Signature:</span> _________________________________
+      &nbsp;&nbsp;&nbsp;<span class="lbl">Date:</span> ___________________
+    {% endif %}
   </div>
 </div>
 {% endfor %}

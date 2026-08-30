@@ -1,114 +1,70 @@
 {% extends 'print/base_form.html' %}
 {% block content %}
-{% for hh in households %}{% with cg=hh.cg %}
+{% for hh in households %}{% with cg=hh.cg a=hh.assessment %}
 <div class="sheet">
   {% include 'print/_gov.html' %}
   <div class="ftitle">CW 09: Assessment, Planning and Contracting</div>
   <table class="nb">
     <tr><td class="nb" style="width:50%;"><span class="lbl">File Number:</span> {{ hh.org_household_number }}</td>
-        <td class="nb"><span class="lbl">Social Worker:</span> {{ user.get_full_name|default:user.username }}</td></tr>
+        <td class="nb"><span class="lbl">Social Worker:</span> {{ a.created_by|default:user.get_full_name|default:user.username }}</td></tr>
   </table>
-
   <h2 class="sec">Part 1: Client(s) Name and ID</h2>
   <table>
     <tr><th style="width:25%;">Primary Client Surname</th><td style="width:25%;">{{ cg.surname }}</td>
         <th style="width:25%;">Primary Client First name</th><td style="width:25%;">{{ cg.name }}</td></tr>
     <tr><th>Primary Client ID Number / Date of Birth</th><td colspan="3">{{ cg.id_number }}{% if cg.date_of_birth %} / {{ cg.date_of_birth|date:"Y-m-d" }}{% endif %}</td></tr>
   </table>
-
-  <h2 class="sec">Part 2: Process of Completing Assessment</h2>
-  <h3 class="sub">Part 2.1: Engagement with client(s)</h3>
-  <table>
-    <tr><th>Type of engagement (office, telephone, home visit, school, other)</th><th style="width:25%;">Date completed</th></tr>
-    <tr><td>&nbsp;</td><td></td></tr><tr><td>&nbsp;</td><td></td></tr>
-  </table>
-  <h3 class="sub">Part 2.2: Other persons consulted during the assessment and planning</h3>
-  <table>
-    <tr><th>Name of Person</th><th>Relationship to client(s) or Type of Professional</th><th style="width:22%;">Date completed</th></tr>
-    <tr><td>&nbsp;</td><td></td><td></td></tr><tr><td>&nbsp;</td><td></td><td></td></tr>
-  </table>
-  <h3 class="sub">Part 2.3: List of documents reviewed in assessment</h3>
-  <table>
-    <tr><th style="width:40%;">Name of document</th><th>Key information</th></tr>
-    <tr><td>&nbsp;</td><td></td></tr><tr><td>&nbsp;</td><td></td></tr>
-  </table>
-</div>
-
-<div class="sheet">
-  <div class="conf">CW 09: ASSESSMENT, PLANNING AND CONTRACTING</div>
   <h2 class="sec">Part 3: Assessment Findings</h2>
   <h3 class="sub">Part 3.1: Overview of the situation of the client(s)</h3>
-  <div class="q">Briefly describe the client(s)'s main concern(s)/issues and their expectations. What is the impact of the issue on the client(s), their daily life and family?</div>
-  <div class="ans" style="min-height:60px;"></div>
-  <h3 class="sub">Part 3.2: Strengths and problem solving of the client(s)</h3>
-  <div class="q">How has the client tried to resolve the problem? What are the main strengths, coping mechanisms, values and sources of hope?</div>
-  <div class="ans" style="min-height:60px;"></div>
+  <div class="ans" style="min-height:44px;">{{ a.overview_situation|linebreaksbr }}</div>
+  <h3 class="sub">Part 3.2: Strengths and problem solving</h3>
+  <div class="ans" style="min-height:44px;">{{ a.strengths|linebreaksbr }}</div>
   <h3 class="sub">Part 3.3: Psychosocial issues</h3>
   <div class="q">3.3.1 Social relations, integration and functioning in daily life.</div>
-  <div class="ans" style="min-height:40px;"></div>
+  <div class="ans" style="min-height:36px;">{{ a.psychosocial_social|linebreaksbr }}</div>
   <div class="q">3.3.2 Sources of stress, emotional and behaviour problems.</div>
-  <div class="ans" style="min-height:40px;"></div>
+  <div class="ans" style="min-height:36px;">{{ a.psychosocial_stress|linebreaksbr }}</div>
   <h3 class="sub">Part 3.4: Education</h3>
-  <div class="ans" style="min-height:40px;"></div>
-  <h3 class="sub">Part 3.5: Safety and security</h3>
-  <div class="ans" style="min-height:40px;"></div>
+  <div class="ans" style="min-height:36px;">{{ a.education|linebreaksbr }}</div>
 </div>
 
 <div class="sheet">
   <div class="conf">CW 09: ASSESSMENT, PLANNING AND CONTRACTING</div>
+  <h3 class="sub">Part 3.5: Safety and security</h3>
+  <div class="ans" style="min-height:40px;">{{ a.safety|linebreaksbr }}</div>
   <h3 class="sub">Part 3.6: Health and Nutrition</h3>
-  <div class="ans" style="min-height:44px;"></div>
+  <div class="ans" style="min-height:40px;">{{ a.health_nutrition|linebreaksbr }}</div>
   <h3 class="sub">Part 3.7: Economic issues, basic needs and legal needs</h3>
-  <div class="ans" style="min-height:44px;"></div>
+  <div class="ans" style="min-height:40px;">{{ a.economic_legal|linebreaksbr }}</div>
   <h3 class="sub">Part 3.8: Assessment summary</h3>
-  <div class="q">Problems and strengths &mdash; key challenges/needs and positive coping mechanisms.</div>
-  <div class="ans" style="min-height:44px;"></div>
+  <div class="ans" style="min-height:44px;">{{ a.assessment_summary|linebreaksbr }}</div>
   <div class="half">
-    <div><span class="lbl">Problem codes</span><div class="ans" style="min-height:20px;"></div></div>
+    <div><span class="lbl">Problem codes</span><div class="ans" style="min-height:20px;">{{ a.problem_codes }}</div></div>
     <div><span class="lbl">Risk level</span>
-      <div class="fld"><span class="chk"></span>Emergency (24-48 hrs) <span class="chk"></span>High (1 week) <span class="chk"></span>Mild (2-3 weeks)</div>
+      <div class="fld">
+        <span class="chk">{% if a.risk_level == 'Emergency' %}X{% endif %}</span>Emergency (24-48 hrs)
+        <span class="chk">{% if a.risk_level == 'High' %}X{% endif %}</span>High (1 week)
+        <span class="chk">{% if a.risk_level == 'Mild' %}X{% endif %}</span>Mild (2-3 weeks)</div>
     </div>
   </div>
-
   <h2 class="sec">Part 4: Planning and Contracting &mdash; Plan of Action</h2>
   <div class="q">Overall goal of the intervention (include estimated time to achieve).</div>
-  <div class="ans" style="min-height:30px;"></div>
+  <div class="ans" style="min-height:30px;">{{ a.overall_goal|linebreaksbr }}</div>
   <div class="q">Views of the client(s).</div>
-  <div class="ans" style="min-height:30px;"></div>
+  <div class="ans" style="min-height:30px;">{{ a.client_views|linebreaksbr }}</div>
   <table>
     <tr><th>Issues to be addressed</th><th>Planned intervention &amp; intervention codes</th><th style="width:15%;">Due date</th><th style="width:22%;">Responsibility</th></tr>
     <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
     <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
-    <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
   </table>
-  <div class="fld"><span class="lbl">Due Date for Evaluation:</span> ______________________</div>
-</div>
+  <div class="fld"><span class="lbl">Due Date for Evaluation:</span> {{ a.due_date_evaluation|date:"Y-m-d" }}</div>
 
-<div class="sheet">
-  <div class="conf">CW 09: ASSESSMENT, PLANNING AND CONTRACTING</div>
   <h2 class="sec">Part 5: Contracting Signature Block</h2>
-  <div class="fld">Does client(s)/caregiver agree to share information with other persons or service providers:
-    <span class="chk"></span>Yes, with all relevant actors <span class="chk"></span>With only some actors <span class="chk"></span>No</div>
-  <div class="q">If only some, specify which ones. If no consent and provider decides to share, explain why.</div>
-  <div class="ans" style="min-height:30px;"></div>
   <table>
-    <tr><td colspan="4"><span class="lbl">Client(s) / caregiver:</span> I agree to the above plan and consent to work with the Social Service professional on the plan.</td></tr>
-    <tr><th>Name</th><td>{{ cg.name }} {{ cg.surname }}</td><th>Signature / thumbprint</th><td>&nbsp;</td></tr>
-    <tr><th>Date</th><td colspan="3"></td></tr>
+    <tr><th>Client(s) / caregiver Name</th><td>{{ cg.name }} {{ cg.surname }}</td><th>Signature / thumbprint</th><td>&nbsp;</td><th>Date</th><td></td></tr>
+    <tr><th>Social worker Name</th><td>{{ a.created_by|default:user.get_full_name|default:user.username }}</td><th>Signature</th><td>&nbsp;</td><th>SACSSP / Date</th><td></td></tr>
   </table>
-  <table>
-    <tr><td colspan="4"><span class="lbl">Social worker:</span> I commit to supporting the above client(s) with the above action plan.</td></tr>
-    <tr><th>Name</th><td>{{ user.get_full_name|default:user.username }}</td><th>Signature</th><td>&nbsp;</td></tr>
-    <tr><th>SACSSP Practice Number</th><td></td><th>Date</th><td></td></tr>
-  </table>
-  <h3 class="sub">Review by supervisor</h3>
-  <div class="fld"><span class="chk"></span>I approve the above plan without any amendments</div>
-  <div class="fld"><span class="chk"></span>I approve the above plan with the following amendments (describe below)</div>
-  <div class="ans" style="min-height:30px;"></div>
-  <table>
-    <tr><th>Name</th><td>&nbsp;</td><th>Signature</th><td>&nbsp;</td></tr>
-    <tr><th>SACSSP Practice Number</th><td></td><th>Date</th><td></td></tr>
-  </table>
+  <div class="fld"><span class="lbl">Supervisor review:</span> <span class="chk"></span>Approve without amendments <span class="chk"></span>Approve with amendments</div>
 </div>
 {% endwith %}{% endfor %}
 {% endblock %}

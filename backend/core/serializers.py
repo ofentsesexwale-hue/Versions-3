@@ -8,6 +8,7 @@ from rest_framework import serializers
 from . import choices
 from .models import (
     AuditLogEntry,
+    Assessment,
     Caregiver,
     CaseFileChecklistItem,
     Household,
@@ -281,6 +282,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
             'id', 'org_household_number', 'house_number', 'street', 'town',
             'province', 'district', 'municipality', 'ward', 'date_registered',
             'assigned_to', 'assigned_to_names', 'checklist_progress', 'created_at',
+            'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
         ]
 
     def get_assigned_to_names(self, obj):
@@ -326,3 +328,17 @@ class ProcessNoteSerializer(serializers.ModelSerializer):
             'created_at', 'created_by',
         ]
         read_only_fields = ['created_at', 'created_by']
+
+
+class AssessmentSerializer(serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Assessment
+        fields = [
+            'id', 'household', 'overview_situation', 'strengths', 'psychosocial_social',
+            'psychosocial_stress', 'education', 'safety', 'health_nutrition', 'economic_legal',
+            'assessment_summary', 'problem_codes', 'risk_level', 'overall_goal', 'client_views',
+            'due_date_evaluation', 'created_at', 'updated_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']

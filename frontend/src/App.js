@@ -16,6 +16,8 @@ import AuditLog from "@/pages/AuditLog";
 import Verification from "@/pages/Verification";
 import MyHouseholds from "@/pages/MyHouseholds";
 import Reassign from "@/pages/Reassign";
+import PrintCenter from "@/pages/PrintCenter";
+import AssessmentForm from "@/pages/AssessmentForm";
 
 function App() {
   return (
@@ -34,6 +36,8 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="my-households" element={<MyHouseholds />} />
               <Route path="reassign" element={<Reassign />} />
+              <Route path="print-center" element={<PrintCenter />} />
+              <Route path="households/:id/assessment" element={<AssessmentForm />} />
               <Route path="verification" element={<Verification />} />
               <Route path="households/new" element={<HouseholdForm />} />
               <Route path="households/:id" element={<HouseholdDetail />} />

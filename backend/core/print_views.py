@@ -66,7 +66,7 @@ def print_form(request, form):
     template, title = FORMS[form]
 
     qs = scoped_household_qs(user).prefetch_related(
-        'members', 'caregiver', 'checklist_items', 'process_notes'
+        'members', 'caregiver', 'checklist_items', 'process_notes', 'assessments'
     )
     hid = request.GET.get('household_id')
     ids = request.GET.get('household_ids')
@@ -93,6 +93,7 @@ def print_form(request, form):
             groups.setdefault(it.category, []).append(it)
         hh.cl_groups = [(CAT_LABELS.get(c, c), groups.get(c, [])) for c, _ in choices.CATEGORY_CHOICES]
         hh.notes_list = list(hh.process_notes.all())
+        hh.assessment = hh.assessments.all().first() if hasattr(hh, 'assessments') else None
         log_action(user, 'printed', f'Printed "{title}" for Household #{hh.pk} ({hh.org_household_number})')
 
     ctx = {

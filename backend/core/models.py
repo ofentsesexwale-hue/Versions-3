@@ -46,6 +46,15 @@ class Household(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Checklist sign-off (supervisor stamp on printed Case File Checklist).
+    checklist_signed_name = models.CharField(max_length=255, blank=True)
+    checklist_signed_sacssp = models.CharField(max_length=64, blank=True)
+    checklist_signed_at = models.DateTimeField(null=True, blank=True)
+    checklist_signed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+',
+    )
+
     documents = GenericRelation('SupportingDocument')
 
     class Meta:
@@ -222,3 +231,34 @@ class ProcessNote(models.Model):
 
     def __str__(self):
         return f"Process note for Household #{self.household_id} ({self.created_at:%Y-%m-%d})"
+
+
+class Assessment(models.Model):
+    """Structured CW 09 Assessment, Planning and Contracting record."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='assessments')
+    overview_situation = models.TextField(blank=True)
+    strengths = models.TextField(blank=True)
+    psychosocial_social = models.TextField(blank=True)
+    psychosocial_stress = models.TextField(blank=True)
+    education = models.TextField(blank=True)
+    safety = models.TextField(blank=True)
+    health_nutrition = models.TextField(blank=True)
+    economic_legal = models.TextField(blank=True)
+    assessment_summary = models.TextField(blank=True)
+    problem_codes = models.CharField(max_length=255, blank=True)
+    risk_level = models.CharField(max_length=16, choices=choices.RISK_LEVEL_CHOICES, blank=True)
+    overall_goal = models.TextField(blank=True)
+    client_views = models.TextField(blank=True)
+    due_date_evaluation = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='assessments',
+    )
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"Assessment for Household #{self.household_id}"

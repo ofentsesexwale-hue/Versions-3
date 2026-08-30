@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BadgeCheck, Lock, Printer } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Lock, Printer, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { printForm } from "@/lib/print";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +26,8 @@ export default function Checklist() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canEdit = user?.permissions?.can_edit_checklist_evidence;
+  const [signOpen, setSignOpen] = useState(false);
+  const [sacssp, setSacssp] = useState("");
   const [items, setItems] = useState([]);
   const [household, setHousehold] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,6 +43,17 @@ export default function Checklist() {
     });
   };
   useEffect(() => { load(); }, [id]);
+
+  const signOff = async () => {
+    try {
+      const res = await api.post(`/households/${id}/sign_checklist/`, { sacssp });
+      setHousehold(res.data);
+      toast.success("Checklist signed off");
+      setSignOpen(false);
+    } catch (e) {
+      toast.error("Only supervisors can sign off the checklist");
+    }
+  };
 
   const patchItem = async (item, changes) => {
     try {
@@ -75,14 +91,37 @@ export default function Checklist() {
             </p>
           )}
         </div>
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={() => printForm("checklist", { householdId: id })}
-          data-testid="print-checklist-button"
-        >
-          <Printer className="h-4 w-4" /> Print DSD Checklist
-        </Button>
+        <div className="flex gap-2">
+          {canEdit && (
+            <Dialog open={signOpen} onOpenChange={setSignOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 bg-slate-900 hover:bg-slate-800" data-testid="signoff-checklist-button">
+                  <PenLine className="h-4 w-4" /> Sign off checklist
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Sign off case-file checklist</DialogTitle></DialogHeader>
+                <p className="text-sm text-slate-600">Your name and today's date will be stamped on the printed DSD checklist.</p>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">SACSSP Number (optional)</label>
+                  <Input value={sacssp} onChange={(e) => setSacssp(e.target.value)} placeholder="e.g. 10-12345" data-testid="signoff-sacssp-input" />
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setSignOpen(false)}>Cancel</Button>
+                  <Button className="bg-slate-900 hover:bg-slate-800" onClick={signOff} data-testid="signoff-confirm-button">Sign off</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => printForm("checklist", { householdId: id })}
+            data-testid="print-checklist-button"
+          >
+            <Printer className="h-4 w-4" /> Print DSD Checklist
+          </Button>
+        </div>
       </div>
 
       <Card>

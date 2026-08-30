@@ -30,6 +30,7 @@ export function ProcessNotes({ householdId }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [codes, setCodes] = useState({ problem_codes: [], intervention_codes: [] });
 
   const load = () => {
     api.get("/process-notes/", { params: { household: householdId, page_size: 100 } })
@@ -37,6 +38,12 @@ export function ProcessNotes({ householdId }) {
       .catch(() => {});
   };
   useEffect(() => { load(); }, [householdId]);
+
+  useEffect(() => {
+    api.get("/choices/")
+      .then((r) => setCodes({ problem_codes: r.data.problem_codes || [], intervention_codes: r.data.intervention_codes || [] }))
+      .catch(() => {});
+  }, []);
 
   const save = async () => {
     if (!form.purpose_and_what_transpired.trim()) {
@@ -101,11 +108,21 @@ export function ProcessNotes({ householdId }) {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-600">Problem code (CW 06)</label>
-                    <Input value={form.problem_code} onChange={set("problem_code")} data-testid="pn-problem-code" />
+                    <Select value={form.problem_code} onValueChange={(v) => setForm((f) => ({ ...f, problem_code: v }))}>
+                      <SelectTrigger data-testid="pn-problem-code"><SelectValue placeholder="Select code" /></SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {codes.problem_codes.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-600">Intervention code (CW 10)</label>
-                    <Input value={form.intervention_code} onChange={set("intervention_code")} data-testid="pn-intervention-code" />
+                    <Select value={form.intervention_code} onValueChange={(v) => setForm((f) => ({ ...f, intervention_code: v }))}>
+                      <SelectTrigger data-testid="pn-intervention-code"><SelectValue placeholder="Select code" /></SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        {codes.intervention_codes.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-600">Type of engagement</label>

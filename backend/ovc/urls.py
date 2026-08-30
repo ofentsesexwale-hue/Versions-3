@@ -15,6 +15,7 @@ router.register(r'members', views.HouseholdMemberViewSet, basename='member')
 router.register(r'documents', views.SupportingDocumentViewSet, basename='document')
 router.register(r'checklist', views.ChecklistViewSet, basename='checklist')
 router.register(r'process-notes', views.ProcessNoteViewSet, basename='processnote')
+router.register(r'assessments', views.AssessmentViewSet, basename='assessment')
 router.register(r'audit', views.AuditLogViewSet, basename='audit')
 
 api_patterns = [

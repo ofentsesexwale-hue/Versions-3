@@ -1,0 +1,112 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Printer, Save } from "lucide-react";
+import { toast } from "sonner";
+import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { printForm } from "@/lib/print";
+
+const FIELDS = [
+  ["overview_situation", "Part 3.1 Overview of the situation"],
+  ["strengths", "Part 3.2 Strengths and problem solving"],
+  ["psychosocial_social", "Part 3.3.1 Social relations & functioning"],
+  ["psychosocial_stress", "Part 3.3.2 Sources of stress / behaviour"],
+  ["education", "Part 3.4 Education"],
+  ["safety", "Part 3.5 Safety and security"],
+  ["health_nutrition", "Part 3.6 Health and nutrition"],
+  ["economic_legal", "Part 3.7 Economic, basic & legal needs"],
+  ["assessment_summary", "Part 3.8 Assessment summary"],
+  ["overall_goal", "Part 4 Overall goal"],
+  ["client_views", "Part 4 Views of the client(s)"],
+];
+const EMPTY = FIELDS.reduce((a, [k]) => ({ ...a, [k]: "" }), { problem_codes: "", risk_level: "", due_date_evaluation: "" });
+
+export default function AssessmentForm() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [form, setForm] = useState(EMPTY);
+  const [existingId, setExistingId] = useState(null);
+  const [risks, setRisks] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/assessments/", { params: { household: id, page_size: 1 } }).then((r) => {
+      const a = (r.data.results || [])[0];
+      if (a) {
+        setExistingId(a.id);
+        setForm({ ...EMPTY, ...a, due_date_evaluation: a.due_date_evaluation || "" });
+      }
+    }).catch(() => {});
+    api.get("/choices/").then((r) => setRisks(r.data.risk_level || [])).catch(() => {});
+  }, [id]);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = { ...form, household: Number(id) };
+      if (!payload.due_date_evaluation) delete payload.due_date_evaluation;
+      if (existingId) await api.put(`/assessments/${existingId}/`, payload);
+      else { const r = await api.post("/assessments/", payload); setExistingId(r.data.id); }
+      toast.success("Assessment saved");
+    } catch (e) {
+      toast.error("Could not save assessment");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-6" data-testid="assessment-form-page">
+      <Button variant="ghost" onClick={() => navigate(`/households/${id}`)} className="gap-2" data-testid="back-button">
+        <ArrowLeft className="h-4 w-4" /> Back to household
+      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">CW 09 Assessment, Planning &amp; Contracting</h1>
+          <p className="text-sm text-slate-600">Complete the narrative sections; they print onto the official CW 09 form.</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => printForm("assessment", { householdId: id })} data-testid="print-assessment-button">
+            <Printer className="h-4 w-4" /> Print CW 09
+          </Button>
+          <Button onClick={save} disabled={saving} className="gap-2 bg-slate-900 hover:bg-slate-800" data-testid="assessment-save-button">
+            <Save className="h-4 w-4" /> {saving ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      </div>
+      <Card>
+        <CardContent className="space-y-4 p-5">
+          {FIELDS.map(([k, label]) => (
+            <div key={k}>
+              <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+              <Textarea rows={2} value={form[k]} onChange={set(k)} data-testid={`assessment-${k}`} />
+            </div>
+          ))}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Problem codes</label>
+              <Input value={form.problem_codes} onChange={set("problem_codes")} placeholder="e.g. 1.1, 6.8" data-testid="assessment-problem-codes" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Risk level</label>
+              <Select value={form.risk_level} onValueChange={(v) => setForm((f) => ({ ...f, risk_level: v }))}>
+                <SelectTrigger data-testid="assessment-risk-level"><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>{risks.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Due date for evaluation</label>
+              <Input type="date" value={form.due_date_evaluation} onChange={set("due_date_evaluation")} data-testid="assessment-due-date" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
