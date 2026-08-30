@@ -347,7 +347,31 @@ class AssessmentSerializer(serializers.ModelSerializer):
 
 
 class OrganisationSerializer(serializers.ModelSerializer):
+    logo = serializers.SerializerMethodField()
+
     class Meta:
         model = Organisation
         fields = ['id', 'name', 'logo', 'address', 'contact', 'updated_at']
         read_only_fields = ['updated_at']
+
+    def get_logo(self, obj):
+        # Return a relative URL so the frontend can prepend REACT_APP_BACKEND_URL
+        # correctly. build_absolute_uri uses the internal cluster hostname (Host
+        # header from ingress -> pod) which is not reachable from a browser.
+        if not obj.logo:
+            return None
+        try:
+            return obj.logo.url
+        except Exception:
+            return None
+
+    def to_internal_value(self, data):
+        # SerializerMethodField makes 'logo' read-only; accept uploads via the
+        # model field directly by delegating write handling to the parent when
+        # a file is provided in multipart data.
+        result = super().to_internal_value(data)
+        if hasattr(data, 'getlist'):
+            files = data.getlist('logo') if 'logo' in data else []
+            if files and hasattr(files[0], 'read'):
+                result['logo'] = files[0]
+        return result

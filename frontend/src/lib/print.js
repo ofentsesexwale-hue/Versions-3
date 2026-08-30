@@ -34,12 +34,13 @@ export const BATCH_FORMS = [
 // Open a server-rendered DSD print view in a new tab. Auth token is passed as a
 // query param so the browser tab can load it directly; `auto=1` triggers the
 // print dialog on load.
-export function printForm(form, { householdId, householdIds, org, auto = true } = {}) {
+export function printForm(form, { householdId, householdIds, org, auto = true, assessmentId } = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
   const qs = new URLSearchParams();
   qs.set("token", token || "");
   if (org) qs.set("org", org);
   if (auto) qs.set("auto", "1");
+  if (assessmentId) qs.set("assessment_id", assessmentId);
   if (householdId) qs.set("household_id", householdId);
   if (householdIds && householdIds.length) qs.set("household_ids", householdIds.join(","));
   window.open(`${BACKEND_URL}/api/print/${form}/?${qs.toString()}`, "_blank", "noopener");

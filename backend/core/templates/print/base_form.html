@@ -71,6 +71,11 @@
     <tr><td>{{ forloop.counter }}</td><td>{{ hh.org_household_number }}</td><td>{{ hh.cg.name }} {{ hh.cg.surname }}</td><td>{{ hh.town }}</td><td>{{ hh.district }}</td></tr>
     {% endfor %}
   </table>
+  <div class="sigrow" style="margin-top:22px;">
+    <div><div class="sigline">Prepared by: {{ user.get_full_name|default:user.username }}</div></div>
+    <div><div class="sigline">Supervisor name &amp; signature</div></div>
+    <div><div class="sigline">Date</div></div>
+  </div>
 </div>
 {% endif %}
 {% block content %}{% endblock %}

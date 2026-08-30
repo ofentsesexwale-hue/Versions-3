@@ -35,6 +35,13 @@ Offline case-management system for South African NPOs serving Orphans & Vulnerab
 - **Sign-off History**: admin/supervisor overview at `/signoffs` (`/api/households/?signed=1`) listing signer/SACSSP/date. (Sign-off fields added to `HouseholdListSerializer`.)
 - **Batch Cover Page**: Print Center batch runs (2+ households) prepend a cover sheet listing every included household.
 
+### Enhancements (2026-06, round 4)
+- **Timeline Sign-off**: checklist sign-off events appear in each household's activity timeline (audit regex already matches `Household #<id>`).
+- **On-screen logo**: AppShell fetches `/api/organisation/` and shows the org logo + name in the sidebar and top bar (falls back to default brand). Logo served relative (`/api/media/...`) so it resolves on the public origin.
+- **Assessment versions**: multiple CW09 assessments kept per household; editor has a version selector + "New version"; `?assessment_id=` prints a specific version.
+- **Cover signatures**: batch cover page shows "Prepared by" + supervisor signature + date lines.
+- Fixes (testing agent + main): `OrganisationSerializer.logo` returns a relative URL (build_absolute_uri produced the internal cluster host); print letterhead logo likewise uses a relative src.
+
 ## Backlog / next
 - P1: add remaining DSD reference forms (CW06 problem codes, CW10 intervention codes as pickers in Process Note dialog; COW1 Planning, CW12 Evaluation, GRW group-work forms).
 - P2: batch "Print Center" page (print one form across a district or a worker's caseload).

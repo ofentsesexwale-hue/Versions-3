@@ -97,15 +97,19 @@ function NavItems({ role, counts, onNavigate }) {
   );
 }
 
-function SidebarContent({ user, counts, onLogout, onNavigate }) {
+function SidebarContent({ user, counts, onLogout, onNavigate, logoUrl, orgName }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-4 py-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-white">
-          <ShieldCheck className="h-6 w-6" />
-        </div>
+        {logoUrl ? (
+          <img src={logoUrl} alt="logo" className="h-10 w-10 rounded-lg object-contain" data-testid="sidebar-org-logo" />
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-white">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+        )}
         <div>
-          <p className="text-base font-semibold leading-tight text-slate-900">OVC CaseFile</p>
+          <p className="text-base font-semibold leading-tight text-slate-900">{orgName || "OVC CaseFile"}</p>
           <p className="text-xs text-slate-500">Offline case management</p>
         </div>
       </div>
@@ -138,6 +142,15 @@ export function AppShell() {
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [counts, setCounts] = useState({ verification: 0 });
+  const [org, setOrg] = useState(null);
+
+  useEffect(() => {
+    api.get("/organisation/").then((r) => setOrg(r.data)).catch(() => {});
+  }, []);
+
+  const logoUrl = org?.logo
+    ? (org.logo.startsWith("http") ? org.logo : `${process.env.REACT_APP_BACKEND_URL}${org.logo}`)
+    : null;
 
   useEffect(() => {
     if (user?.role === "admin" || user?.role === "supervisor") {
@@ -166,7 +179,7 @@ export function AppShell() {
         data-testid="app-sidebar"
       >
         <div className="sticky top-0 h-screen">
-          <SidebarContent user={user} counts={counts} onLogout={onLogout} />
+          <SidebarContent user={user} counts={counts} onLogout={onLogout} logoUrl={logoUrl} orgName={org?.name} />
         </div>
       </aside>
 
@@ -181,7 +194,7 @@ export function AppShell() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-[280px] p-0">
-                <SidebarContent user={user} counts={counts} onLogout={onLogout} onNavigate={() => setMobileOpen(false)} />
+                <SidebarContent user={user} counts={counts} onLogout={onLogout} logoUrl={logoUrl} orgName={org?.name} onNavigate={() => setMobileOpen(false)} />
               </SheetContent>
             </Sheet>
 
@@ -197,6 +210,7 @@ export function AppShell() {
             </form>
 
             <div className="ml-auto flex items-center gap-2">
+              {logoUrl && <img src={logoUrl} alt="logo" className="hidden h-9 max-w-[140px] object-contain sm:block" data-testid="header-org-logo" />}
               <Button
                 onClick={() => navigate("/households/new")}
                 className="gap-2 bg-slate-900 hover:bg-slate-800"

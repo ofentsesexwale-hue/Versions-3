@@ -34,16 +34,26 @@ export default function AssessmentForm() {
   const [existingId, setExistingId] = useState(null);
   const [risks, setRisks] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [versions, setVersions] = useState([]);
+
+  const applyVersion = (a) => {
+    setExistingId(a.id);
+    setForm({ ...EMPTY, ...a, plan_rows: a.plan_rows || [], due_date_evaluation: a.due_date_evaluation || "" });
+  };
+  const loadVersions = (selectId) => {
+    api.get("/assessments/", { params: { household: id, page_size: 50 } }).then((r) => {
+      const list = r.data.results || [];
+      setVersions(list);
+      const pick = selectId ? list.find((x) => x.id === selectId) : list[0];
+      if (pick) applyVersion(pick);
+    }).catch(() => {});
+  };
+  const newVersion = () => { setExistingId(null); setForm(EMPTY); };
 
   useEffect(() => {
-    api.get("/assessments/", { params: { household: id, page_size: 1 } }).then((r) => {
-      const a = (r.data.results || [])[0];
-      if (a) {
-        setExistingId(a.id);
-        setForm({ ...EMPTY, ...a, plan_rows: a.plan_rows || [], due_date_evaluation: a.due_date_evaluation || "" });
-      }
-    }).catch(() => {});
+    loadVersions();
     api.get("/choices/").then((r) => setRisks(r.data.risk_level || [])).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -57,9 +67,11 @@ export default function AssessmentForm() {
     try {
       const payload = { ...form, household: Number(id) };
       if (!payload.due_date_evaluation) delete payload.due_date_evaluation;
+      let savedId = existingId;
       if (existingId) await api.put(`/assessments/${existingId}/`, payload);
-      else { const r = await api.post("/assessments/", payload); setExistingId(r.data.id); }
+      else { const r = await api.post("/assessments/", payload); savedId = r.data.id; setExistingId(r.data.id); }
       toast.success("Assessment saved");
+      loadVersions(savedId);
     } catch (e) {
       toast.error("Could not save assessment");
     } finally { setSaving(false); }
@@ -75,8 +87,22 @@ export default function AssessmentForm() {
           <h1 className="text-2xl font-semibold text-slate-900">CW 09 Assessment, Planning &amp; Contracting</h1>
           <p className="text-sm text-slate-600">Complete the narrative sections; they print onto the official CW 09 form.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => printForm("assessment", { householdId: id })} data-testid="print-assessment-button">
+        <div className="flex flex-wrap items-center gap-2">
+          {versions.length > 0 && (
+            <Select value={existingId ? String(existingId) : "new"} onValueChange={(v) => (v === "new" ? newVersion() : applyVersion(versions.find((x) => String(x.id) === v)))}>
+              <SelectTrigger className="w-[220px]" data-testid="assessment-version-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {versions.map((v) => (
+                  <SelectItem key={v.id} value={String(v.id)}>
+                    Version · {new Date(v.updated_at).toLocaleDateString()} {new Date(v.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </SelectItem>
+                ))}
+                <SelectItem value="new">+ New (unsaved)</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Button variant="outline" className="gap-2" onClick={newVersion} data-testid="assessment-new-version-button">New version</Button>
+          <Button variant="outline" className="gap-2" onClick={() => printForm("assessment", { householdId: id, assessmentId: existingId })} data-testid="print-assessment-button">
             <Printer className="h-4 w-4" /> Print CW 09
           </Button>
           <Button onClick={save} disabled={saving} className="gap-2 bg-slate-900 hover:bg-slate-800" data-testid="assessment-save-button">

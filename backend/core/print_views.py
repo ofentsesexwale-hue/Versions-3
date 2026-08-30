@@ -82,7 +82,11 @@ def print_form(request, form):
 
     org = Organisation.get_solo()
     org_name = request.GET.get('org') or org.name
-    org_logo = request.build_absolute_uri(org.logo.url) if org.logo else None
+    # Relative URL: the print page is served from the public origin, so a
+    # relative src resolves correctly. build_absolute_uri() would use the
+    # internal cluster Host header and break the image in the browser.
+    org_logo = org.logo.url if org.logo else None
+    aid = request.GET.get('assessment_id')
     today = timezone.localdate()
     for hh in households:
         hh.cg = getattr(hh, 'caregiver', None)
@@ -96,7 +100,9 @@ def print_form(request, form):
             groups.setdefault(it.category, []).append(it)
         hh.cl_groups = [(CAT_LABELS.get(c, c), groups.get(c, [])) for c, _ in choices.CATEGORY_CHOICES]
         hh.notes_list = list(hh.process_notes.all())
-        hh.assessment = hh.assessments.all().first() if hasattr(hh, 'assessments') else None
+        assessments = list(hh.assessments.all())
+        hh.assessment = (next((a for a in assessments if str(a.pk) == aid), None)
+                         if aid else (assessments[0] if assessments else None))
         log_action(user, 'printed', f'Printed "{title}" for Household #{hh.pk} ({hh.org_household_number})')
 
     ctx = {

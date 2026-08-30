@@ -1,0 +1,37 @@
+{
+  "summary": "Round-4 polish testing complete. Added /app/backend/tests/test_round4_features.py (13 tests) covering: Timeline Sign-off (household 59 timeline contains 'Signed off checklist for Household #59'), Organisation Logo (GET returns name+logo; PUT multipart with logo file persists and file served at /api/media/org/...), Assessment Versions (>=2 versions on hh60, print with assessment_id works, POST creates NEW version rather than overwriting), Cover Signatures (/api/print/checklist/ and /api/print/full/ with 2+ households contain 'Prepared by:' and 'Supervisor name' lines), plus 5 print-form regression tests. Full run: 35 passed, 11 skipped (11 skips are the pre-existing parametrised print-form names that never had URL routes — unchanged from iteration 3). Frontend Playwright verified via external URL: sidebar-org-logo + header-org-logo render and image LOADS (naturalWidth>0) after fix; sidebar text shows 'Ubuntu Care NPO'; assessment-version-select lists dated versions ('Version · 8/30/2026 10:03 PM'), assessment-new-version-button clears the overview field ('Version B updated review.' -> ''), print-assessment-button present; household-timeline-card on HH59 contains 'Signed off checklist' entry. Found and fixed one integration bug (see RCA).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_round4_features.py",
+    "/app/backend/tests/test_round3_features.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration_4.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/views.py continues to grow (Organisation, Assessment, sign_checklist, timeline, verification_count, bulk_reassign etc.); split into modules before crossing 700 lines.",
+    "Print endpoints still accept ?token= via URL for window.open(), leaking tokens in access logs / Referer headers. Recommend signed one-time tokens or an HttpOnly cookie handshake.",
+    "OrganisationSerializer previously exposed logo via DRF default FileField serialisation, which calls request.build_absolute_uri() using the internal cluster hostname. That absolute URL was returned to the browser and produced a 403/broken-image. Fixed by making `logo` a SerializerMethodField that returns obj.logo.url (relative). Any future ImageField/FileField exposed through DRF should follow the same pattern in this environment (frontend already prepends REACT_APP_BACKEND_URL when the value is relative).",
+    "Assessment version selector groups by 'updated_at' timestamp only — two rapid saves in the same minute render identical labels. Consider adding a monotonic version number or including seconds/id in the label."
+  ],
+  "updated_files": [
+    "/app/backend/core/serializers.py (OrganisationSerializer.logo now returns relative URL via SerializerMethodField + to_internal_value accepts multipart uploads)",
+    "/app/backend/tests/test_round4_features.py (new — 13 tests for round-4 features)"
+  ],
+  "success_rate": {"backend": "100% (35/35 executed; 11 skips are pre-existing print-form-name mismatches unchanged since iteration 3)", "frontend": "100% of round-4 testids present, interactive and integrated with backend"},
+  "test_credentials": "admin/admin123, supervisor/supervisor123, caseworker/caseworker123, capturer/capturer123",
+  "seed_data_creation": "Uploaded a 1x1 red PNG as organisation logo (persisted under /app/backend/media/org/test*.png). Created and then deleted one TEST_ assessment on HH60 during version test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Four backend test files in /app/backend/tests/: backend_test.py (regression), test_new_features.py, test_round3_features.py, test_round4_features.py. Run all with `REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/ -v`. IMPORTANT: pytest.ini in /app/backend does not load env from /app/frontend/.env, so you MUST export REACT_APP_BACKEND_URL before running. Organisation now has a logo uploaded — if you re-upload, Django FileField auto-suffixes the filename (test_XXXXX.png). MEDIA_URL is /api/media/ so ingress routes it to the backend correctly. Frontend AppShell fetches /api/organisation/ once on mount; when org.logo starts with 'http' it uses it as-is, otherwise prepends REACT_APP_BACKEND_URL — backend now always returns a relative URL, keeping the browser render path deterministic.",
+  "rca of the issue": "BUG (fixed): Organisation logo did not render in the browser sidebar/header despite the file existing on disk and being served correctly by Django. Reproduction: 1) log in as admin, 2) upload a logo at /settings/organisation, 3) reload — sidebar-org-logo <img> element exists but naturalWidth=0 (broken image). Root cause: DRF's default FileField serialisation calls request.build_absolute_uri(value.url), which uses the request Host header. Behind the k8s ingress the Host is the internal cluster name (verify-badge-dash.cluster-5.preview.emergentcf.cloud) which is not routable from a client browser (returns 403 through the CDN). Frontend logic `org.logo.startsWith('http') ? org.logo : REACT_APP_BACKEND_URL + org.logo` then treated that internal absolute URL as final and used it verbatim. Mitigation: changed OrganisationSerializer.logo to a SerializerMethodField returning obj.logo.url (relative — '/api/media/org/…'). Frontend prepends REACT_APP_BACKEND_URL and the browser hits the public ingress URL, image loads (verified naturalWidth>0 for both sidebar-org-logo and header-org-logo in Playwright). Also updated to_internal_value to still accept multipart file uploads for the same 'logo' key (SerializerMethodField would otherwise make it read-only)."
+}
