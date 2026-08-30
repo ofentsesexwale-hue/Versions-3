@@ -94,7 +94,7 @@ export default function AssessmentForm() {
               <SelectContent>
                 {versions.map((v) => (
                   <SelectItem key={v.id} value={String(v.id)}>
-                    Version · {new Date(v.updated_at).toLocaleDateString()} {new Date(v.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    v{v.version_number} · {new Date(v.updated_at).toLocaleDateString()} {new Date(v.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{v.created_by ? ` · ${v.created_by}` : ""}
                   </SelectItem>
                 ))}
                 <SelectItem value="new">+ New (unsaved)</SelectItem>

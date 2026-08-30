@@ -3,14 +3,14 @@ import csv
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from django.db.models import Case, Count, F, FloatField, Q, Value, When
+from django.db.models import Case, Count, F, FloatField, Max, Q, Value, When
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -551,8 +551,10 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        obj = serializer.save(created_by=self.request.user)
-        log_action(self.request.user, 'created', f'Assessment for Household #{obj.household_id}')
+        household = serializer.validated_data['household']
+        last = Assessment.objects.filter(household=household).aggregate(m=Max('version_number'))['m'] or 0
+        obj = serializer.save(created_by=self.request.user, version_number=last + 1)
+        log_action(self.request.user, 'created', f'Assessment v{obj.version_number} for Household #{obj.household_id}')
 
     def perform_update(self, serializer):
         obj = serializer.save()
@@ -637,8 +639,16 @@ class UsersListView(APIView):
         return users_list(request)
 
 
+class BrandingView(APIView):
+    """Public org branding (name + logo) for the login screen."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        org = Organisation.get_solo()
+        return Response({'name': org.name, 'logo': org.logo.url if org.logo else None})
+
+
 class OrganisationView(APIView):
-    """Read (any staff) / update (admin) the org letterhead profile."""
     permission_classes = [IsAuthenticated, IsStaffRole]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 

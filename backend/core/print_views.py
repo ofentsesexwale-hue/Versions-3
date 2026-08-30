@@ -12,6 +12,7 @@ from rest_framework.authtoken.models import Token
 from . import choices
 from .audit import log_action
 from .models import Organisation
+from .serializers import checklist_progress
 from .views import scoped_household_qs
 
 CAT_LABELS = dict(choices.CATEGORY_CHOICES)
@@ -100,6 +101,10 @@ def print_form(request, form):
             groups.setdefault(it.category, []).append(it)
         hh.cl_groups = [(CAT_LABELS.get(c, c), groups.get(c, [])) for c, _ in choices.CATEGORY_CHOICES]
         hh.notes_list = list(hh.process_notes.all())
+        try:
+            hh.cl_pct = checklist_progress(hh).get('percent', 0)
+        except Exception:
+            hh.cl_pct = 0
         assessments = list(hh.assessments.all())
         hh.assessment = (next((a for a in assessments if str(a.pk) == aid), None)
                          if aid else (assessments[0] if assessments else None))
@@ -111,6 +116,7 @@ def print_form(request, form):
         'org_logo': org_logo,
         'org': org,
         'show_cover': len(households) > 1 and request.GET.get('cover') != '0',
+        'cover_avg': round(sum(getattr(h, 'cl_pct', 0) for h in households) / len(households)) if households else 0,
         'now': timezone.now(),
         'user': user,
         'form_title': title,

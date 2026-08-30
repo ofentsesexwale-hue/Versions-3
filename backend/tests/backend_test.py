@@ -245,7 +245,7 @@ class TestBulkReassign:
         # Reassign
         r2 = requests.post(
             f"{API}/households/bulk_reassign/",
-            json={"household_ids": hh_ids, "assigned_to": cw2},
+            json={"household_ids": hh_ids, "to_user": cw2},
             headers=admin_headers, timeout=15,
         )
         assert r2.status_code in (200, 202), r2.text[:300]
@@ -254,19 +254,20 @@ class TestBulkReassign:
         r3 = requests.get(f"{API}/households/{hh_ids[0]}/", headers=admin_headers, timeout=15)
         assert r3.status_code == 200
         det = r3.json()
-        # assigned_to may be nested obj or id
         assigned = det.get("assigned_to")
-        assigned_id = assigned.get("id") if isinstance(assigned, dict) else assigned
-        if assigned_id is None:
-            # try assigned_to_ids
-            ids = det.get("assigned_to_ids") or []
-            assert cw2 in ids
+        if isinstance(assigned, list):
+            ids = [a.get("id") if isinstance(a, dict) else a for a in assigned]
+        elif isinstance(assigned, dict):
+            ids = [assigned.get("id")]
+        elif assigned is not None:
+            ids = [assigned]
         else:
-            assert assigned_id == cw2
+            ids = det.get("assigned_to_ids") or []
+        assert cw2 in ids, f"cw2 {cw2} not in {ids}"
 
         # Revert
         requests.post(
             f"{API}/households/bulk_reassign/",
-            json={"household_ids": hh_ids, "assigned_to": cw1},
+            json={"household_ids": hh_ids, "to_user": cw1},
             headers=admin_headers, timeout=15,
         )

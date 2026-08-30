@@ -96,6 +96,7 @@ export default function HouseholdDetail() {
   const [viewerDoc, setViewerDoc] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [timeline, setTimeline] = useState([]);
+  const [tlFilter, setTlFilter] = useState("all");
 
   const load = () => {
     setLoading(true);
@@ -387,31 +388,46 @@ export default function HouseholdDetail() {
       <ProcessNotes householdId={id} />
 
       <Card data-testid="household-timeline-card">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <History className="h-4 w-4" /> Case history &amp; activity timeline
           </CardTitle>
+          {timeline.length > 0 && (
+            <div className="flex flex-wrap gap-1" data-testid="timeline-filter">
+              {["all", ...Array.from(new Set(timeline.map((e) => e.action)))].map((a) => (
+                <button
+                  key={a}
+                  onClick={() => setTlFilter(a)}
+                  className={`rounded-full px-2.5 py-1 text-xs capitalize ${tlFilter === a ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                  data-testid={`timeline-filter-${a}`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          {timeline.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-600" data-testid="timeline-empty">
-              No recorded activity for this household yet.
-            </p>
-          ) : (
-            <ol className="relative border-l-2 border-slate-200 pl-5">
-              {timeline.map((e) => (
-                <li key={e.id} className="mb-4 last:mb-0" data-testid={`timeline-entry-${e.id}`}>
-                  <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-[color:var(--sa-green,#007a4d)]" />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700">{e.action}</span>
-                    <span className="text-xs text-slate-500">{formatDateTime(e.timestamp)}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-slate-800">{e.target_description}</p>
-                  <p className="text-xs text-slate-500">by {e.user}</p>
-                </li>
-              ))}
-            </ol>
-          )}
+          {(() => {
+            const rows = timeline.filter((e) => tlFilter === "all" || e.action === tlFilter);
+            return rows.length === 0 ? (
+              <p className="py-4 text-center text-sm text-slate-600" data-testid="timeline-empty">No matching activity for this household.</p>
+            ) : (
+              <ol className="relative border-l-2 border-slate-200 pl-5">
+                {rows.map((e) => (
+                  <li key={e.id} className="mb-4 last:mb-0" data-testid={`timeline-entry-${e.id}`}>
+                    <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-[color:var(--sa-green,#007a4d)]" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700">{e.action}</span>
+                      <span className="text-xs text-slate-500">{formatDateTime(e.timestamp)}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-800">{e.target_description}</p>
+                    <p className="text-xs text-slate-500">by {e.user}</p>
+                  </li>
+                ))}
+              </ol>
+            );
+          })()}
         </CardContent>
       </Card>
 

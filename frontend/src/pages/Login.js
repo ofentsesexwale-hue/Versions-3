@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,15 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [branding, setBranding] = useState(null);
+
+  useEffect(() => {
+    api.get("/branding/").then((r) => setBranding(r.data)).catch(() => {});
+  }, []);
+
+  const brandingLogo = branding?.logo
+    ? (branding.logo.startsWith("http") ? branding.logo : `${process.env.REACT_APP_BACKEND_URL}${branding.logo}`)
+    : null;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -40,10 +50,14 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white">
-            <ShieldCheck className="h-8 w-8" />
-          </div>
-          <h1 className="text-2xl font-semibold text-slate-900">OVC CaseFile</h1>
+          {brandingLogo ? (
+            <img src={brandingLogo} alt="logo" className="mb-3 h-16 max-w-[200px] object-contain" data-testid="login-org-logo" />
+          ) : (
+            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <ShieldCheck className="h-8 w-8" />
+            </div>
+          )}
+          <h1 className="text-2xl font-semibold text-slate-900">{branding?.name || "OVC CaseFile"}</h1>
           <p className="mt-1 text-sm text-slate-600">
             Offline Case Management for Orphans &amp; Vulnerable Children
           </p>

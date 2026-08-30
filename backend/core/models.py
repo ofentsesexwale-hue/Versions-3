@@ -251,6 +251,7 @@ class Assessment(models.Model):
     client_views = models.TextField(blank=True)
     due_date_evaluation = models.DateField(null=True, blank=True)
     plan_rows = models.JSONField(default=list, blank=True)
+    version_number = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

@@ -341,9 +341,9 @@ class AssessmentSerializer(serializers.ModelSerializer):
             'id', 'household', 'overview_situation', 'strengths', 'psychosocial_social',
             'psychosocial_stress', 'education', 'safety', 'health_nutrition', 'economic_legal',
             'assessment_summary', 'problem_codes', 'risk_level', 'overall_goal', 'client_views',
-            'due_date_evaluation', 'plan_rows', 'created_at', 'updated_at', 'created_by',
+            'due_date_evaluation', 'plan_rows', 'version_number', 'created_at', 'updated_at', 'created_by',
         ]
-        read_only_fields = ['created_at', 'updated_at', 'created_by']
+        read_only_fields = ['created_at', 'updated_at', 'created_by', 'version_number']
 
 
 class OrganisationSerializer(serializers.ModelSerializer):

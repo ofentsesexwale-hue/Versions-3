@@ -42,6 +42,12 @@ Offline case-management system for South African NPOs serving Orphans & Vulnerab
 - **Cover signatures**: batch cover page shows "Prepared by" + supervisor signature + date lines.
 - Fixes (testing agent + main): `OrganisationSerializer.logo` returns a relative URL (build_absolute_uri produced the internal cluster host); print letterhead logo likewise uses a relative src.
 
+### Enhancements (2026-06, round 5)
+- **Version labels**: `Assessment.version_number` stamped server-side (Max+1 per household); version picker shows `v{n} · date · author`.
+- **Logo in login**: public `GET /api/branding/` (AllowAny) returns org name+logo; login screen shows them.
+- **Timeline filters**: household timeline card has action-type filter chips (all + confirmed/edited/printed/...).
+- **Cover totals**: batch cover shows average file completeness + a per-household File % column.
+
 ## Backlog / next
 - P1: add remaining DSD reference forms (CW06 problem codes, CW10 intervention codes as pickers in Process Note dialog; COW1 Planning, CW12 Evaluation, GRW group-work forms).
 - P2: batch "Print Center" page (print one form across a district or a worker's caseload).

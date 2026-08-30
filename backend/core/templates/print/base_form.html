@@ -64,11 +64,11 @@
   {% if org_logo %}<img class="logo" src="{{ org_logo }}" style="max-height:70px;margin-bottom:8px;">{% endif %}
   <div class="orghead"><div class="on">{{ org_name }}</div><div>Batch Print Cover</div></div>
   <h3 class="sub">{{ form_title }}</h3>
-  <p><span class="lbl">Generated:</span> {{ now|date:"Y-m-d H:i" }} &nbsp;&nbsp; <span class="lbl">By:</span> {{ user.get_full_name|default:user.username }} &nbsp;&nbsp; <span class="lbl">Records:</span> {{ households|length }}</p>
+  <p><span class="lbl">Generated:</span> {{ now|date:"Y-m-d H:i" }} &nbsp;&nbsp; <span class="lbl">By:</span> {{ user.get_full_name|default:user.username }} &nbsp;&nbsp; <span class="lbl">Records:</span> {{ households|length }} &nbsp;&nbsp; <span class="lbl">Avg file completeness:</span> {{ cover_avg }}%</p>
   <table>
-    <tr><th style="width:6%;">#</th><th>Household Number</th><th>Head of household</th><th>Town</th><th>District</th></tr>
+    <tr><th style="width:6%;">#</th><th>Household Number</th><th>Head of household</th><th>Town</th><th>District</th><th style="width:10%;">File %</th></tr>
     {% for hh in households %}
-    <tr><td>{{ forloop.counter }}</td><td>{{ hh.org_household_number }}</td><td>{{ hh.cg.name }} {{ hh.cg.surname }}</td><td>{{ hh.town }}</td><td>{{ hh.district }}</td></tr>
+    <tr><td>{{ forloop.counter }}</td><td>{{ hh.org_household_number }}</td><td>{{ hh.cg.name }} {{ hh.cg.surname }}</td><td>{{ hh.town }}</td><td>{{ hh.district }}</td><td>{{ hh.cl_pct }}%</td></tr>
     {% endfor %}
   </table>
   <div class="sigrow" style="margin-top:22px;">

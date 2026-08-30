@@ -1,0 +1,45 @@
+{
+  "summary": "Round-5 polish tested end-to-end. Added /app/backend/tests/test_round5_features.py (15 tests, all passing) covering: (1) public branding endpoint returns {name, logo} without auth and does NOT leak internal cluster host; (2) HH60 assessments expose version_number + created_by, POSTing increments version_number per household (verified max+1); (3) household timeline returns 'action' field; (4) batch print cover for /api/print/checklist/?household_ids=59,60 and /api/print/full/... contain 'Avg file completeness:' and 'File %' column header; (5) regression: 4-role login, assessment print with assessment_id, organisation logo relative URL, verification_count, dashboard. Frontend Playwright (external URL) verified: login page shows login-org-logo (naturalWidth=1 — 1x1 test PNG loaded from /api/media/org/test_wO26KlW.png), heading = org name 'Ubuntu Care NPO'; HH60 detail timeline-filter chips render as [all, viewed, printed, created, edited, deleted, confirmed] and filtering reduces the visible entries (187 -> 33 for 'viewed', back to 187 for 'all'); assessment-version-select opens and shows well-formed labels: 'v2 · 8/30/2026 10:31 PM · supervisor' and 'v1 · … · supervisor' plus '+ New (unsaved)'. New version + Save creates a new version_number rather than overwriting. Full round-1..4 regression suite: 81 passed, 3 pre-existing failures (11 skipped print-form-name mismatches unchanged from iter 3 + 1 pre-existing bulk_reassign test bug that sends wrong payload key).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "N/A (test only)", "issue": "Pre-existing tests/backend_test.py::TestBulkReassign::test_bulk_reassign_admin sends {'assigned_to': cw2} but backend expects {'to_user': cw2}; assertion fails with 400 'to_user is required.'. This has been failing since before Round-5 and is a test-side bug, not an API regression."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_round5_features.py",
+    "/app/backend/tests/test_round4_features.py",
+    "/app/backend/tests/test_round3_features.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iteration_5.xml"
+  ],
+  "action_items": [
+    "(Optional/pre-existing) fix tests/backend_test.py::TestBulkReassign::test_bulk_reassign_admin payload key from 'assigned_to' to 'to_user' so the regression suite is 100% green."
+  ],
+  "critical_code_review_comments": [
+    "core/views.py is now ~680 lines with viewsets for Household, Person, SupportingDocument, Checklist, ProcessNote, Assessment, plus Login/Me/Branding/Organisation/Dashboard/Choices. Approaching the 700-line split threshold; recommend extracting Assessment/ProcessNote/Organisation/Branding into their own modules.",
+    "AssessmentViewSet.perform_create computes next version via Max on filter(household=..) without any locking. Under concurrent POSTs to the same household two writers can end up with the same version_number. Consider select_for_update() inside a transaction, or a DB unique-together constraint on (household, version_number) with a retry on IntegrityError.",
+    "BrandingView returns obj.logo.url unconditionally — good — but if the org record is missing the file on disk, url will still be a valid path pointing to a 404. Consider verifying storage.exists() before exposing, or accepting the harmless broken-image fallback.",
+    "Timeline filter chips are derived per-render from `Array.from(new Set(timeline.map(e => e.action)))` — order depends on timeline chronology, so chip order will shift household-to-household. A stable order (e.g. viewed, created, edited, confirmed, printed, deleted) would look more polished but is cosmetic.",
+    "Print token still goes via ?token= in the URL for window.open(); persistent smell (called out previous rounds)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_round5_features.py (new — 15 tests for Round-5 features + regression)"
+  ],
+  "success_rate": {
+    "backend": "100% for Round-5 (15/15); overall regression 81/85 passed with 3 pre-existing failures unchanged from iter 4 (test-side, not app)",
+    "frontend": "100% — login-org-logo, timeline-filter chips (all + 6 action types), version-select labels all render and are interactive"
+  },
+  "test_credentials": "admin/admin123, supervisor/supervisor123, caseworker/caseworker123, capturer/capturer123",
+  "seed_data_creation": "Playwright transiently created 2 TEST_ROUND5 assessments on HH60 to populate the version selector, then deleted them via API. No residual test data. HH60 currently has 0 assessments — if next iteration expects HH60 to already have >=2 versions, seed via UI or POST twice first (the round-5 test now seeds and cleans up automatically).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test files in /app/backend/tests/: backend_test.py (regression), test_new_features.py, test_round3_features.py, test_round4_features.py, test_round5_features.py. Run with `REACT_APP_BACKEND_URL=<url> pytest /app/backend/tests/ -v` — pytest.ini does NOT load env; you MUST export REACT_APP_BACKEND_URL. HH60 has 0 pre-seeded assessments; test_round5 seeds+cleans as needed. Login page fetches /api/branding/ (public, AllowAny) and shows the org name as the h1. Timeline chips are derived dynamically from the audit log, so possible actions include viewed/created/edited/deleted/printed/confirmed. Assessment.version_number is now stamped server-side in AssessmentViewSet.perform_create via Max()+1 (see race condition note above).",
+  "rca of the issue": "No new bugs found in Round-5. Version race-condition risk noted but not reproduced."
+}
