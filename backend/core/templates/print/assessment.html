@@ -54,7 +54,9 @@
   <div class="ans" style="min-height:30px;">{{ a.client_views|linebreaksbr }}</div>
   <table>
     <tr><th>Issues to be addressed</th><th>Planned intervention &amp; intervention codes</th><th style="width:15%;">Due date</th><th style="width:22%;">Responsibility</th></tr>
-    <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+    {% for r in a.plan_rows %}
+    <tr><td>{{ r.issue }}</td><td>{{ r.intervention }}</td><td>{{ r.due_date }}</td><td>{{ r.responsibility }}</td></tr>
+    {% endfor %}
     <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
   </table>
   <div class="fld"><span class="lbl">Due Date for Evaluation:</span> {{ a.due_date_evaluation|date:"Y-m-d" }}</div>

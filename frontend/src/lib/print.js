@@ -2,7 +2,8 @@ import { TOKEN_KEY } from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-// The organisation name printed in form headers. Central so it stays consistent.
+// The organisation name/logo used on printed forms now comes from the backend
+// Organisation profile; only pass `org` to override it explicitly.
 export const ORG_NAME = "OVC Organisation";
 
 // Per-household DSD forms (official Department of Social Development templates).
@@ -37,7 +38,7 @@ export function printForm(form, { householdId, householdIds, org, auto = true } 
   const token = localStorage.getItem(TOKEN_KEY);
   const qs = new URLSearchParams();
   qs.set("token", token || "");
-  qs.set("org", org || ORG_NAME);
+  if (org) qs.set("org", org);
   if (auto) qs.set("auto", "1");
   if (householdId) qs.set("household_id", householdId);
   if (householdIds && householdIds.length) qs.set("household_ids", householdIds.join(","));

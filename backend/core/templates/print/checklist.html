@@ -2,6 +2,7 @@
 {% block content %}
 {% for hh in households %}
 <div class="sheet">
+  {% if org_logo %}<img class="logo" src="{{ org_logo }}" style="display:block;margin-bottom:6px;">{% endif %}
   <div class="ftitle">Case Management: NPO Check List</div>
   <table class="nb" style="margin-bottom:8px;">
     <tr><td class="nb" colspan="2"><span class="lbl">Name of the Organisation:</span> {{ org_name }}</td></tr>

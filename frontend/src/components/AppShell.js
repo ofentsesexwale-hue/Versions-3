@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   Briefcase,
+  Building2,
   FileText,
   Home,
   ListChecks,
@@ -29,6 +30,8 @@ const NAV = [
   { key: "my-households", label: "My Households", to: "/my-households", icon: Briefcase },
   { key: "reassign", label: "Reassign Caseload", to: "/reassign", icon: Users, roles: ["admin", "supervisor"] },
   { key: "print-center", label: "Print Center", to: "/print-center", icon: Printer, roles: ["admin", "supervisor"] },
+  { key: "signoffs", label: "Sign-off History", to: "/signoffs", icon: ShieldCheck, roles: ["admin", "supervisor"] },
+  { key: "org-settings", label: "Organisation", to: "/settings/organisation", icon: Building2, adminOnly: true },
   { key: "upload", label: "Upload Document", to: "/documents/upload", icon: FileText },
   { key: "audit", label: "Audit Log", to: "/audit", icon: Shield, adminOnly: true },
 ];

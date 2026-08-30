@@ -2,7 +2,7 @@
 {% block content %}
 {% for hh in households %}{% with cg=hh.cg %}
 <div class="sheet">
-  <div class="orghead"><div class="on">{{ org_name }}</div><div>C06: Monthly Household Services Report (v2.0)</div></div>
+  <div class="orghead">{% if org_logo %}<img class="logo" src="{{ org_logo }}">{% endif %}<div class="on">{{ org_name }}</div><div>C06: Monthly Household Services Report (v2.0)</div></div>
   <h3 class="sub">Head of Household Details</h3>
   <table>
     <tr><th style="width:14%;">First Name</th><td>{{ cg.name }}</td><th style="width:14%;">Surname</th><td>{{ cg.surname }}</td>

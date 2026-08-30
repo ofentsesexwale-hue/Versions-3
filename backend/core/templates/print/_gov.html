@@ -4,4 +4,10 @@
     <div class="govsmall">social development</div>
     <div class="govdept">Department:<br>Social Development<br><b>REPUBLIC OF SOUTH AFRICA</b></div>
   </div>
+  <div style="margin-left:auto;text-align:right;">
+    {% if org_logo %}<img class="logo" src="{{ org_logo }}"><br>{% endif %}
+    <span style="font-size:13px;font-weight:800;">{{ org_name }}</span>
+    {% if org.address %}<div class="muted">{{ org.address }}</div>{% endif %}
+    {% if org.contact %}<div class="muted">{{ org.contact }}</div>{% endif %}
+  </div>
 </div>

@@ -18,6 +18,8 @@ import MyHouseholds from "@/pages/MyHouseholds";
 import Reassign from "@/pages/Reassign";
 import PrintCenter from "@/pages/PrintCenter";
 import AssessmentForm from "@/pages/AssessmentForm";
+import OrgSettings from "@/pages/OrgSettings";
+import SignoffHistory from "@/pages/SignoffHistory";
 
 function App() {
   return (
@@ -37,6 +39,8 @@ function App() {
               <Route path="my-households" element={<MyHouseholds />} />
               <Route path="reassign" element={<Reassign />} />
               <Route path="print-center" element={<PrintCenter />} />
+              <Route path="signoffs" element={<SignoffHistory />} />
+              <Route path="settings/organisation" element={<OrgSettings />} />
               <Route path="households/:id/assessment" element={<AssessmentForm />} />
               <Route path="verification" element={<Verification />} />
               <Route path="households/new" element={<HouseholdForm />} />

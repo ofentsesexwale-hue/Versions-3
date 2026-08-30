@@ -2,7 +2,7 @@
 {% block content %}
 {% for hh in households %}{% with cg=hh.cg %}
 <div class="sheet">
-  <div class="orghead"><div class="on">{{ org_name }}</div><div>Case File &mdash; Cover Sheet</div></div>
+  <div class="orghead">{% if org_logo %}<img class="logo" src="{{ org_logo }}">{% endif %}<div class="on">{{ org_name }}</div><div>Case File &mdash; Cover Sheet</div></div>
   <table>
     <tr><th style="width:22%;">Household Number</th><td>{{ hh.org_household_number }}</td>
         <th style="width:22%;">Date Registered</th><td>{{ hh.date_registered|date:"Y-m-d" }}</td></tr>

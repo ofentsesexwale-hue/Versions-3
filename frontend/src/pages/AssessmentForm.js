@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Printer, Save } from "lucide-react";
+import { ArrowLeft, Plus, Printer, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ const FIELDS = [
   ["overall_goal", "Part 4 Overall goal"],
   ["client_views", "Part 4 Views of the client(s)"],
 ];
-const EMPTY = FIELDS.reduce((a, [k]) => ({ ...a, [k]: "" }), { problem_codes: "", risk_level: "", due_date_evaluation: "" });
+const EMPTY = FIELDS.reduce((a, [k]) => ({ ...a, [k]: "" }), { problem_codes: "", risk_level: "", due_date_evaluation: "", plan_rows: [] });
 
 export default function AssessmentForm() {
   const { id } = useParams();
@@ -40,13 +40,17 @@ export default function AssessmentForm() {
       const a = (r.data.results || [])[0];
       if (a) {
         setExistingId(a.id);
-        setForm({ ...EMPTY, ...a, due_date_evaluation: a.due_date_evaluation || "" });
+        setForm({ ...EMPTY, ...a, plan_rows: a.plan_rows || [], due_date_evaluation: a.due_date_evaluation || "" });
       }
     }).catch(() => {});
     api.get("/choices/").then((r) => setRisks(r.data.risk_level || [])).catch(() => {});
   }, [id]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const addRow = () => setForm((f) => ({ ...f, plan_rows: [...f.plan_rows, { issue: "", intervention: "", due_date: "", responsibility: "" }] }));
+  const setRow = (i, k, v) => setForm((f) => { const rows = [...f.plan_rows]; rows[i] = { ...rows[i], [k]: v }; return { ...f, plan_rows: rows }; });
+  const delRow = (i) => setForm((f) => ({ ...f, plan_rows: f.plan_rows.filter((_, x) => x !== i) }));
 
   const save = async () => {
     setSaving(true);
@@ -105,6 +109,29 @@ export default function AssessmentForm() {
               <Input type="date" value={form.due_date_evaluation} onChange={set("due_date_evaluation")} data-testid="assessment-due-date" />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="plan-rows-card">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Part 4: Plan of Action</CardTitle>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={addRow} data-testid="add-plan-row-button">
+            <Plus className="h-3.5 w-3.5" /> Add row
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {form.plan_rows.length === 0 && (
+            <p className="py-2 text-center text-sm text-slate-500" data-testid="plan-rows-empty">No plan rows yet. Add issues, interventions, due dates and responsibilities.</p>
+          )}
+          {form.plan_rows.map((r, i) => (
+            <div key={i} className="grid grid-cols-1 items-start gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-[1fr_1fr_130px_150px_auto]" data-testid={`plan-row-${i}`}>
+              <Input placeholder="Issue to be addressed" value={r.issue} onChange={(e) => setRow(i, "issue", e.target.value)} data-testid={`plan-issue-${i}`} />
+              <Input placeholder="Intervention + codes" value={r.intervention} onChange={(e) => setRow(i, "intervention", e.target.value)} data-testid={`plan-intervention-${i}`} />
+              <Input type="date" value={r.due_date} onChange={(e) => setRow(i, "due_date", e.target.value)} data-testid={`plan-due-${i}`} />
+              <Input placeholder="Responsibility" value={r.responsibility} onChange={(e) => setRow(i, "responsibility", e.target.value)} data-testid={`plan-responsibility-${i}`} />
+              <Button variant="ghost" size="icon" className="text-rose-700" onClick={() => delRow(i)} data-testid={`plan-del-${i}`}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          ))}
         </CardContent>
       </Card>
     </div>

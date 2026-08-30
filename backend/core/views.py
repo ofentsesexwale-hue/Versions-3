@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -22,12 +23,14 @@ from .models import (
     CaseFileChecklistItem,
     Household,
     HouseholdMember,
+    Organisation,
     ProcessNote,
     SupportingDocument,
 )
 from .permissions import (
     IsAdminRole,
     IsStaffRole,
+    ROLE_ADMIN,
     ROLE_CASE_WORKER,
     can_signoff_checklist,
     user_role,
@@ -41,6 +44,7 @@ from .serializers import (
     HouseholdListSerializer,
     HouseholdSerializer,
     HouseholdMemberSerializer,
+    OrganisationSerializer,
     ProcessNoteSerializer,
     SupportingDocumentSerializer,
     UserSerializer,
@@ -169,6 +173,8 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         assigned_to = request.query_params.get('assigned_to')
         if assigned_to and assigned_to.isdigit():
             qs = qs.filter(assigned_to__id=assigned_to).distinct()
+        if request.query_params.get('signed'):
+            qs = qs.filter(checklist_signed_at__isnull=False)
         ordering = request.query_params.get('ordering')
         if ordering in ('completeness', '-completeness'):
             qs = annotate_completeness(qs)
@@ -629,6 +635,26 @@ class UsersListView(APIView):
 
     def get(self, request):
         return users_list(request)
+
+
+class OrganisationView(APIView):
+    """Read (any staff) / update (admin) the org letterhead profile."""
+    permission_classes = [IsAuthenticated, IsStaffRole]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        return Response(OrganisationSerializer(Organisation.get_solo(), context={'request': request}).data)
+
+    def put(self, request):
+        if user_role(request.user) != ROLE_ADMIN:
+            return Response({'detail': 'Only administrators can edit the organisation profile.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        org = Organisation.get_solo()
+        serializer = OrganisationSerializer(org, data=request.data, partial=True, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_action(request.user, 'edited', 'Updated organisation profile')
+        return Response(serializer.data)
 
 
 class DashboardView(APIView):

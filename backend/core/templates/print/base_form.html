@@ -36,6 +36,8 @@
   .muted{color:#333;font-size:9.5px;font-style:italic;}
   .orghead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px;}
   .orghead .on{font-size:16px;font-weight:800;}
+  .logo{max-height:56px;max-width:190px;object-fit:contain;}
+  .orghead .logo{margin-right:10px;}
   .fld{margin-bottom:4px;}
   .half{display:flex;gap:10px;}
   .half>div{flex:1;}
@@ -57,6 +59,20 @@
   <span class="c">{{ households|length }} record(s)</span>
 </div>
 <div class="wrap">
+{% if show_cover %}
+<div class="sheet">
+  {% if org_logo %}<img class="logo" src="{{ org_logo }}" style="max-height:70px;margin-bottom:8px;">{% endif %}
+  <div class="orghead"><div class="on">{{ org_name }}</div><div>Batch Print Cover</div></div>
+  <h3 class="sub">{{ form_title }}</h3>
+  <p><span class="lbl">Generated:</span> {{ now|date:"Y-m-d H:i" }} &nbsp;&nbsp; <span class="lbl">By:</span> {{ user.get_full_name|default:user.username }} &nbsp;&nbsp; <span class="lbl">Records:</span> {{ households|length }}</p>
+  <table>
+    <tr><th style="width:6%;">#</th><th>Household Number</th><th>Head of household</th><th>Town</th><th>District</th></tr>
+    {% for hh in households %}
+    <tr><td>{{ forloop.counter }}</td><td>{{ hh.org_household_number }}</td><td>{{ hh.cg.name }} {{ hh.cg.surname }}</td><td>{{ hh.town }}</td><td>{{ hh.district }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 {% block content %}{% endblock %}
 </div>
 {% if auto_print %}<script>window.onload=function(){setTimeout(function(){window.print();},450);};</script>{% endif %}

@@ -2,7 +2,7 @@
 {% block content %}
 {% for hh in households %}{% with cg=hh.cg %}
 <div class="sheet">
-  <div class="orghead"><div class="on">{{ org_name }}</div><div>Educational Progress Record</div></div>
+  <div class="orghead">{% if org_logo %}<img class="logo" src="{{ org_logo }}">{% endif %}<div class="on">{{ org_name }}</div><div>Educational Progress Record</div></div>
   <table class="nb">
     <tr><td class="nb"><span class="lbl">Year:</span> {{ now|date:"Y" }}</td>
         <td class="nb"><span class="lbl">Family name:</span> {{ cg.surname }}</td>

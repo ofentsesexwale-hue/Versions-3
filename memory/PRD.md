@@ -29,6 +29,12 @@ Offline case-management system for South African NPOs serving Orphans & Vulnerab
 - **Structured Assessment (CW09)**: `Assessment` model + `/api/assessments/`; in-app editor at `/households/:id/assessment`; prints pre-filled on the official CW09 form.
 - **Checklist Sign-off**: supervisor stamps name/SACSSP/date via `POST /api/households/<id>/sign_checklist/`; printed Case File Checklist shows the stamp; action logged to audit/timeline.
 
+### Enhancements (2026-06, round 3)
+- **Plan Rows (CW09)**: assessment editor captures Part 4 plan rows (issue/intervention/due-date/responsibility) stored as `Assessment.plan_rows` JSON; they print in the official CW09 Part 4 table.
+- **Organisation letterhead**: singleton `Organisation` (name/address/contact/logo) editable by admin at `/settings/organisation` (`/api/organisation/`); prints as the letterhead on every DSD form (gov + org headers).
+- **Sign-off History**: admin/supervisor overview at `/signoffs` (`/api/households/?signed=1`) listing signer/SACSSP/date. (Sign-off fields added to `HouseholdListSerializer`.)
+- **Batch Cover Page**: Print Center batch runs (2+ households) prepend a cover sheet listing every included household.
+
 ## Backlog / next
 - P1: add remaining DSD reference forms (CW06 problem codes, CW10 intervention codes as pickers in Process Note dialog; COW1 Planning, CW12 Evaluation, GRW group-work forms).
 - P2: batch "Print Center" page (print one form across a district or a worker's caseload).

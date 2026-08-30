@@ -25,6 +25,7 @@ api_patterns = [
     path('dashboard/', views.DashboardView.as_view()),
     path('choices/', views.ChoicesView.as_view()),
     path('users/', views.UsersListView.as_view()),
+    path('organisation/', views.OrganisationView.as_view()),
     path('print/<str:form>/', print_views.print_form),
     path('', include(router.urls)),
 ]

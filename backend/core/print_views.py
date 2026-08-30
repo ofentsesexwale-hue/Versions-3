@@ -11,6 +11,7 @@ from rest_framework.authtoken.models import Token
 
 from . import choices
 from .audit import log_action
+from .models import Organisation
 from .views import scoped_household_qs
 
 CAT_LABELS = dict(choices.CATEGORY_CHOICES)
@@ -79,7 +80,9 @@ def print_form(request, form):
     if not households:
         raise Http404('No households in scope')
 
-    org_name = request.GET.get('org') or 'OVC Organisation'
+    org = Organisation.get_solo()
+    org_name = request.GET.get('org') or org.name
+    org_logo = request.build_absolute_uri(org.logo.url) if org.logo else None
     today = timezone.localdate()
     for hh in households:
         hh.cg = getattr(hh, 'caregiver', None)
@@ -99,6 +102,9 @@ def print_form(request, form):
     ctx = {
         'households': households,
         'org_name': org_name,
+        'org_logo': org_logo,
+        'org': org,
+        'show_cover': len(households) > 1 and request.GET.get('cover') != '0',
         'now': timezone.now(),
         'user': user,
         'form_title': title,

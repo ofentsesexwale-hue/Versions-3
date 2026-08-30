@@ -13,6 +13,7 @@ from .models import (
     CaseFileChecklistItem,
     Household,
     HouseholdMember,
+    Organisation,
     ProcessNote,
     SupportingDocument,
 )
@@ -242,6 +243,7 @@ class HouseholdListSerializer(serializers.ModelSerializer):
             'id', 'org_household_number', 'town', 'district', 'province',
             'date_registered', 'caregiver_name', 'member_count', 'has_unconfirmed',
             'checklist_progress', 'assigned_to_ids', 'assigned_to_names',
+            'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
         ]
 
     def get_caregiver_name(self, obj):
@@ -339,6 +341,13 @@ class AssessmentSerializer(serializers.ModelSerializer):
             'id', 'household', 'overview_situation', 'strengths', 'psychosocial_social',
             'psychosocial_stress', 'education', 'safety', 'health_nutrition', 'economic_legal',
             'assessment_summary', 'problem_codes', 'risk_level', 'overall_goal', 'client_views',
-            'due_date_evaluation', 'created_at', 'updated_at', 'created_by',
+            'due_date_evaluation', 'plan_rows', 'created_at', 'updated_at', 'created_by',
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+
+class OrganisationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organisation
+        fields = ['id', 'name', 'logo', 'address', 'contact', 'updated_at']
+        read_only_fields = ['updated_at']
