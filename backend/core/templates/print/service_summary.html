@@ -1,0 +1,38 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+<div class="sheet">
+  {% if org_logo %}<img class="logo" src="{{ org_logo }}" style="display:block;margin-bottom:6px;">{% endif %}
+  <div class="ftitle">Monthly Service Delivery Report &mdash; {{ month_label }}</div>
+  <table class="nb" style="margin-bottom:8px;">
+    <tr><td class="nb"><span class="lbl">Organisation:</span> {{ org_name }}</td>
+        <td class="nb" style="text-align:right;"><span class="lbl">Printed by:</span> {{ user.get_full_name|default:user.username }}</td></tr>
+  </table>
+  <p><span class="lbl">Households served:</span> {{ served_hh }} / {{ total_hh }} ({{ served_pct }}%) &nbsp;&nbsp;
+     <span class="lbl">Total services delivered:</span> {{ total_services }}</p>
+
+  <h3 class="sub">Services by staff member</h3>
+  <table>
+    <thead><tr><th>Staff member</th><th style="width:24%;">Services delivered</th></tr></thead>
+    <tbody>
+    {% for name, count in by_staff %}
+      <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+    {% empty %}
+      <tr><td colspan="2" style="text-align:center;">No services recorded this month.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <h3 class="sub">Services by type (utilisation)</h3>
+  <table>
+    <thead><tr><th>Service type</th><th style="width:24%;">Count</th></tr></thead>
+    <tbody>
+    {% for name, count in by_type %}
+      <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+    {% empty %}
+      <tr><td colspan="2" style="text-align:center;">No services recorded this month.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:14px;">Generated on {{ now|date:"Y-m-d H:i" }}.</p>
+</div>
+{% endblock %}

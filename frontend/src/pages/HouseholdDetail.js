@@ -43,6 +43,8 @@ import {
 import { DocumentViewer } from "@/components/DocumentViewer";
 import { PrintFormsPanel } from "@/components/PrintFormsPanel";
 import { ProcessNotes } from "@/components/ProcessNotes";
+import { ServicesPanel } from "@/components/ServicesPanel";
+import { printTimeline } from "@/lib/print";
 import { CATEGORY_LABELS, CATEGORY_ORDER, formatDate, formatDateTime } from "@/lib/constants";
 
 function ConfirmChips({ person }) {
@@ -387,13 +389,16 @@ export default function HouseholdDetail() {
 
       <ProcessNotes householdId={id} />
 
+      <ServicesPanel householdId={id} caregiver={hh.caregiver} members={hh.members} />
+
       <Card data-testid="household-timeline-card">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <History className="h-4 w-4" /> Case history &amp; activity timeline
           </CardTitle>
-          {timeline.length > 0 && (
-            <div className="flex flex-wrap gap-1" data-testid="timeline-filter">
+          <div className="flex flex-wrap items-center gap-2">
+            {timeline.length > 0 && (
+              <div className="flex flex-wrap gap-1" data-testid="timeline-filter">
               {["all", ...Array.from(new Set(timeline.map((e) => e.action)))].map((a) => (
                 <button
                   key={a}
@@ -404,8 +409,12 @@ export default function HouseholdDetail() {
                   {a}
                 </button>
               ))}
-            </div>
-          )}
+              </div>
+            )}
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => printTimeline(id)} data-testid="export-timeline-button">
+              <Printer className="h-3.5 w-3.5" /> Export timeline
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {(() => {

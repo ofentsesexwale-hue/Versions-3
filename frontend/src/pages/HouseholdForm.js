@@ -72,7 +72,14 @@ export default function HouseholdForm() {
       toast.success("Household saved");
       navigate(`/households/${res.data.id}`);
     } catch (e) {
-      toast.error("Could not save household");
+      if (e?.response?.status === 409) {
+        toast.error("This record was modified by another user. Please refresh and re-apply your changes.");
+        const fresh = await api.get(`/households/${id}/`);
+        setForm(fresh.data);
+        setAssigned(fresh.data.assigned_to || []);
+      } else {
+        toast.error("Could not save household");
+      }
     } finally {
       setSaving(false);
     }

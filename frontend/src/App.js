@@ -20,6 +20,7 @@ import PrintCenter from "@/pages/PrintCenter";
 import AssessmentForm from "@/pages/AssessmentForm";
 import OrgSettings from "@/pages/OrgSettings";
 import SignoffHistory from "@/pages/SignoffHistory";
+import ServiceLog from "@/pages/ServiceLog";
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
             >
               <Route index element={<Dashboard />} />
               <Route path="my-households" element={<MyHouseholds />} />
+              <Route path="services" element={<ServiceLog />} />
               <Route path="reassign" element={<Reassign />} />
               <Route path="print-center" element={<PrintCenter />} />
               <Route path="signoffs" element={<SignoffHistory />} />

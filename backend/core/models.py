@@ -46,6 +46,9 @@ class Household(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Optimistic-concurrency version (incremented on each edit save).
+    version = models.PositiveIntegerField(default=0)
+
     # Checklist sign-off (supervisor stamp on printed Case File Checklist).
     checklist_signed_name = models.CharField(max_length=255, blank=True)
     checklist_signed_sacssp = models.CharField(max_length=64, blank=True)
@@ -281,3 +284,46 @@ class Organisation(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class SiteConfig(models.Model):
+    """Singleton site-wide config (e.g. login page tagline)."""
+    login_tagline = models.CharField(max_length=200, blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return 'Site configuration'
+
+
+class ServiceDelivery(models.Model):
+    """A single service delivered to a household (optionally a named beneficiary)."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='services')
+    beneficiary_content_type = models.ForeignKey(
+        ContentType, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
+    )
+    beneficiary_object_id = models.PositiveIntegerField(null=True, blank=True)
+    beneficiary = GenericForeignKey('beneficiary_content_type', 'beneficiary_object_id')
+    service_date = models.DateField(default=today, db_index=True)
+    service_type = models.CharField(max_length=64, choices=choices.SERVICE_TYPE_CHOICES)
+    delivered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='delivered_services',
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_services',
+    )
+
+    class Meta:
+        ordering = ['-service_date', '-id']
+        indexes = [models.Index(fields=['household', 'service_date'])]
+
+    def __str__(self):
+        return f"{self.service_type} for Household #{self.household_id} on {self.service_date}"

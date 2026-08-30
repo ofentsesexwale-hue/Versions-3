@@ -123,3 +123,124 @@ def print_form(request, form):
         'auto_print': request.GET.get('auto') == '1',
     }
     return render(request, template, ctx)
+
+
+def print_timeline(request, form=None):
+    """Print-friendly household activity timeline (from the audit log)."""
+    from .models import AuditLogEntry
+    user = _auth_user(request)
+    if not user:
+        return HttpResponse('Authentication required.', status=401)
+    hid = request.GET.get('household_id')
+    qs = scoped_household_qs(user).prefetch_related('caregiver')
+    hh = qs.filter(pk=hid).first() if hid else None
+    if not hh:
+        raise Http404('No household in scope')
+    cg = getattr(hh, 'caregiver', None)
+    hh.cg = cg
+    entries = list(AuditLogEntry.objects.select_related('user').filter(
+        target_description__regex=rf'Household #{hh.pk}([^0-9]|$)'
+    ).order_by('timestamp'))
+    org = Organisation.get_solo()
+    log_action(user, 'printed', f'Printed activity timeline for Household #{hh.pk}')
+    ctx = {
+        'hh': hh, 'entries': entries,
+        'org_name': request.GET.get('org') or org.name,
+        'org_logo': org.logo.url if org.logo else None,
+        'now': timezone.now(), 'user': user,
+        'form_title': 'Household Activity Timeline',
+        'auto_print': request.GET.get('auto') == '1',
+    }
+    return render(request, 'print/timeline.html', ctx)
+
+
+def print_service_report(request, form=None):
+    """Print service-delivery reports: per-household history, missed, or monthly summary."""
+    from .models import ServiceDelivery
+    from .views import _month_bounds
+    user = _auth_user(request)
+    if not user:
+        return HttpResponse('Authentication required.', status=401)
+    org = Organisation.get_solo()
+    report = request.GET.get('report', 'household')
+    month = request.GET.get('month')
+    if month:
+        y, m = month.split('-')
+        start = timezone.datetime(int(y), int(m), 1).date()
+    else:
+        start = None
+    if start:
+        _, nxt = _month_bounds(start)
+    scoped = scoped_household_qs(user).prefetch_related('caregiver')
+    ctx = {
+        'org_name': request.GET.get('org') or org.name,
+        'org_logo': org.logo.url if org.logo else None,
+        'now': timezone.now(), 'user': user,
+        'auto_print': request.GET.get('auto') == '1',
+        'report': report,
+        'month_label': start.strftime('%B %Y') if start else 'All time',
+    }
+
+    if report == 'household':
+        hid = request.GET.get('household_id')
+        hh = scoped.filter(pk=hid).first()
+        if not hh:
+            raise Http404('No household in scope')
+        cg = getattr(hh, 'caregiver', None)
+        hh.cg = cg
+        svc = ServiceDelivery.objects.filter(household=hh).select_related('delivered_by')
+        if start:
+            svc = svc.filter(service_date__gte=start, service_date__lt=nxt)
+        rows = list(svc.order_by('service_date'))
+        for r in rows:
+            b = r.beneficiary
+            r.beneficiary_label = f'{b.name} {b.surname}'.strip() if b else 'Household'
+        ctx.update({'hh': hh, 'rows': rows, 'form_title': 'Household Service History'})
+        log_action(user, 'printed', f'Printed service history for Household #{hh.pk}')
+        return render(request, 'print/service_household.html', ctx)
+
+    # Organisation-wide reports need supervisor/admin scope (scoped_household_qs
+    # already limits case workers, so this is naturally safe).
+    if not start:
+        start, nxt = _month_bounds()
+        ctx['month_label'] = start.strftime('%B %Y')
+    svc = ServiceDelivery.objects.filter(
+        household__in=scoped, service_date__gte=start, service_date__lt=nxt
+    ).select_related('delivered_by', 'household')
+
+    if report == 'missed':
+        served = set(svc.values_list('household_id', flat=True))
+        missed = []
+        for hh in scoped:
+            if hh.id in served:
+                continue
+            last = ServiceDelivery.objects.filter(household=hh).order_by('-service_date').first()
+            cg = getattr(hh, 'caregiver', None)
+            missed.append({
+                'org_household_number': hh.org_household_number,
+                'caregiver_name': f'{cg.name} {cg.surname}'.strip() if cg else '',
+                'last_service_date': last.service_date if last else None,
+            })
+        ctx.update({'missed': missed, 'form_title': 'Households Not Served This Month'})
+        log_action(user, 'printed', 'Printed missed-households report')
+        return render(request, 'print/service_missed.html', ctx)
+
+    # Monthly summary: grouped by staff + by service type.
+    by_staff = {}
+    by_type = {}
+    for s in svc:
+        name = (s.delivered_by.get_full_name() or s.delivered_by.username) if s.delivered_by else 'Unknown'
+        by_staff[name] = by_staff.get(name, 0) + 1
+        by_type[s.service_type] = by_type.get(s.service_type, 0) + 1
+    total_hh = scoped.count()
+    served_hh = len(set(svc.values_list('household_id', flat=True)))
+    ctx.update({
+        'by_staff': sorted(by_staff.items(), key=lambda x: -x[1]),
+        'by_type': sorted(by_type.items(), key=lambda x: -x[1]),
+        'total_hh': total_hh, 'served_hh': served_hh,
+        'served_pct': round(served_hh * 100 / total_hh) if total_hh else 0,
+        'total_services': svc.count(),
+        'form_title': 'Monthly Service Delivery Report',
+    })
+    log_action(user, 'printed', 'Printed monthly service delivery report')
+    return render(request, 'print/service_summary.html', ctx)

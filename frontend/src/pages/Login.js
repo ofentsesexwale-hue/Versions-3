@@ -61,6 +61,11 @@ export default function Login() {
           <p className="mt-1 text-sm text-slate-600">
             Offline Case Management for Orphans &amp; Vulnerable Children
           </p>
+          {branding?.login_tagline && (
+            <p className="mt-2 text-sm font-medium text-[color:var(--sa-green,#007a4d)]" data-testid="login-tagline">
+              {branding.login_tagline}
+            </p>
+          )}
         </div>
         <Card>
           <CardHeader>

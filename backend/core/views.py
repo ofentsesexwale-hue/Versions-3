@@ -1,8 +1,10 @@
 """API views enforcing server-side RBAC + audit logging."""
 import csv
+from datetime import timedelta
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Case, Count, F, FloatField, Max, Q, Value, When
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
@@ -25,6 +27,8 @@ from .models import (
     HouseholdMember,
     Organisation,
     ProcessNote,
+    ServiceDelivery,
+    SiteConfig,
     SupportingDocument,
 )
 from .permissions import (
@@ -46,6 +50,8 @@ from .serializers import (
     HouseholdMemberSerializer,
     OrganisationSerializer,
     ProcessNoteSerializer,
+    ServiceDeliverySerializer,
+    SiteConfigSerializer,
     SupportingDocumentSerializer,
     UserSerializer,
 )
@@ -175,6 +181,15 @@ class HouseholdViewSet(viewsets.ModelViewSet):
             qs = qs.filter(assigned_to__id=assigned_to).distinct()
         if request.query_params.get('signed'):
             qs = qs.filter(checklist_signed_at__isnull=False)
+        band = request.query_params.get('band')
+        if band in ('ready', 'in_progress', 'needs_attention'):
+            qs = annotate_completeness(qs)
+            if band == 'ready':
+                qs = qs.filter(_pct__gte=90)
+            elif band == 'in_progress':
+                qs = qs.filter(_pct__gte=50, _pct__lt=90)
+            else:
+                qs = qs.filter(_pct__lt=50)
         ordering = request.query_params.get('ordering')
         if ordering in ('completeness', '-completeness'):
             qs = annotate_completeness(qs)
@@ -188,13 +203,34 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         log_action(request.user, 'viewed', f'Household #{instance.pk} ({instance.org_household_number})')
         return Response(HouseholdDetailSerializer(instance).data)
 
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        client_version = request.data.get('version')
+        # DB-level guard: lock the row for the duration of the transaction so two
+        # concurrent writers cannot both read the same version and both win.
+        with transaction.atomic():
+            instance = self.get_queryset().select_for_update().filter(pk=kwargs['pk']).first()
+            if instance is None:
+                raise Http404
+            if client_version is not None and str(client_version) != str(instance.version):
+                return Response(
+                    {'detail': 'This record was modified by another user. Please refresh and re-apply your changes.',
+                     'code': 'version_conflict', 'current_version': instance.version},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            data = serializer.data
+        return Response(data)
+
     def perform_create(self, serializer):
         obj = serializer.save()
         _ensure_checklist(obj)
         log_action(self.request.user, 'created', f'Household #{obj.pk} ({obj.org_household_number})')
 
     def perform_update(self, serializer):
-        obj = serializer.save()
+        obj = serializer.save(version=serializer.instance.version + 1)
         log_action(self.request.user, 'edited', f'Household #{obj.pk} ({obj.org_household_number})')
 
     def perform_destroy(self, instance):
@@ -561,6 +597,266 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         log_action(self.request.user, 'edited', f'Assessment for Household #{obj.household_id}')
 
 
+# ------------------------------ Service delivery ------------------------------
+def _month_bounds(ref=None):
+    ref = ref or timezone.localdate()
+    start = ref.replace(day=1)
+    if start.month == 12:
+        nxt = start.replace(year=start.year + 1, month=1)
+    else:
+        nxt = start.replace(month=start.month + 1)
+    return start, nxt
+
+
+class ServiceDeliveryViewSet(viewsets.ModelViewSet):
+    """Daily service-delivery log, scoped to households the user can see."""
+    permission_classes = [IsAuthenticated, IsStaffRole]
+    serializer_class = ServiceDeliverySerializer
+
+    def get_queryset(self):
+        households = scoped_household_qs(self.request.user)
+        qs = ServiceDelivery.objects.filter(household__in=households).select_related(
+            'delivered_by', 'created_by', 'household'
+        )
+        household_id = self.request.query_params.get('household')
+        if household_id:
+            qs = qs.filter(household_id=household_id)
+        month = self.request.query_params.get('month')  # YYYY-MM
+        if month:
+            try:
+                y, m = month.split('-')
+                start = timezone.datetime(int(y), int(m), 1).date()
+                _, nxt = _month_bounds(start)
+                qs = qs.filter(service_date__gte=start, service_date__lt=nxt)
+            except Exception:
+                pass
+        date = self.request.query_params.get('date')
+        if date:
+            qs = qs.filter(service_date=date)
+        return qs
+
+    def _check_caseload(self, household):
+        """Case-workers may only log for households assigned to them."""
+        if user_role(self.request.user) == ROLE_CASE_WORKER:
+            if not household.assigned_to.filter(pk=self.request.user.pk).exists():
+                return False
+        return True
+
+    def perform_create(self, serializer):
+        household = serializer.validated_data['household']
+        if not self._check_caseload(household):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You may only log services for households assigned to you.')
+        obj = serializer.save(created_by=self.request.user, delivered_by=self.request.user)
+        log_action(self.request.user, 'created',
+                   f'Service "{obj.service_type}" for Household #{obj.household_id}')
+
+    def perform_destroy(self, instance):
+        hid = instance.household_id
+        instance.delete()
+        log_action(self.request.user, 'deleted', f'Service for Household #{hid}')
+
+    @action(detail=False, methods=['post'])
+    def bulk_log(self, request):
+        """Log the same service for many households on a date (daily log screen)."""
+        household_ids = request.data.get('household_ids') or []
+        service_type = request.data.get('service_type')
+        service_date = request.data.get('service_date') or str(timezone.localdate())
+        notes = request.data.get('notes', '')
+        if not service_type:
+            return Response({'detail': 'service_type is required.'}, status=400)
+        if service_date > str(timezone.localdate()):
+            return Response({'detail': 'Service date cannot be in the future.'}, status=400)
+        scoped = scoped_household_qs(request.user)
+        created = 0
+        for hh in scoped.filter(pk__in=household_ids):
+            if not self._check_caseload(hh):
+                continue
+            ServiceDelivery.objects.create(
+                household=hh, service_type=service_type, service_date=service_date,
+                notes=notes, created_by=request.user, delivered_by=request.user,
+            )
+            created += 1
+            log_action(request.user, 'created', f'Service "{service_type}" for Household #{hh.pk}')
+        return Response({'logged': created})
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Monthly service-delivery progress (staff + organisation + ranking + missed)."""
+        start, nxt = _month_bounds()
+        role = user_role(request.user)
+
+        def served_ids(household_qs):
+            hh_ids = list(household_qs.values_list('id', flat=True))
+            served = set(
+                ServiceDelivery.objects.filter(
+                    household_id__in=hh_ids, service_date__gte=start, service_date__lt=nxt
+                ).values_list('household_id', flat=True)
+            )
+            return hh_ids, served
+
+        def bar(household_qs):
+            hh_ids, served = served_ids(household_qs)
+            total = len(hh_ids)
+            n = len(served & set(hh_ids))
+            pct = round(n * 100 / total) if total else 0
+            return {'served': n, 'total': total, 'percent': pct}
+
+        # Staff bar (households assigned to me) + my by-type breakdown.
+        my_hh = Household.objects.filter(assigned_to=request.user)
+        staff = bar(my_hh)
+        by_type = {}
+        for row in ServiceDelivery.objects.filter(
+            delivered_by=request.user, service_date__gte=start, service_date__lt=nxt
+        ).values('service_type').annotate(c=Count('id')):
+            by_type[row['service_type']] = row['c']
+        staff['by_type'] = by_type
+
+        org = None
+        ranking = []
+        if role in ('admin', 'supervisor'):
+            org = bar(Household.objects.all())
+            workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct()
+            for w in workers:
+                b = bar(Household.objects.filter(assigned_to=w))
+                if b['total'] == 0:
+                    continue
+                ranking.append({
+                    'user_id': w.id,
+                    'name': w.get_full_name() or w.username,
+                    **b,
+                })
+            ranking.sort(key=lambda r: r['percent'], reverse=True)
+
+        # Weekly trend (last 4 weeks) over households in scope.
+        today = timezone.localdate()
+        trend = []
+        for i in range(3, -1, -1):
+            wk_start = today - timedelta(days=7 * i + 6)
+            wk_end = today - timedelta(days=7 * i)
+            count = ServiceDelivery.objects.filter(
+                household__in=scoped_household_qs(request.user),
+                service_date__gte=wk_start, service_date__lte=wk_end,
+            ).count()
+            trend.append({'label': wk_start.strftime('%d %b'), 'count': count})
+
+        return Response({
+            'month': start.strftime('%Y-%m'),
+            'staff': staff, 'org': org, 'ranking': ranking, 'trend': trend,
+        })
+
+    @action(detail=False, methods=['get'])
+    def beneficiary_reminders(self, request):
+        """Children (members < 18) overdue for HIV testing or counselling."""
+        from django.contrib.contenttypes.models import ContentType
+        THRESHOLD_DAYS = 90
+        TRACKED = ['HIV Testing Referral', 'Individual Counselling']
+        scoped = scoped_household_qs(request.user)
+        ct_member = ContentType.objects.get_for_model(HouseholdMember)
+        today = timezone.localdate()
+        out = []
+        members = HouseholdMember.objects.filter(household__in=scoped).select_related('household')
+        for m in members:
+            if m.date_of_birth:
+                age = today.year - m.date_of_birth.year - (
+                    (today.month, today.day) < (m.date_of_birth.month, m.date_of_birth.day))
+                if age >= 18:
+                    continue
+            for st in TRACKED:
+                last = ServiceDelivery.objects.filter(
+                    beneficiary_content_type=ct_member, beneficiary_object_id=m.id, service_type=st,
+                ).order_by('-service_date').first()
+                days = (today - last.service_date).days if last else None
+                if days is None or days >= THRESHOLD_DAYS:
+                    out.append({
+                        'member_id': m.id,
+                        'name': f'{m.name} {m.surname}'.strip(),
+                        'household_id': m.household_id,
+                        'org_household_number': m.household.org_household_number,
+                        'service_type': st,
+                        'last_service_date': str(last.service_date) if last else None,
+                        'days_since': days,
+                        'dob_missing': m.date_of_birth is None,
+                    })
+        # Children with a known DOB and a real overdue status are the most
+        # actionable, so surface them first; DOB-missing rows sort last.
+        out.sort(key=lambda r: (r['dob_missing'], -(10 ** 9 if r['days_since'] is None else r['days_since'])))
+        return Response(out)
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        """CSV export of a month's service delivery (supervisor/admin, donor reporting)."""
+        if user_role(request.user) not in ('admin', 'supervisor'):
+            return Response({'detail': 'Only supervisors/administrators may export service reports.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        month = request.query_params.get('month')
+        if month:
+            y, m = month.split('-')
+            start = timezone.datetime(int(y), int(m), 1).date()
+        else:
+            start = timezone.localdate().replace(day=1)
+        _, nxt = _month_bounds(start)
+        scoped = scoped_household_qs(request.user)
+        qs = ServiceDelivery.objects.filter(
+            household__in=scoped, service_date__gte=start, service_date__lt=nxt,
+        ).select_related('household', 'delivered_by').order_by('service_date')
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="service_report_{start:%Y_%m}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['Date', 'Household Number', 'Beneficiary', 'Service Type', 'Delivered By', 'Notes'])
+        for s in qs:
+            b = s.beneficiary
+            bname = f'{b.name} {b.surname}'.strip() if b else 'Whole household'
+            dby = (s.delivered_by.get_full_name() or s.delivered_by.username) if s.delivered_by else ''
+            writer.writerow([s.service_date.strftime('%Y-%m-%d'), s.household.org_household_number,
+                             bname, s.service_type, dby, s.notes])
+        log_action(request.user, 'downloaded', f'Service report CSV export ({start:%Y-%m})')
+        return response
+
+    @action(detail=False, methods=['get'])
+    def monthly_detail(self, request):
+        """Per-household served/not-served detail for the current month (in scope)."""
+        start, nxt = _month_bounds()
+        scoped = scoped_household_qs(request.user).prefetch_related('caregiver')
+        counts = {}
+        last = {}
+        for row in ServiceDelivery.objects.filter(
+            household__in=scoped, service_date__gte=start, service_date__lt=nxt
+        ).values('household_id').annotate(c=Count('id'), latest=Max('service_date')):
+            counts[row['household_id']] = row['c']
+            last[row['household_id']] = row['latest']
+        # last-ever service date (for missed >30 days)
+        ever = {}
+        for row in ServiceDelivery.objects.filter(household__in=scoped).values(
+            'household_id').annotate(latest=Max('service_date')):
+            ever[row['household_id']] = row['latest']
+        today = timezone.localdate()
+        rows = []
+        missed = []
+        for hh in scoped:
+            cg = getattr(hh, 'caregiver', None)
+            cg_name = f'{cg.name} {cg.surname}'.strip() if cg else ''
+            served = hh.id in counts
+            last_ever = ever.get(hh.id)
+            days = (today - last_ever).days if last_ever else None
+            item = {
+                'id': hh.id, 'org_household_number': hh.org_household_number,
+                'caregiver_name': cg_name, 'served': served,
+                'count': counts.get(hh.id, 0),
+                'last_service_date': str(last.get(hh.id)) if last.get(hh.id) else (str(last_ever) if last_ever else None),
+            }
+            rows.append(item)
+            if days is None or days >= 30:
+                missed.append({
+                    'id': hh.id, 'org_household_number': hh.org_household_number,
+                    'caregiver_name': cg_name,
+                    'last_service_date': str(last_ever) if last_ever else None,
+                    'days_since': days,
+                })
+        rows.sort(key=lambda r: (r['served'], r['org_household_number']))
+        return Response({'month': start.strftime('%Y-%m'), 'households': rows, 'missed': missed})
+
+
 # ------------------------------ Users (for assignment dropdowns) ------------------------------
 def users_list(request):
     users = User.objects.filter(is_active=True).order_by('username')
@@ -591,6 +887,15 @@ def dashboard(request):
 
     stats = {'total_households': qs.count()}
 
+    # Case-file completeness bands (supervisors/admin) for the dashboard chart.
+    completeness_bands = None
+    if role in ('supervisor', 'admin'):
+        banded = annotate_completeness(qs)
+        ready = banded.filter(_pct__gte=90).count()
+        in_progress = banded.filter(_pct__gte=50, _pct__lt=90).count()
+        needs = banded.filter(_pct__lt=50).count()
+        completeness_bands = {'ready': ready, 'in_progress': in_progress, 'needs_attention': needs}
+
     # Unconfirmed field counts (visible to supervisors/admin).
     unconfirmed = {'id_number': 0, 'surname': 0, 'date_of_birth': 0}
     if role in ('supervisor', 'admin'):
@@ -613,6 +918,7 @@ def dashboard(request):
         'search_results': search_results,
         'stats': stats,
         'unconfirmed_counts': unconfirmed,
+        'completeness_bands': completeness_bands,
     })
 
 
@@ -629,6 +935,7 @@ def choices_view(request):
         'problem_codes': [{'value': c[0], 'label': c[1]} for c in choices.PROBLEM_CODES],
         'intervention_codes': [{'value': c[0], 'label': c[1]} for c in choices.INTERVENTION_CODES],
         'risk_level': [{'value': c[0], 'label': c[1]} for c in choices.RISK_LEVEL_CHOICES],
+        'service_types': [c[0] for c in choices.SERVICE_TYPE_CHOICES],
     })
 
 
@@ -640,12 +947,35 @@ class UsersListView(APIView):
 
 
 class BrandingView(APIView):
-    """Public org branding (name + logo) for the login screen."""
+    """Public org branding (name + logo + login tagline) for the login screen."""
     permission_classes = [AllowAny]
 
     def get(self, request):
         org = Organisation.get_solo()
-        return Response({'name': org.name, 'logo': org.logo.url if org.logo else None})
+        cfg = SiteConfig.get_solo()
+        return Response({
+            'name': org.name,
+            'logo': org.logo.url if org.logo else None,
+            'login_tagline': cfg.login_tagline,
+        })
+
+
+class SiteConfigView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffRole]
+
+    def get(self, request):
+        return Response(SiteConfigSerializer(SiteConfig.get_solo()).data)
+
+    def put(self, request):
+        if user_role(request.user) != ROLE_ADMIN:
+            return Response({'detail': 'Only administrators can edit site configuration.'},
+                            status=status.HTTP_403_FORBIDDEN)
+        cfg = SiteConfig.get_solo()
+        serializer = SiteConfigSerializer(cfg, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_action(request.user, 'edited', 'Updated site configuration')
+        return Response(serializer.data)
 
 
 class OrganisationView(APIView):

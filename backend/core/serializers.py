@@ -15,6 +15,8 @@ from .models import (
     HouseholdMember,
     Organisation,
     ProcessNote,
+    ServiceDelivery,
+    SiteConfig,
     SupportingDocument,
 )
 from .permissions import user_role
@@ -277,6 +279,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
     )
     assigned_to_names = serializers.SerializerMethodField()
     checklist_progress = serializers.SerializerMethodField()
+    version = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Household
@@ -285,6 +288,7 @@ class HouseholdSerializer(serializers.ModelSerializer):
             'province', 'district', 'municipality', 'ward', 'date_registered',
             'assigned_to', 'assigned_to_names', 'checklist_progress', 'created_at',
             'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
+            'version',
         ]
 
     def get_assigned_to_names(self, obj):
@@ -375,3 +379,52 @@ class OrganisationSerializer(serializers.ModelSerializer):
             if files and hasattr(files[0], 'read'):
                 result['logo'] = files[0]
         return result
+
+
+class SiteConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SiteConfig
+        fields = ['id', 'login_tagline', 'updated_at']
+        read_only_fields = ['updated_at']
+
+
+class ServiceDeliverySerializer(serializers.ModelSerializer):
+    delivered_by = serializers.StringRelatedField(read_only=True)
+    created_by = serializers.StringRelatedField(read_only=True)
+    beneficiary_type = serializers.ChoiceField(
+        choices=['caregiver', 'householdmember'], write_only=True, required=False, allow_null=True
+    )
+    beneficiary_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    beneficiary_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceDelivery
+        fields = [
+            'id', 'household', 'service_date', 'service_type', 'notes',
+            'delivered_by', 'created_at', 'created_by',
+            'beneficiary_type', 'beneficiary_id', 'beneficiary_name',
+        ]
+        read_only_fields = ['created_at', 'delivered_by', 'created_by']
+
+    def get_beneficiary_name(self, obj):
+        b = obj.beneficiary
+        if not b:
+            return ''
+        return f'{b.name} {b.surname}'.strip()
+
+    def validate_service_date(self, value):
+        if value and value > timezone.localdate():
+            raise serializers.ValidationError('Service date cannot be in the future.')
+        return value
+
+    def create(self, validated_data):
+        btype = validated_data.pop('beneficiary_type', None)
+        bid = validated_data.pop('beneficiary_id', None)
+        if btype and bid:
+            model = {'caregiver': Caregiver, 'householdmember': HouseholdMember}[btype]
+            obj = model.objects.filter(pk=bid, household=validated_data['household']).first()
+            if not obj:
+                raise serializers.ValidationError({'beneficiary_id': 'Beneficiary not found in this household.'})
+            validated_data['beneficiary_content_type'] = ContentType.objects.get_for_model(model)
+            validated_data['beneficiary_object_id'] = bid
+        return super().create(validated_data)

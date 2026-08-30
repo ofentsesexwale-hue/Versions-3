@@ -181,3 +181,21 @@ RISK_LEVEL_CHOICES = [
     ('High', 'High (1 week)'),
     ('Mild', 'Mild (2-3 weeks)'),
 ]
+
+# Service delivery types (fixed list agreed with the NPO).
+SERVICE_TYPE_CHOICES = [
+    ('Individual Counselling', 'Individual Counselling'),
+    ('Family Counselling', 'Family Counselling'),
+    ('Home Visit', 'Home Visit'),
+    ('School Visit', 'School Visit'),
+    ('Support Group', 'Support Group'),
+    ('Referral', 'Referral'),
+    ('Material Support', 'Material Support'),
+    ('Grant Assistance', 'Grant Assistance'),
+    ('ID Documentation Assistance', 'ID Documentation Assistance'),
+    ('HIV Testing Referral', 'HIV Testing Referral'),
+    ('Health Check', 'Health Check'),
+    ('Educational Support', 'Educational Support'),
+    ('Psychosocial Support', 'Psychosocial Support'),
+    ('Other', 'Other'),
+]

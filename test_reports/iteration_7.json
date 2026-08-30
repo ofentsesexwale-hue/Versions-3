@@ -1,0 +1,27 @@
+{
+  "summary": "Round-7 four new features fully tested. Backend: /app/backend/tests/test_round7_features.py — 20/20 passing (Service Trend chart: 4 weekly buckets on /services/stats/ for admin/supervisor/caseworker; Beneficiary Reminders: /services/beneficiary_reminders/ returns overdue children with all required fields, tracked only 'HIV Testing Referral'/'Individual Counselling', RBAC-scoped, and recording a service via POST /api/services/ correctly removes that member+service_type from reminders; CSV Export: 200 text/csv with exact header row for admin/supervisor, 403 for caseworker & capturer, ?month=YYYY-MM honoured in Content-Disposition; Race-Safe Versioning: normal PATCH still 200 with version+1, stale=409 with code=version_conflict+current_version, correct-version PATCH after stale still succeeds; Regression: bulk_log, monthly_detail.missed, stats.staff/org/ranking, dashboard.completeness_bands, ?band= filter all green). Frontend Playwright: supervisor dashboard renders data-testid service-trend-chart (4 bars: 0/7/5/22), export-service-csv-button (click triggers 200 text/csv), beneficiary-reminders-card with reminder-row-0 (303 reminders), and all Round-6 widgets (service-progress-card, staff/org-progress-bar, staff-ranking, completeness-chart). Caseworker correctly does NOT see export button or reminders card (isSup gated) but still sees trend chart (scoped).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_round7_features.py",
+    "/app/test_reports/pytest/iteration_7.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/views.py is now 1009 lines — well past the 700-line split threshold (flagged in iter5/iter6). Recommend extracting ServiceDeliveryViewSet (with its 5+ actions: stats, monthly_detail, bulk_log, beneficiary_reminders, export) into its own module core/views_services.py, and Household/Assessment/Verification into their own modules.",
+    "beneficiary_reminders() performs an N+2 query per HouseholdMember (one ServiceDelivery lookup per (member, tracked_service_type)) — with ~150 members × 2 service types = 300 sequential queries. For larger orgs this will be slow. Consider a single aggregate group-by query, or prefetch the latest ServiceDelivery per (member, service_type).",
+    "services/export/ streams the whole month via a single HttpResponse — fine now but for large orgs should switch to StreamingHttpResponse with a generator to avoid memory pressure.",
+    "Race-safe versioning uses select_for_update inside transaction.atomic() — correctly serialises concurrent PATCHes on the same row. However there is no explicit test simulating true concurrent writers with threads (which would need an actual worker pool); the current fix is correct but only integration/load testing would prove it under contention.",
+    "beneficiary_reminders(): the child age filter treats a NULL date_of_birth as 'child' (i.e. always overdue if never tested). This inflates the reminders list (303 rows on seed data, mostly 'never') because many HouseholdMember records have no DOB. Consider surfacing this to the FE (badge 'DOB missing') or requiring DOB before including in reminders — otherwise the card is dominated by DOB-missing rows and less actionable.",
+    "CSV writer writes s.notes raw — no escaping of CR/LF in notes. Python csv module handles quoting for commas/quotes but consumers opening with Excel may still hit multi-line rows. Minor.",
+    "trend bucket labels use %d %b (e.g. '04 Aug') with no year — fine for a rolling-4-weeks view but ambiguous around year-boundary weeks (Dec/Jan)."
+  ],
+  "updated_files": ["/app/backend/tests/test_round7_features.py (new — 20 tests)"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% (all data-testids verified + RBAC gating)"},
+  "test_credentials": "admin/admin123, supervisor/supervisor123, caseworker/caseworker123, capturer/capturer123",
+  "seed_data_creation": "1 ServiceDelivery row created by test_recording_service_removes_from_reminders (member-scoped, one of the tracked service types on the first reminder's household). A handful of trivial notes-suffix PATCHes on HH60 (each increments version by 1). No households/members created or deleted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Household 60 (HH60) version has been incremented ~2 more times by race-safe-versioning tests (each test bumps version by 1). HH60 notes now has a couple of '.' and '!' suffix chars appended. Beneficiary_reminders on seed = ~303 rows (was 304 pre-test; one member cleared by test). Login tagline still 'TEST tagline round6' from iter-6. System month is 2026-08 with 23/60 households served. Trend chart shows 4 buckets [0, 7, 5, 22] for supervisor scope.",
+  "rca of the issue": "No bugs found. All 4 Round-7 features work as spec'd; Round-6 regression clean."
+}

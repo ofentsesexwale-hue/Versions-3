@@ -48,6 +48,19 @@ Offline case-management system for South African NPOs serving Orphans & Vulnerab
 - **Timeline filters**: household timeline card has action-type filter chips (all + confirmed/edited/printed/...).
 - **Cover totals**: batch cover shows average file completeness + a per-household File % column.
 
+### Enhancements (2026-06, round 6) — tested 15/15 backend, 14/14 frontend (iteration_6.json)
+- **Version Lock (optimistic concurrency)**: `Household.version` int; edit form sends loaded version; `PATCH /api/households/<id>/` returns **409** with "modified by another user" message on stale version, else saves and increments. FE (`HouseholdForm.js`) refetches on 409.
+- **Login Tagline**: `SiteConfig` singleton (`login_tagline` ≤200 chars). Admin edits at `/settings/organisation` (`PUT /api/site-config/`); shown on login page via public `GET /api/branding/`.
+- **Timeline Export**: `Export timeline` button → `GET /api/print/timeline/?household_id=&token=` (DSD-style HTML, browser Save-as-PDF) listing household header + chronological audit entries + generated footer.
+- **Completeness Chart**: supervisor/admin dashboard bands (ready ≥90 / in_progress 50–89 / needs_attention <50) from `dashboard.completeness_bands`; clicking a band filters households via `GET /api/households/?band=`.
+- **Services Rendered**: `ServiceDelivery` model (household + optional GenericForeignKey beneficiary + 14 fixed `SERVICE_TYPE_CHOICES`). `ServiceDeliveryViewSet` (`/api/services/`) with caseload enforcement + no-future-date. Actions: `bulk_log`, `stats` (staff + org progress bars + staff ranking + by-type), `monthly_detail` (served/not-served + missed 30+ days). Daily Service Log page `/services`; per-household `ServicesPanel` (Services tab); dashboard two progress bars + ranking + missed-households card. Print reports: `GET /api/print/service-report/?report=household|monthly|missed`.
+
+### Enhancements (2026-06, round 7) — tested 20/20 backend + frontend (iteration_7.json)
+- **Service Trend Chart**: `GET /api/services/stats/` now returns `trend` (4 weekly buckets over households in scope); dashboard renders a small bar chart (`service-trend-chart`).
+- **Beneficiary Reminders**: `GET /api/services/beneficiary_reminders/` flags children (members <18 or DOB-missing) overdue (≥90 days or never) for `HIV Testing Referral` / `Individual Counselling`. Recording that service for the member clears the reminder. Dashboard card `beneficiary-reminders-card` (supervisor/admin); rows with unknown DOB show a "DOB missing" badge and sort last.
+- **CSV Service Export**: `GET /api/services/export/?month=YYYY-MM` (supervisor/admin only; 403 otherwise) → text/csv monthly service report for donor reporting; dashboard `export-service-csv-button` (axios blob download).
+- **Race-Safe Versioning**: `HouseholdViewSet.update` wraps the read-compare-save in `transaction.atomic()` + `select_for_update()`, so two concurrent writers on the same row are serialised (still 409 on stale version, +1 on success).
+
 ## Backlog / next
 - P1: add remaining DSD reference forms (CW06 problem codes, CW10 intervention codes as pickers in Process Note dialog; COW1 Planning, CW12 Evaluation, GRW group-work forms).
 - P2: batch "Print Center" page (print one form across a district or a worker's caseload).

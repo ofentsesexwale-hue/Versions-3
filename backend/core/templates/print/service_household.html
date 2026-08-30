@@ -1,0 +1,40 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+<div class="sheet">
+  {% if org_logo %}<img class="logo" src="{{ org_logo }}" style="display:block;margin-bottom:6px;">{% endif %}
+  <div class="ftitle">Household Service History</div>
+  <table class="nb" style="margin-bottom:8px;">
+    <tr><td class="nb" colspan="2"><span class="lbl">Name of the Organisation:</span> {{ org_name }}</td></tr>
+    <tr>
+      <td class="nb"><span class="lbl">Household Number:</span> {{ hh.org_household_number }}</td>
+      <td class="nb" style="text-align:right;"><span class="lbl">Head of household:</span> {{ hh.cg.name }} {{ hh.cg.surname }}</td>
+    </tr>
+    <tr><td class="nb" colspan="2"><span class="lbl">Period:</span> {{ month_label }}</td></tr>
+  </table>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:14%;">Date</th>
+        <th style="width:24%;">Service type</th>
+        <th style="width:20%;">Beneficiary</th>
+        <th style="width:18%;">Delivered by</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.service_date|date:"Y-m-d" }}</td>
+        <td>{{ r.service_type }}</td>
+        <td>{{ r.beneficiary_label }}</td>
+        <td>{% if r.delivered_by %}{{ r.delivered_by.get_full_name|default:r.delivered_by.username }}{% endif %}</td>
+        <td>{{ r.notes }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" style="text-align:center;">No services recorded for this period.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:14px;">Generated on {{ now|date:"Y-m-d H:i" }} &mdash; {{ rows|length }} service(s).</p>
+</div>
+{% endblock %}

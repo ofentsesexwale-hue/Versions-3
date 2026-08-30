@@ -1,0 +1,39 @@
+{
+  "summary": "Round-6 (5 new features) tested end-to-end. Backend: created /app/backend/tests/test_round6_features.py (15 tests, 15/15 passing) covering Version Lock (list version present, stale=409 with 'modified' message, correct version increments +1), Login Tagline (PUT /api/site-config/ persists, GET /api/branding/ exposes public login_tagline, non-admin PUT blocked 403), Timeline Export (/api/print/timeline/?household_id&token 200 HTML), Completeness Chart (dashboard completeness_bands with ready/in_progress/needs_attention, band filter ?band=in_progress 200), Services (future date 400, today 201, bulk_log 201, stats 200, monthly_detail with missed[], all 3 print/service-report variants 200), RBAC (caseworker POSTing service to unassigned household blocked 400/403). Frontend: Playwright verified data-testid presence and interactions for all 5 features: login-tagline shows 'TEST tagline round6', completeness-chart + completeness-band-in_progress + staff-ranking + org-progress-bar + missed-households-card render on admin dashboard, band click navigates and filters households, /services page loads with 'Log selected' + 'Mark all served today' buttons, export-timeline-button on /households/60, services-panel + add-service-button render, org-tagline-input present in /settings/organisation. 14/14 UI checks passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/households/", "issue": "List serializer returns 'assigned_to_ids' but not 'version' field. Detail endpoint returns 'version'. Not a bug — FE fetches full detail before edit — but is worth noting for consistency."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_round6_features.py",
+    "/app/test_reports/pytest/iteration_6.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/views.py already flagged >680 lines in iter5; adding ServiceDeliveryViewSet (bulk_log/stats/monthly_detail actions), SiteConfigView and dashboard completeness_bands has likely pushed it well past the 700-line split threshold. Recommend extracting Services/SiteConfig/Branding/Dashboard into separate modules.",
+    "HouseholdViewSet.perform_update increments version but if two concurrent PATCHes both pass the same current version they could race (same as the AssessmentViewSet race noted in iter5). A DB-level unique-together / select_for_update inside a transaction is the definitive fix. 409 handling only guards clients that submitted the stale version — it doesn't prevent concurrent writers who both read version=N.",
+    "ServiceDelivery.beneficiary via GenericForeignKey — ensure DELETE cascade or SET_NULL is handled when Caregiver/HouseholdMember is deleted; otherwise dangling FK by content_type+object_id. Consider a signal or overriding delete().",
+    "Print tokens continue to travel in ?token= query params — persistent smell from previous rounds; logged in web-server access logs.",
+    "Household list serializer uses 'assigned_to_ids' while detail uses 'assigned_to' with nested names — a minor inconsistency; unify field naming to avoid FE confusion (a real trap that caused a false positive in test iteration authoring)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_round6_features.py (new — 15 tests for Round-6 five features + RBAC)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15) for Round-6 features",
+    "frontend": "100% (14/14) — every required data-testid present and interactive"
+  },
+  "test_credentials": "admin/admin123, supervisor/supervisor123, caseworker/caseworker123, capturer/capturer123",
+  "seed_data_creation": "Tests created a handful of ServiceDelivery rows for HH60 (admin + caseworker) and set SiteConfig.login_tagline='TEST tagline round6' (still persisted — visible on login page). No households or assessments created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login tagline currently reads 'TEST tagline round6' (SiteConfig persisted from tests). To restore, PUT /api/site-config/ with {login_tagline:''} as admin. Household list serializer returns 'assigned_to_ids' (list), NOT 'assigned_to' — use that when writing FE-style tests. HH60 assigned_to = [3, 4] (caseworker, caseworker2). ServiceDelivery choice enum served under /api/choices/ as 'service_types' (14 fixed strings). Print endpoints authenticate via ?token= query param (still). Version field only on household DETAIL response, not on list.",
+  "rca of the issue": "No new bugs found in Round-6. Two potential race-conditions flagged (Household.version and Assessment.version_number) but not reproduced; recommend DB unique-together + retry on IntegrityError."
+}

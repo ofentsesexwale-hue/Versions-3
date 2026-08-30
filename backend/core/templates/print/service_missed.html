@@ -1,0 +1,34 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+<div class="sheet">
+  {% if org_logo %}<img class="logo" src="{{ org_logo }}" style="display:block;margin-bottom:6px;">{% endif %}
+  <div class="ftitle">Households Not Served &mdash; {{ month_label }}</div>
+  <table class="nb" style="margin-bottom:8px;">
+    <tr><td class="nb"><span class="lbl">Organisation:</span> {{ org_name }}</td>
+        <td class="nb" style="text-align:right;"><span class="lbl">Printed by:</span> {{ user.get_full_name|default:user.username }}</td></tr>
+  </table>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:8%;">#</th>
+        <th style="width:24%;">Household Number</th>
+        <th>Head of household</th>
+        <th style="width:22%;">Last service date</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for m in missed %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ m.org_household_number }}</td>
+        <td>{{ m.caregiver_name }}</td>
+        <td>{% if m.last_service_date %}{{ m.last_service_date|date:"Y-m-d" }}{% else %}Never{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" style="text-align:center;">Every household in scope has been served this month.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:14px;">Generated on {{ now|date:"Y-m-d H:i" }} &mdash; {{ missed|length }} household(s) not yet served.</p>
+</div>
+{% endblock %}

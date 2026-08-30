@@ -45,3 +45,20 @@ export function printForm(form, { householdId, householdIds, org, auto = true, a
   if (householdIds && householdIds.length) qs.set("household_ids", householdIds.join(","));
   window.open(`${BACKEND_URL}/api/print/${form}/?${qs.toString()}`, "_blank", "noopener");
 }
+
+// Open the household activity timeline print view.
+export function printTimeline(householdId) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const qs = new URLSearchParams({ token: token || "", auto: "1", household_id: householdId });
+  window.open(`${BACKEND_URL}/api/print/timeline/?${qs.toString()}`, "_blank", "noopener");
+}
+
+// Open a service-delivery report print view.
+// report: 'household' | 'monthly' | 'missed'
+export function printServiceReport({ report = "household", householdId, month } = {}) {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const qs = new URLSearchParams({ token: token || "", auto: "1", report });
+  if (householdId) qs.set("household_id", householdId);
+  if (month) qs.set("month", month);
+  window.open(`${BACKEND_URL}/api/print/service-report/?${qs.toString()}`, "_blank", "noopener");
+}

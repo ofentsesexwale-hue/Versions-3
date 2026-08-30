@@ -13,10 +13,12 @@ export default function OrgSettings() {
   const { user } = useAuth();
   const [org, setOrg] = useState({ name: "", address: "", contact: "", logo: null });
   const [file, setFile] = useState(null);
+  const [tagline, setTagline] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.get("/organisation/").then((r) => setOrg(r.data)).catch(() => {});
+    api.get("/site-config/").then((r) => setTagline(r.data.login_tagline || "")).catch(() => {});
   }, []);
 
   if (user && user.role !== "admin") {
@@ -34,6 +36,7 @@ export default function OrgSettings() {
       const r = await api.put("/organisation/", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setOrg(r.data);
       setFile(null);
+      await api.put("/site-config/", { login_tagline: tagline });
       toast.success("Organisation profile saved");
     } catch (e) {
       toast.error("Could not save organisation profile");
@@ -69,6 +72,11 @@ export default function OrgSettings() {
             <label className="mb-1 block text-xs font-medium text-slate-600">Logo</label>
             {logoUrl && <img src={logoUrl} alt="logo" className="mb-2 max-h-20 rounded border border-slate-200 p-1" data-testid="org-logo-preview" />}
             <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} data-testid="org-logo-input" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Login page tagline</label>
+            <Input value={tagline} maxLength={200} onChange={(e) => setTagline(e.target.value)} placeholder="e.g. Welcome to the OVC Case Management System" data-testid="org-tagline-input" />
+            <p className="mt-1 text-xs text-slate-500">Shown on the login screen, below the organisation name.</p>
           </div>
           <div className="flex justify-end">
             <Button onClick={save} disabled={saving} className="gap-2 bg-slate-900 hover:bg-slate-800" data-testid="org-save-button">
