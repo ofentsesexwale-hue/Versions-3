@@ -15,15 +15,21 @@ import {
 } from "@/components/ui/select";
 import { CASE_STATUS_LABELS } from "@/lib/constants";
 
-const FIELDS = [
-  ["org_household_number", "Organisation household number", true],
-  ["house_number", "House number", false],
-  ["street", "Street", false],
-  ["town", "Town", false],
-  ["province", "Province", false],
-  ["district", "District", false],
-  ["municipality", "Municipality", false],
-  ["ward", "Ward", false],
+const FILE_FIELD = [
+  "org_household_number",
+  "Office file number",
+  true,
+  "The code this office gives the family file, e.g. SI-0041. Search uses this number.",
+];
+
+const ADDRESS_FIELDS = [
+  ["house_number", "Street / stand number", false, "The number on the house or stand, e.g. 12. Not the office file number."],
+  ["street", "Street", false, ""],
+  ["town", "Town", false, ""],
+  ["province", "Province", false, ""],
+  ["district", "District", false, ""],
+  ["municipality", "Municipality", false, ""],
+  ["ward", "Ward", false, ""],
 ];
 
 export default function HouseholdForm() {
@@ -61,7 +67,7 @@ export default function HouseholdForm() {
 
   const submit = async () => {
     if (!form.org_household_number) {
-      toast.error("Household number is required");
+      toast.error("Office file number is required");
       return;
     }
     setSaving(true);
@@ -103,23 +109,23 @@ export default function HouseholdForm() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Household details</CardTitle>
+          <CardTitle className="text-base">Office file</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {FIELDS.map(([key, label, required]) => (
-            <div key={key} className="space-y-1.5">
-              <Label>
-                {label}
-                {required && <span className="ml-1 text-rose-600">*</span>}
-              </Label>
-              <Input
-                value={form[key] || ""}
-                onChange={(e) => set(key, e.target.value)}
-                className="h-11"
-                data-testid={`household-${key}-input`}
-              />
-            </div>
-          ))}
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>
+              {FILE_FIELD[1]}
+              <span className="ml-1 text-rose-600">*</span>
+            </Label>
+            <Input
+              value={form[FILE_FIELD[0]] || ""}
+              onChange={(e) => set(FILE_FIELD[0], e.target.value)}
+              className="h-11"
+              placeholder="e.g. SI-0041"
+              data-testid={`household-${FILE_FIELD[0]}-input`}
+            />
+            <p className="text-[13px] text-muted-foreground">{FILE_FIELD[3]}</p>
+          </div>
           <div className="space-y-1.5">
             <Label>Date registered</Label>
             <DateField value={dateRegistered} onChange={setDateRegistered} testId="date-picker-date_registered" />
@@ -139,6 +145,29 @@ export default function HouseholdForm() {
               <Input value={form.status_reason || ""} onChange={(e) => set("status_reason", e.target.value)} data-testid="household-status-reason-input" />
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Home address</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          {ADDRESS_FIELDS.map(([key, label, required, hint]) => (
+            <div key={key} className="space-y-1.5">
+              <Label>
+                {label}
+                {required && <span className="ml-1 text-rose-600">*</span>}
+              </Label>
+              <Input
+                value={form[key] || ""}
+                onChange={(e) => set(key, e.target.value)}
+                className="h-11"
+                data-testid={`household-${key}-input`}
+              />
+              {hint ? <p className="text-[13px] text-muted-foreground">{hint}</p> : null}
+            </div>
+          ))}
         </CardContent>
       </Card>
 
