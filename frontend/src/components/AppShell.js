@@ -232,7 +232,7 @@ export function AppShell() {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="ID number, surname, or household number"
+                placeholder="ID number, surname, or office file number"
                 className="h-11 pl-10"
                 data-testid="global-search-input"
               />
