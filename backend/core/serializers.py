@@ -366,21 +366,36 @@ class HouseholdSerializer(serializers.ModelSerializer):
             'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
             'status', 'status_changed_at', 'status_reason', 'version',
         ]
+        extra_kwargs = {
+            'org_household_number': {'required': False, 'allow_blank': True},
+        }
 
     def validate_org_household_number(self, value):
         value = (value or '').strip()
+        if not value:
+            return ''
         prefix = getattr(settings, 'TRAINING_HOUSEHOLD_PREFIX', 'TEST')
         request = self.context.get('request')
         user = getattr(request, 'user', None)
         is_training = is_training_user(user)
         starts_test = value.upper().startswith(prefix.upper())
         if is_training and not starts_test:
-            return f'{prefix}-{value}' if value else f'{prefix}-NEW'
+            return f'{prefix}-{value}' if value else ''
         if user and user.is_authenticated and not is_training and starts_test:
             raise serializers.ValidationError(
                 'TEST- household numbers belong to the training files. Use a real organisation number here.'
             )
         return value
+
+    def create(self, validated_data):
+        number = (validated_data.get('org_household_number') or '').strip()
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not number:
+            validated_data['org_household_number'] = Household.next_file_number(
+                training=is_training_user(user)
+            )
+        return super().create(validated_data)
 
     def update(self, instance, validated_data):
         new_status = validated_data.get('status', instance.status)

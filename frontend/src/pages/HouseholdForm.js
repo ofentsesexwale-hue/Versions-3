@@ -19,7 +19,7 @@ const FILE_FIELD = [
   "org_household_number",
   "Office file number",
   true,
-  "The code this office gives the family file, e.g. SI-0041. Search uses this number.",
+  "The office assigns this automatically when you save, e.g. SI-0001.",
 ];
 
 const ADDRESS_FIELDS = [
@@ -46,6 +46,7 @@ export default function HouseholdForm() {
   const [caseworkers, setCaseworkers] = useState([]);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [nextFileNumber, setNextFileNumber] = useState("");
 
   useEffect(() => {
     if (canAssign) {
@@ -60,18 +61,25 @@ export default function HouseholdForm() {
         setAssigned(res.data.assigned_to || []);
         setLoading(false);
       });
+    } else {
+      api.get("/households/next-file-number/").then((res) => {
+        setNextFileNumber(res.data.org_household_number || "");
+      }).catch(() => {});
     }
   }, [id]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async () => {
-    if (!form.org_household_number) {
+    if (isEdit && !form.org_household_number) {
       toast.error("Office file number is required");
       return;
     }
     setSaving(true);
     const payload = { ...form, date_registered: dateRegistered, assigned_to: assigned };
+    if (!isEdit) {
+      delete payload.org_household_number;
+    }
     try {
       let res;
       if (isEdit) {
@@ -79,7 +87,7 @@ export default function HouseholdForm() {
       } else {
         res = await api.post("/households/", payload);
       }
-      toast.success("Household saved");
+      toast.success(isEdit ? "Household saved" : `File ${res.data.org_household_number} saved`);
       navigate(`/households/${res.data.id}`);
     } catch (e) {
       if (e?.response?.status === 409) {
@@ -118,10 +126,9 @@ export default function HouseholdForm() {
               <span className="ml-1 text-rose-600">*</span>
             </Label>
             <Input
-              value={form[FILE_FIELD[0]] || ""}
-              onChange={(e) => set(FILE_FIELD[0], e.target.value)}
-              className="h-11"
-              placeholder="e.g. SI-0041"
+              value={isEdit ? (form.org_household_number || "") : (nextFileNumber || "Assigned when you save")}
+              readOnly
+              className="h-11 bg-white/30"
               data-testid={`household-${FILE_FIELD[0]}-input`}
             />
             <p className="text-[13px] text-muted-foreground">{FILE_FIELD[3]}</p>

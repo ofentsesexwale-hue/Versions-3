@@ -159,3 +159,4 @@ TRAINING_USERNAMES = frozenset({
     'admin', 'supervisor', 'caseworker', 'caseworker2', 'capturer',
 })
 TRAINING_HOUSEHOLD_PREFIX = 'TEST'
+LIVE_HOUSEHOLD_PREFIX = 'SI'

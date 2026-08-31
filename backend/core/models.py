@@ -74,6 +74,23 @@ class Household(models.Model):
     def __str__(self):
         return f"Household #{self.pk} ({self.org_household_number})"
 
+    @classmethod
+    def next_file_number(cls, training=False):
+        """Next office file code: SI-0001 for live, TEST-0001 for training."""
+        import re
+        prefix = (
+            settings.TRAINING_HOUSEHOLD_PREFIX if training
+            else getattr(settings, 'LIVE_HOUSEHOLD_PREFIX', 'SI')
+        )
+        max_n = 0
+        for num in cls.objects.filter(
+            org_household_number__istartswith=f'{prefix}-'
+        ).values_list('org_household_number', flat=True):
+            match = re.search(r'(\d+)\s*$', num or '')
+            if match:
+                max_n = max(max_n, int(match.group(1)))
+        return f'{prefix}-{max_n + 1:04d}'
+
 
 class PersonBase(models.Model):
     """Shared person fields for Caregiver and HouseholdMember, incl. confirm-trio."""

@@ -73,3 +73,14 @@ class CaseworkGoldStandardTests(TestCase):
         payload = r.data.get('results') if isinstance(r.data, dict) else r.data
         names = [p['name'] for p in payload]
         self.assertNotIn('Live clinic', names)
+
+    def test_new_household_gets_generated_file_number(self):
+        r = self.client.post('/api/households/', {'town': 'Umlazi'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data['org_household_number'], 'SI-0001')
+        r2 = self.client.post('/api/households/', {'town': 'Soweto'}, format='json')
+        self.assertEqual(r2.status_code, 201, r2.data)
+        self.assertEqual(r2.data['org_household_number'], 'SI-0002')
+        peek = self.client.get('/api/households/next-file-number/')
+        self.assertEqual(peek.status_code, 200)
+        self.assertEqual(peek.data['org_household_number'], 'SI-0003')

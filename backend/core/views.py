@@ -290,6 +290,14 @@ class HouseholdViewSet(viewsets.ModelViewSet):
             return HouseholdDetailSerializer
         return HouseholdSerializer
 
+    @action(detail=False, methods=['get'], url_path='next-file-number')
+    def next_file_number(self, request):
+        return Response({
+            'org_household_number': Household.next_file_number(
+                training=is_training_user(request.user)
+            ),
+        })
+
     def list(self, request, *args, **kwargs):
         qs = self.get_queryset()
         q = request.query_params.get('q') or request.query_params.get('search')
