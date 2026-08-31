@@ -1,0 +1,7 @@
+Django==5.1.15
+djangorestframework==3.17.2
+django-cors-headers==4.9.0
+python-dotenv==1.2.3
+Pillow==12.3.0
+Faker==40.37.0
+tzdata==2026.3

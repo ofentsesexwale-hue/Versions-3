@@ -91,6 +91,7 @@ credentials.json
 .credentials
 agent-tools/
 desktop/node_modules/
+desktop/vendor/
 desktop/release/
 desktop/*.AppImage
 !/OVC-CaseFile.exe

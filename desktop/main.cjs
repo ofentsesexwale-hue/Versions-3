@@ -46,13 +46,25 @@ function iconPath() {
 function pythonBin() {
   const root = repoRoot();
   const candidates = [
+    path.join(root, "python", "python.exe"),
+    path.join(root, "python", "python"),
+    path.join(process.resourcesPath, "python", "python.exe"),
     path.join(root, "backend", ".venv", "Scripts", "python.exe"),
     path.join(root, "backend", ".venv", "bin", "python"),
     path.join(process.resourcesPath, "venv", "Scripts", "python.exe"),
     path.join(process.resourcesPath, "venv", "bin", "python"),
-    process.platform === "win32" ? "python" : "python3",
   ];
-  return candidates.find((p) => p === "python" || p === "python3" || fs.existsSync(p)) || "python3";
+  const found = candidates.find((p) => fs.existsSync(p));
+  if (found) return found;
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function engineLogPath() {
+  try {
+    return path.join(app.getPath("userData"), "engine.log");
+  } catch {
+    return path.join(repoRoot(), "engine.log");
+  }
 }
 
 function waitForHttp(url, timeoutMs = 45000) {
@@ -82,29 +94,36 @@ function startOffice() {
     ? path.join(root, "preview_server.py")
     : path.join(process.resourcesPath, "preview_server.py");
   const py = pythonBin();
+  const pyHome = path.dirname(py);
+  const logFile = engineLogPath();
+  const log = fs.openSync(logFile, "a");
+  fs.writeSync(log, `\n--- ${new Date().toISOString()} python=${py} ---\n`);
   const env = {
     ...process.env,
     USE_SQLITE: "true",
     PYTHONUNBUFFERED: "1",
+    PATH: `${pyHome}${path.delimiter}${process.env.PATH || ""}`,
     OVC_API_PORT: API_PORT,
     OVC_API_HOST: "127.0.0.1",
     OVC_UI_PORT: UI_PORT,
     OVC_UI_HOST: "127.0.0.1",
     OVC_UI_ROOT: uiRoot,
   };
+  if (fs.existsSync(path.join(pyHome, "Lib"))) env.PYTHONHOME = pyHome;
 
-  spawnSync(py, ["manage.py", "migrate", "--noinput"], { cwd: backend, env, stdio: "ignore", windowsHide: true });
+  spawnSync(py, ["manage.py", "migrate", "--noinput"], { cwd: backend, env, stdio: ["ignore", log, log], windowsHide: true });
+  spawnSync(py, ["manage.py", "seed_data"], { cwd: backend, env, stdio: ["ignore", log, log], windowsHide: true });
 
   apiProc = spawn(py, ["manage.py", "runserver", `127.0.0.1:${API_PORT}`, "--noreload"], {
     cwd: backend,
     env,
-    stdio: "ignore",
+    stdio: ["ignore", log, log],
     windowsHide: true,
   });
   uiProc = spawn(py, [preview], {
     cwd: root,
     env,
-    stdio: "ignore",
+    stdio: ["ignore", log, log],
     windowsHide: true,
   });
   apiProc.on("exit", (code) => {
@@ -215,7 +234,7 @@ async function boot() {
     startOffice();
   }
   try {
-    await waitForHttp(UI_URL);
+    await waitForHttp(UI_URL, 90000);
     await mainWindow.loadURL(UI_URL);
     mainWindow.setTitle(APP_NAME);
   } catch (err) {
@@ -225,7 +244,8 @@ async function boot() {
           `<body style="font-family:Segoe UI,sans-serif;background:#f3ead8;color:#3f3a32;padding:48px">
            <h1>Could not open the office file</h1>
            <p>${String(err.message || err)}</p>
-           <p>Python and the CaseFile engine must be installed on this computer.</p></body>`,
+           <p>Use the new OVC-CaseFile.exe from Downloads (it includes Python and the CaseFile engine).</p>
+           <p style="color:#7a7368">Or double-click install-python-and-engine.bat once in the project folder.</p></body>`,
         ),
     );
   }

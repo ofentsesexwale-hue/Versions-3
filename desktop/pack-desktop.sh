@@ -14,6 +14,7 @@ cp -f "$ROOT/desktop/icons/icon-512.png" "$ROOT/desktop/icons/512x512.png" 2>/de
 cp -f "$ROOT/desktop/icons/icon-256.png" "$ROOT/desktop/icons/256x256.png" 2>/dev/null || true
 cd "$ROOT/desktop"
 yarn install
+"$ROOT/desktop/bundle-windows-python.sh"
 yarn pack:linux
 if command -v wine >/dev/null 2>&1; then
   yarn pack:win || echo "Windows package skipped (Wine present but electron-builder failed)"

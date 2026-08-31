@@ -11,7 +11,8 @@
       "filter": ["**/*", "!.venv/**", "!media/**", "!backups/**", "!**/__pycache__/**"]
     },
     { "from": "../frontend/build", "to": "office/frontend/build" },
-    { "from": "../preview_server.py", "to": "office/preview_server.py" }
+    { "from": "../preview_server.py", "to": "office/preview_server.py" },
+    { "from": "vendor/python-win", "to": "office/python" }
   ],
   "win": {
     "icon": "icons/icon.ico",
