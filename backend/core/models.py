@@ -306,7 +306,7 @@ class Assessment(models.Model):
 
 class Organisation(models.Model):
     """Singleton org profile used as the letterhead on printed DSD forms."""
-    name = models.CharField(max_length=255, default='OVC Organisation')
+    name = models.CharField(max_length=255, default='Sebueng Itumeleng')
     logo = models.FileField(upload_to='org/', null=True, blank=True)
     address = models.CharField(max_length=500, blank=True)
     contact = models.CharField(max_length=255, blank=True)
@@ -315,6 +315,9 @@ class Organisation(models.Model):
     @classmethod
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
+        if obj.name in ('OVC Organisation', 'OVC CaseFile', ''):
+            obj.name = 'Sebueng Itumeleng'
+            obj.save(update_fields=['name'])
         return obj
 
     def __str__(self):

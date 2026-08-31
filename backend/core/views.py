@@ -1407,9 +1407,9 @@ class BrandingView(APIView):
         org = Organisation.get_solo()
         cfg = SiteConfig.get_solo()
         return Response({
-            'name': org.name,
-            'logo': org.logo.url if org.logo else None,
-            'login_tagline': cfg.login_tagline,
+            'name': org.name or 'Sebueng Itumeleng',
+            'logo': org.logo.url if org.logo else '/emblem.jpg',
+            'login_tagline': cfg.login_tagline or 'Re Emisa Sechaba',
         })
 
 

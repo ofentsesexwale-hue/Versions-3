@@ -110,14 +110,12 @@ function SidebarContent({ user, counts, onLogout, onNavigate, logoUrl, orgName }
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 px-4 py-6">
         {logoUrl ? (
-          <img src={logoUrl} alt="logo" className="h-10 w-10 rounded-2xl object-contain" data-testid="sidebar-org-logo" />
+          <img src={logoUrl} alt="Sebueng Itumeleng" className="h-10 w-10 rounded-2xl object-cover" data-testid="sidebar-org-logo" />
         ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-foreground text-[#f3ead8]">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
+          <img src="/emblem.jpg" alt="Sebueng Itumeleng" className="h-10 w-10 rounded-2xl object-cover" data-testid="sidebar-org-logo" />
         )}
         <div>
-          <p className="text-[15px] font-semibold tracking-tight">{orgName || "OVC CaseFile"}</p>
+          <p className="text-[15px] font-semibold tracking-tight">{orgName && orgName !== "OVC Organisation" ? orgName : "Sebueng Itumeleng"}</p>
           <p className="text-[11px] text-muted-foreground">{user?.is_training ? "Training workspace" : "Live office files"}</p>
         </div>
       </div>
@@ -154,6 +152,7 @@ export function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [counts, setCounts] = useState({ verification: 0, diary: 0 });
   const [muted, setMuted] = useState(() => localStorage.getItem("ovc_mute_sounds") === "1");
+  const [org, setOrg] = useState(null);
 
   useEffect(() => {
     api.get("/organisation/").then((r) => setOrg(r.data)).catch(() => {});
@@ -161,7 +160,7 @@ export function AppShell() {
 
   const logoUrl = org?.logo
     ? (org.logo.startsWith("http") ? org.logo : `${process.env.REACT_APP_BACKEND_URL || ""}${org.logo}`)
-    : null;
+    : "/emblem.jpg";
 
   useEffect(() => {
     api.get("/work-diary/").then((r) => {

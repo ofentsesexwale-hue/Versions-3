@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, Loader2, ShieldCheck } from "lucide-react";
+import { GraduationCap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { playChime } from "@/lib/chimes";
 import api from "@/lib/api";
@@ -29,9 +29,13 @@ export default function Login() {
     api.get("/branding/").then((r) => setBranding(r.data)).catch(() => {});
   }, []);
 
-  const brandingLogo = branding?.logo
-    ? (branding.logo.startsWith("http") ? branding.logo : `${process.env.REACT_APP_BACKEND_URL || ""}${branding.logo}`)
-    : null;
+  const brandingLogo = (() => {
+    const logo = branding?.logo;
+    if (!logo) return "/emblem.jpg";
+    if (logo.startsWith("http")) return logo;
+    if (logo.startsWith("/media")) return `${process.env.REACT_APP_BACKEND_URL || ""}${logo}`;
+    return logo;
+  })();
 
   const submit = async (e) => {
     e.preventDefault();
@@ -53,22 +57,18 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-[440px]">
         <div className="mb-8 flex flex-col items-center text-center">
-          {brandingLogo ? (
-            <img src={brandingLogo} alt="logo" className="mb-4 h-16 max-w-[200px] object-contain" data-testid="login-org-logo" />
-          ) : (
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-foreground text-[#f3ead8] shadow-lg">
-              <ShieldCheck className="h-8 w-8" />
-            </div>
-          )}
-          <h1 className="text-[28px] font-semibold tracking-tight">{branding?.name || "OVC CaseFile"}</h1>
-          <p className="mt-1 max-w-sm text-[15px] text-muted-foreground">
-            Office case files for orphans and vulnerable children
+          <img
+            src={brandingLogo}
+            alt="Sebueng Itumeleng"
+            className="mb-5 h-36 w-full max-w-[280px] object-contain"
+            data-testid="login-org-logo"
+          />
+          <h1 className="text-[28px] font-semibold tracking-tight">
+            {branding?.name && branding.name !== "OVC Organisation" ? branding.name : "Sebueng Itumeleng"}
+          </h1>
+          <p className="mt-1 max-w-sm text-[15px] text-muted-foreground" data-testid="login-tagline">
+            Re Emisa Sechaba
           </p>
-          {branding?.login_tagline && (
-            <p className="mt-2 text-sm font-medium" data-testid="login-tagline">
-              {branding.login_tagline}
-            </p>
-          )}
         </div>
         <div className="glass-strong rounded-[1.75rem] p-6 sm:p-7">
           <h2 className="mb-1 text-lg font-semibold tracking-tight">Office sign-in</h2>
