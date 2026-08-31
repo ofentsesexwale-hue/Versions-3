@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   Briefcase,
@@ -7,7 +7,6 @@ import {
   FileText,
   HeartHandshake,
   Home,
-  ListChecks,
   LogOut,
   Menu,
   Plus,
@@ -47,15 +46,9 @@ function visibleNav(role) {
 }
 
 function RoleBadge({ role }) {
-  const styles = {
-    admin: "bg-slate-900 text-white",
-    supervisor: "bg-blue-50 text-blue-900 border border-blue-200",
-    "case-worker": "bg-slate-100 text-slate-800 border border-slate-200",
-    "data-capturer": "bg-slate-100 text-slate-800 border border-slate-200",
-  };
   return (
     <span
-      className={cn("rounded-md px-2.5 py-1 text-xs font-medium", styles[role] || "bg-slate-100")}
+      className="rounded-full bg-white/50 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-foreground/80"
       data-testid="user-role-badge"
     >
       {ROLE_LABELS[role] || role}
@@ -65,7 +58,7 @@ function RoleBadge({ role }) {
 
 function NavItems({ role, counts, onNavigate }) {
   return (
-    <nav className="flex flex-col gap-1" data-testid="app-sidebar-nav">
+    <nav className="flex flex-col gap-0.5" data-testid="app-sidebar-nav">
       {visibleNav(role).map((n) => {
         const Icon = n.icon;
         const badge = n.badgeKey ? counts?.[n.badgeKey] : 0;
@@ -78,17 +71,16 @@ function NavItems({ role, counts, onNavigate }) {
             data-testid={`nav-item-${n.key}`}
             className={({ isActive }) =>
               cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base text-amber-100/80 hover:bg-amber-950/80",
-                isActive &&
-                  "bg-amber-950 font-medium text-yellow-400 border-l-4 border-yellow-400"
+                "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-[15px] text-foreground/70 transition-colors hover:bg-white/40",
+                isActive && "bg-white/70 font-semibold text-foreground shadow-sm",
               )
             }
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-[18px] w-[18px] opacity-80" />
             <span className="flex-1">{n.label}</span>
             {badge > 0 && (
               <span
-                className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums"
+                className="ml-auto rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums"
                 data-testid={`nav-badge-${n.key}`}
               >
                 {badge}
@@ -104,32 +96,30 @@ function NavItems({ role, counts, onNavigate }) {
 function SidebarContent({ user, counts, onLogout, onNavigate, logoUrl, orgName }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-4 py-5">
+      <div className="flex items-center gap-3 px-4 py-6">
         {logoUrl ? (
-          <img src={logoUrl} alt="logo" className="h-10 w-10 rounded-lg object-contain" data-testid="sidebar-org-logo" />
+          <img src={logoUrl} alt="logo" className="h-10 w-10 rounded-2xl object-contain" data-testid="sidebar-org-logo" />
         ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-400 text-black">
-            <ShieldCheck className="h-6 w-6" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-foreground text-[#f3ead8]">
+            <ShieldCheck className="h-5 w-5" />
           </div>
         )}
         <div>
-          <p className="text-base font-semibold leading-tight text-yellow-400">{orgName || "OVC CaseFile"}</p>
-          <p className="text-xs text-amber-200/70">Offline case management</p>
+          <p className="text-[15px] font-semibold tracking-tight">{orgName || "OVC CaseFile"}</p>
+          <p className="text-[11px] text-muted-foreground">Offline case management</p>
         </div>
       </div>
-      <div className="flex-1 px-3 py-2">
+      <div className="flex-1 overflow-y-auto px-3 py-1">
         <NavItems role={user?.role} counts={counts} onNavigate={onNavigate} />
       </div>
-      <div className="border-t border-amber-900 p-4">
-        <div className="mb-3">
-          <p className="truncate text-sm font-medium text-yellow-100">{user?.full_name}</p>
-          <div className="mt-1">
-            <RoleBadge role={user?.role} />
-          </div>
+      <div className="mx-3 mb-4 rounded-2xl bg-white/40 p-3">
+        <p className="truncate text-sm font-medium">{user?.full_name}</p>
+        <div className="mt-1.5">
+          <RoleBadge role={user?.role} />
         </div>
         <Button
-          variant="outline"
-          className="w-full justify-start gap-2 border-yellow-400/40 bg-transparent text-yellow-400 hover:bg-amber-950 hover:text-yellow-300"
+          variant="ghost"
+          className="mt-3 w-full justify-start gap-2 text-foreground/70"
           onClick={onLogout}
           data-testid="app-logout-button"
         >
@@ -176,11 +166,11 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Desktop sidebar */}
+    <div className="flex min-h-screen">
       <aside
-        className="hidden w-[280px] shrink-0 border-r border-amber-950 bg-zinc-950 lg:block"
+        className="glass-tint hidden w-[272px] shrink-0 lg:block"
         data-testid="app-sidebar"
+        style={{ background: "rgba(255,255,255,0.38)" }}
       >
         <div className="sticky top-0 h-screen">
           <SidebarContent user={user} counts={counts} onLogout={onLogout} logoUrl={logoUrl} orgName={org?.name} />
@@ -188,36 +178,35 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top header */}
-        <header className="sticky top-0 z-20 border-b border-amber-800 bg-yellow-400">
-          <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
+        <header className="glass sticky top-0 z-20 mx-3 mt-3 rounded-[1.5rem] sm:mx-4">
+          <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="lg:hidden" data-testid="mobile-menu-button">
+                <Button variant="ghost" size="icon" className="lg:hidden" data-testid="mobile-menu-button">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-[280px] bg-zinc-950 p-0 text-yellow-100">
+              <SheetContent side="left" className="glass w-[280px] border-white/40 p-0">
                 <SidebarContent user={user} counts={counts} onLogout={onLogout} logoUrl={logoUrl} orgName={org?.name} onNavigate={() => setMobileOpen(false)} />
               </SheetContent>
             </Sheet>
 
             <form onSubmit={submitSearch} className="relative max-w-xl flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search surname, ID number, or household number"
-                className="h-11 pl-9"
+                className="h-11 pl-10"
                 data-testid="global-search-input"
               />
             </form>
 
             <div className="ml-auto flex items-center gap-2">
-              {logoUrl && <img src={logoUrl} alt="logo" className="hidden h-9 max-w-[140px] object-contain sm:block" data-testid="header-org-logo" />}
+              {logoUrl && <img src={logoUrl} alt="logo" className="hidden h-8 max-w-[120px] object-contain sm:block" data-testid="header-org-logo" />}
               <Button
                 onClick={() => navigate("/households/new")}
-                className="gap-2 border border-black/30 bg-zinc-950 text-yellow-400 hover:bg-zinc-800"
+                className="gap-2"
                 data-testid="header-new-household-button"
               >
                 <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Household</span>

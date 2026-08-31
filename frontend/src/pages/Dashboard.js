@@ -24,18 +24,18 @@ const CSV_COLUMNS = [
 function KpiCard({ icon: Icon, label, value, testId, accent, onClick }) {
   return (
     <Card
-      className={(accent ? "border-l-4 border-amber-400 " : "") + (onClick ? "cursor-pointer transition-colors hover:border-slate-400" : "")}
+      className={(accent ? "ring-1 ring-amber-400/50 " : "") + (onClick ? "cursor-pointer hover:bg-white/70" : "")}
       data-testid={testId}
       onClick={onClick}
       role={onClick ? "button" : undefined}
     >
       <CardContent className="flex items-center gap-4 p-5">
-        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-          <Icon className="h-6 w-6" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/50 text-foreground">
+          <Icon className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-          <p className="text-sm text-slate-600">{label}</p>
+          <p className="text-[28px] font-semibold leading-none tracking-tight tabular-nums">{value}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -55,7 +55,7 @@ function TrendChart({ trend }) {
         {trend.map((t) => (
           <div key={t.label} className="flex flex-1 flex-col items-center justify-end gap-1" data-testid={`trend-week-${t.label}`}>
             <span className="text-xs font-medium tabular-nums text-slate-700">{t.count}</span>
-            <div className="w-full rounded-t bg-[color:var(--sa-green,#007a4d)]" style={{ height: `${Math.max(4, (t.count / max) * 52)}px` }} />
+            <div className="w-full rounded-full bg-foreground/80" style={{ height: `${Math.max(4, (t.count / max) * 52)}px` }} />
             <span className="text-[10px] text-slate-400">{t.label}</span>
           </div>
         ))}
