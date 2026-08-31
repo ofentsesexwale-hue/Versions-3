@@ -58,9 +58,6 @@ export default function Login() {
             />
           </div>
           <h1 className="text-[28px] font-semibold tracking-tight">Welcome!!!</h1>
-          <p className="mt-1 max-w-sm text-[15px] text-muted-foreground" data-testid="login-tagline">
-            Re Emisa Sechaba
-          </p>
         </div>
         <div className="glass-strong rounded-[1.75rem] p-6 sm:p-7">
           <form onSubmit={submit} className="space-y-4">
