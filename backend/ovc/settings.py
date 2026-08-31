@@ -148,3 +148,9 @@ ROLE_CASE_WORKER = 'case-worker'
 ROLE_SUPERVISOR = 'supervisor'
 ROLE_ADMIN = 'admin'
 ALL_ROLES = [ROLE_DATA_CAPTURER, ROLE_CASE_WORKER, ROLE_SUPERVISOR, ROLE_ADMIN]
+
+# Seeded training logins. They only see TEST- households. Live staff never do.
+TRAINING_USERNAMES = frozenset({
+    'admin', 'supervisor', 'caseworker', 'caseworker2', 'capturer',
+})
+TRAINING_HOUSEHOLD_PREFIX = 'TEST'

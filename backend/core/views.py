@@ -47,6 +47,8 @@ from .permissions import (
     ROLE_ADMIN,
     ROLE_CASE_WORKER,
     can_signoff_checklist,
+    is_training_user,
+    training_households_filter,
     user_role,
 )
 from .serializers import (
@@ -76,8 +78,12 @@ CONFIRM_FIELDS = ['surname', 'id_number', 'date_of_birth']
 
 
 def scoped_household_qs(user):
-    """Case-workers only see their assigned households."""
+    """Case-workers only see assigned households. Training logins only see TEST- files."""
     qs = Household.objects.all()
+    if is_training_user(user):
+        qs = qs.filter(training_households_filter())
+    else:
+        qs = qs.exclude(training_households_filter())
     if user_role(user) == ROLE_CASE_WORKER:
         qs = qs.filter(assigned_to=user)
     return qs
@@ -915,7 +921,7 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
             return {'served': n, 'total': total, 'percent': pct}
 
         # Staff bar (households assigned to me) + my by-type breakdown.
-        my_hh = Household.objects.filter(assigned_to=request.user)
+        my_hh = scoped_household_qs(request.user).filter(assigned_to=request.user)
         staff = bar(my_hh)
         by_type = {}
         for row in ServiceDelivery.objects.filter(
@@ -933,13 +939,19 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
         org = None
         ranking = []
         if role in ('admin', 'supervisor'):
-            org = bar(Household.objects.all())
+            org = bar(scoped_household_qs(request.user))
             delivered_map = {r['delivered_by']: r['c'] for r in ServiceDelivery.objects.filter(
+                household__in=scoped_household_qs(request.user),
                 service_date__gte=start, service_date__lt=nxt).values('delivered_by').annotate(c=Count('id'))}
             targets = {t.user_id: t.monthly_goal for t in ServiceTarget.objects.all()}
             workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct()
+            names = settings.TRAINING_USERNAMES
+            if is_training_user(request.user):
+                workers = workers.filter(username__in=names)
+            else:
+                workers = workers.exclude(username__in=names)
             for w in workers:
-                b = bar(Household.objects.filter(assigned_to=w))
+                b = bar(scoped_household_qs(request.user).filter(assigned_to=w))
                 if b['total'] == 0:
                     continue
                 dv = delivered_map.get(w.id, 0)
@@ -1102,6 +1114,11 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
 # ------------------------------ Users (for assignment dropdowns) ------------------------------
 def users_list(request):
     users = User.objects.filter(is_active=True).order_by('username')
+    names = settings.TRAINING_USERNAMES
+    if is_training_user(request.user):
+        users = users.filter(username__in=names)
+    else:
+        users = users.exclude(username__in=names)
     return Response(UserSerializer(users, many=True).data)
 
 
@@ -1242,6 +1259,11 @@ class ServiceTargetView(APIView):
                             status=status.HTTP_403_FORBIDDEN)
         targets = {t.user_id: t.monthly_goal for t in ServiceTarget.objects.all()}
         workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct().order_by('username')
+        names = settings.TRAINING_USERNAMES
+        if is_training_user(request.user):
+            workers = workers.filter(username__in=names)
+        else:
+            workers = workers.exclude(username__in=names)
         return Response([{
             'user_id': w.id,
             'name': w.get_full_name() or w.username,

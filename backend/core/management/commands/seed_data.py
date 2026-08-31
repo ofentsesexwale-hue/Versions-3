@@ -90,6 +90,7 @@ class Command(BaseCommand):
             user.last_name = last
             user.is_staff = is_super
             user.is_superuser = is_super
+            user.is_active = True
             user.set_password(password)
             user.save()
             user.groups.clear()
@@ -97,16 +98,17 @@ class Command(BaseCommand):
             users_by_role[role] = user
             self.stdout.write(f'  {username} / {password}  ({role})')
 
-        admin_user = users_by_role['admin']
-        caseworker = users_by_role['case-worker']
+        admin_user = User.objects.get(username='admin')
+        caseworker = User.objects.get(username='caseworker')
 
         if options['force']:
-            self.stdout.write('Wiping existing households...')
-            Household.objects.all().delete()
+            self.stdout.write('Wiping training (TEST-) households only...')
+            Household.objects.filter(org_household_number__istartswith='TEST').delete()
 
-        if Household.objects.exists():
+        if Household.objects.filter(org_household_number__istartswith='TEST').exists():
             self.stdout.write(self.style.WARNING(
-                'Households already exist; skipping data seed. Use --force to reseed.'))
+                'Training households already exist; skipping data seed. Use --force to reseed TEST- files only.'))
+            self._ensure_training_assignments(caseworker)
             self.stdout.write(self.style.SUCCESS('Done.'))
             return
 
@@ -183,13 +185,20 @@ class Command(BaseCommand):
                     has_evidence=has,
                 )
 
-            # Assign ~25% of households to the demo case-worker
-            if random.random() < 0.25:
+            # Assign training files to demo case-workers (not live staff).
+            if random.random() < 0.55:
                 hh.assigned_to.add(caseworker)
+            elif 'caseworker2' in {u.username for u in User.objects.filter(username='caseworker2')}:
+                cw2 = User.objects.filter(username='caseworker2').first()
+                if cw2:
+                    hh.assigned_to.add(cw2)
 
+        cw2 = User.objects.filter(username='caseworker2').first()
+        extra = cw2.assigned_households.count() if cw2 else 0
         self.stdout.write(self.style.SUCCESS(
-            f'Seeded {count} households. Case-worker "{caseworker.username}" has '
-            f'{caseworker.assigned_households.count()} assigned.'))
+            f'Seeded {count} training households. "{caseworker.username}" has '
+            f'{caseworker.assigned_households.count()} assigned'
+            + (f'; caseworker2 has {extra}.' if cw2 else '.')))
 
     def _apply_confirm_flags(self, person, admin_user):
         now = timezone.now()
@@ -199,6 +208,14 @@ class Command(BaseCommand):
             if confirmed:
                 setattr(person, f'{field}_confirmed_by', admin_user)
                 setattr(person, f'{field}_confirmed_at', now)
+
+    def _ensure_training_assignments(self, caseworker):
+        cw2 = User.objects.filter(username='caseworker2').first()
+        qs = Household.objects.filter(org_household_number__istartswith='TEST')
+        for i, hh in enumerate(qs):
+            if hh.assigned_to.exists():
+                continue
+            hh.assigned_to.add(caseworker if i % 2 == 0 else (cw2 or caseworker))
 
 
 def choices_all_roles():

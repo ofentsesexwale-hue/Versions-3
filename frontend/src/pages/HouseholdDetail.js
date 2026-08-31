@@ -83,8 +83,8 @@ function ConfirmChips({ person }) {
 function Field({ label, value }) {
   return (
     <div>
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-sm text-slate-900">{value || "\u2014"}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm text-foreground">{value || "\u2014"}</p>
     </div>
   );
 }
@@ -168,7 +168,7 @@ export default function HouseholdDetail() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900" data-testid="household-title">
+          <h1 className="text-2xl font-semibold text-foreground" data-testid="household-title">
             {hh.org_household_number}
           </h1>
           <p className="mt-1">
@@ -176,18 +176,18 @@ export default function HouseholdDetail() {
               {CASE_STATUS_LABELS[hh.status] || hh.status || "Open"}
             </Badge>
           </p>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             {[hh.house_number, hh.street, hh.town, hh.municipality, hh.district, hh.province]
               .filter(Boolean)
               .join(", ") || "No address captured"}
           </p>
-          <p className="mt-1 text-sm text-slate-500">Registered {formatDate(hh.date_registered)}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Registered {formatDate(hh.date_registered)}</p>
           {hh.assigned_to_names?.length > 0 && (
-            <p className="mt-1 text-xs text-slate-500">Assigned to: {hh.assigned_to_names.join(", ")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Assigned to: {hh.assigned_to_names.join(", ")}</p>
           )}
           {hh.checklist_progress && (
             <div className="mt-3 max-w-xs">
-              <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                 <span>Case file completeness</span>
                 <span className="tabular-nums">
                   {hh.checklist_progress.yes}/{hh.checklist_progress.total} ({hh.checklist_progress.percent}%)
@@ -252,8 +252,8 @@ export default function HouseholdDetail() {
             {cg ? (
               <div className="space-y-4">
                 <div>
-                  <p className="text-lg font-medium text-slate-900">{cg.name} {cg.surname}</p>
-                  <p className="text-sm text-slate-600">{cg.headship_type || "\u2014"}</p>
+                  <p className="text-lg font-medium text-foreground">{cg.name} {cg.surname}</p>
+                  <p className="text-sm text-muted-foreground">{cg.headship_type || "\u2014"}</p>
                 </div>
                 <ConfirmChips person={cg} />
                 <div className="grid grid-cols-2 gap-3">
@@ -271,8 +271,8 @@ export default function HouseholdDetail() {
               </div>
             ) : (
               <div className="py-6 text-center" data-testid="empty-state">
-                <p className="mb-3 text-sm text-slate-600">No caregiver captured yet.</p>
-                <Button className="gap-2 bg-slate-900 hover:bg-slate-800" onClick={() => navigate(`/households/${id}/caregiver`)} data-testid="add-caregiver-button">
+                <p className="mb-3 text-sm text-muted-foreground">No caregiver captured yet.</p>
+                <Button className="gap-2" onClick={() => navigate(`/households/${id}/caregiver`)} data-testid="add-caregiver-button">
                   <UserPlus className="h-4 w-4" /> Add caregiver
                 </Button>
               </div>
@@ -290,16 +290,16 @@ export default function HouseholdDetail() {
           </CardHeader>
           <CardContent className="space-y-3">
             {(!hh.members || hh.members.length === 0) && (
-              <p className="py-4 text-center text-sm text-slate-600" data-testid="empty-state">No members captured yet.</p>
+              <p className="py-4 text-center text-sm text-muted-foreground" data-testid="empty-state">No members captured yet.</p>
             )}
             {hh.members?.map((m) => (
-              <div key={m.id} className="rounded-lg border border-slate-200 p-3" data-testid={`member-row-${m.id}`}>
+              <div key={m.id} className="rounded-lg border border-white/50 p-3" data-testid={`member-row-${m.id}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-medium text-slate-900">{m.name} {m.surname}</p>
-                    <p className="text-sm text-slate-600">{m.relationship_to_head || "\u2014"} · {m.date_of_birth ? formatDate(m.date_of_birth) : <span className="font-medium text-amber-700" data-testid={`member-dob-missing-${m.id}`}>Add date of birth</span>}</p>
+                    <p className="font-medium text-foreground">{m.name} {m.surname}</p>
+                    <p className="text-sm text-muted-foreground">{m.relationship_to_head || "\u2014"} · {m.date_of_birth ? formatDate(m.date_of_birth) : <span className="font-medium text-amber-700" data-testid={`member-dob-missing-${m.id}`}>Add date of birth</span>}</p>
                     {(m.school_name || m.grade) && (
-                      <p className="text-xs text-slate-500">{m.enrolled_in_school ? "Enrolled" : "Not enrolled"}{m.school_name ? ` · ${m.school_name}` : ""}{m.grade ? ` · Grade ${m.grade}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{m.enrolled_in_school ? "Enrolled" : "Not enrolled"}{m.school_name ? ` · ${m.school_name}` : ""}{m.grade ? ` · Grade ${m.grade}` : ""}</p>
                     )}
                   </div>
                   <div className="flex gap-1">
@@ -342,7 +342,7 @@ export default function HouseholdDetail() {
         </CardHeader>
         <CardContent>
           {docs.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-600" data-testid="empty-state">
+            <p className="py-6 text-center text-sm text-muted-foreground" data-testid="empty-state">
               No documents uploaded yet - upload the first supporting document.
             </p>
           ) : (
@@ -355,12 +355,12 @@ export default function HouseholdDetail() {
                   <AccordionContent>
                     <div className="space-y-2">
                       {g.items.map((doc) => (
-                        <div key={doc.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3" data-testid={`document-item-${doc.id}`}>
+                        <div key={doc.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/50 p-3" data-testid={`document-item-${doc.id}`}>
                           <div className="flex min-w-0 items-center gap-3">
-                            <FileText className="h-5 w-5 shrink-0 text-slate-500" />
+                            <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-slate-900">{doc.label || doc.file_name}</p>
-                              <p className="text-xs text-slate-500">{formatDate(doc.date_of_document)} · by {doc.uploaded_by}</p>
+                              <p className="truncate text-sm font-medium text-foreground">{doc.label || doc.file_name}</p>
+                              <p className="text-xs text-muted-foreground">{formatDate(doc.date_of_document)} · by {doc.uploaded_by}</p>
                             </div>
                           </div>
                           <div className="flex gap-1">
@@ -414,7 +414,7 @@ export default function HouseholdDetail() {
                 <button
                   key={a}
                   onClick={() => setTlFilter(a)}
-                  className={`rounded-full px-2.5 py-1 text-xs capitalize ${tlFilter === a ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                  className={`rounded-full px-2.5 py-1 text-xs capitalize ${tlFilter === a ? "bg-foreground text-white" : "bg-white/50 text-foreground/70 hover:bg-white/70"}`}
                   data-testid={`timeline-filter-${a}`}
                 >
                   {a}
@@ -431,18 +431,18 @@ export default function HouseholdDetail() {
           {(() => {
             const rows = timeline.filter((e) => tlFilter === "all" || e.action === tlFilter);
             return rows.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-600" data-testid="timeline-empty">No matching activity for this household.</p>
+              <p className="py-4 text-center text-sm text-muted-foreground" data-testid="timeline-empty">No matching activity for this household.</p>
             ) : (
-              <ol className="relative border-l-2 border-slate-200 pl-5">
+              <ol className="relative border-l-2 border-white/50 pl-5">
                 {rows.map((e) => (
                   <li key={e.id} className="mb-4 last:mb-0" data-testid={`timeline-entry-${e.id}`}>
                     <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-[color:var(--sa-green,#007a4d)]" />
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize text-slate-700">{e.action}</span>
-                      <span className="text-xs text-slate-500">{formatDateTime(e.timestamp)}</span>
+                      <span className="rounded-md bg-white/50 px-2 py-0.5 text-xs font-medium capitalize text-foreground/80">{e.action}</span>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(e.timestamp)}</span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-800">{e.target_description}</p>
-                    <p className="text-xs text-slate-500">by {e.user}</p>
+                    <p className="mt-1 text-sm text-foreground">{e.target_description}</p>
+                    <p className="text-xs text-muted-foreground">by {e.user}</p>
                   </li>
                 ))}
               </ol>

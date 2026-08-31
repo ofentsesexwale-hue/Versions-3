@@ -109,13 +109,18 @@ function SidebarContent({ user, counts, onLogout, onNavigate, logoUrl, orgName }
         )}
         <div>
           <p className="text-[15px] font-semibold tracking-tight">{orgName || "OVC CaseFile"}</p>
-          <p className="text-[11px] text-muted-foreground">Offline case management</p>
+          <p className="text-[11px] text-muted-foreground">{user?.is_training ? "Training workspace" : "Live office files"}</p>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-1">
         <NavItems role={user?.role} counts={counts} onNavigate={onNavigate} />
       </div>
       <div className="mx-3 mb-4 rounded-2xl bg-white/40 p-3">
+        {user?.is_training && (
+          <p className="mb-2 rounded-xl bg-amber-100/80 px-2.5 py-1.5 text-[11px] font-medium text-amber-900">
+            Training classroom — fictional TEST files only
+          </p>
+        )}
         <p className="truncate text-sm font-medium">{user?.full_name}</p>
         <div className="mt-1.5">
           <RoleBadge role={user?.role} />

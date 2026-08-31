@@ -1,11 +1,22 @@
 """Server-side role enforcement (Django Groups)."""
 from django.conf import settings
+from django.db.models import Q
 from rest_framework import permissions
 
 ROLE_DATA_CAPTURER = settings.ROLE_DATA_CAPTURER
 ROLE_CASE_WORKER = settings.ROLE_CASE_WORKER
 ROLE_SUPERVISOR = settings.ROLE_SUPERVISOR
 ROLE_ADMIN = settings.ROLE_ADMIN
+
+
+def is_training_user(user):
+    """Demo / training logins used for staff practice, not the live office file."""
+    return bool(user and getattr(user, 'username', None) in settings.TRAINING_USERNAMES)
+
+
+def training_households_filter():
+    prefix = getattr(settings, 'TRAINING_HOUSEHOLD_PREFIX', 'TEST')
+    return Q(org_household_number__istartswith=prefix)
 
 
 def user_role(user):

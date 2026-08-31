@@ -25,7 +25,7 @@ from .models import (
     SiteConfig,
     SupportingDocument,
 )
-from .permissions import user_role
+from .permissions import is_training_user, user_role
 
 
 class EmptyBlankDatesMixin:
@@ -63,12 +63,13 @@ def checklist_progress(household):
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
+    is_training = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'first_name', 'last_name', 'full_name', 'email',
-            'role', 'is_active', 'last_login', 'date_joined',
+            'role', 'is_active', 'last_login', 'date_joined', 'is_training',
         ]
 
     def get_role(self, obj):
@@ -76,6 +77,9 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return (obj.get_full_name() or obj.username).strip()
+
+    def get_is_training(self, obj):
+        return is_training_user(obj)
 
 
 class ConfirmMixin(serializers.ModelSerializer):
@@ -318,6 +322,21 @@ class HouseholdSerializer(serializers.ModelSerializer):
             'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
             'status', 'status_changed_at', 'status_reason', 'version',
         ]
+
+    def validate_org_household_number(self, value):
+        value = (value or '').strip()
+        prefix = getattr(settings, 'TRAINING_HOUSEHOLD_PREFIX', 'TEST')
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        is_training = is_training_user(user)
+        starts_test = value.upper().startswith(prefix.upper())
+        if is_training and not starts_test:
+            return f'{prefix}-{value}' if value else f'{prefix}-NEW'
+        if user and user.is_authenticated and not is_training and starts_test:
+            raise serializers.ValidationError(
+                'TEST- household numbers belong to the training files. Use a real organisation number here.'
+            )
+        return value
 
     def update(self, instance, validated_data):
         new_status = validated_data.get('status', instance.status)

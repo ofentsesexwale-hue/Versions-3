@@ -19,17 +19,36 @@ Backup SQLite and uploaded files:
 cd backend && .venv/bin/python manage.py backup
 ```
 
-## Add real staff (not only demo users)
+## Logins
 
-1. Sign in as administrator.
-2. Open **Staff accounts**.
-3. Create each worker: username, password (8+ characters, not a common password), name, and role (administrator, supervisor, case worker, data capturer).
-4. Each person should open **Change password** after first login and replace any shared password.
-5. Assign households to case workers from **Edit household**.
+**Live office** (empty caseload — no dummy households):
 
-Demo accounts (`admin` / `admin123`, and the other seeded users) are optional practice logins. You can deactivate them once real staff exist. Keep at least one active administrator.
+| User | Password | Role |
+| --- | --- | --- |
+| npo.admin | Khaya-File-7nQ2 | Administrator |
 
-Set `DJANGO_SECRET_KEY` in `backend/.env` before going live.
+Change this password after first sign-in. Add real staff under **Staff accounts**. Dummy TEST- files never appear for this login.
+
+**Training classroom** (fictional TEST- households only — for staff practice):
+
+| User | Password | Role |
+| --- | --- | --- |
+| admin | admin123 | admin |
+| supervisor | supervisor123 | supervisor |
+| caseworker | caseworker123 | case worker |
+| capturer | capturer123 | data capturer |
+
+Open **Training classroom** on the sign-in screen to fill those usernames.
+
+## Software this build needs
+
+Already wired for a local / Cloud Agent run:
+
+- Python 3.12+ with `backend/requirements-runtime.txt` (Django 5.1, DRF, Pillow, python-dotenv, Faker)
+- Node 20+ and Yarn 1 for the React (CRA + craco + Tailwind + shadcn/Radix) UI
+- SQLite by default (no PostgreSQL unless several staff share a server)
+
+`./start-local.sh` or `start-local.bat` creates the venv, migrates, seeds training files if missing, builds the UI, and serves preview on port 43141.
 
 ## What you can capture
 
@@ -64,5 +83,3 @@ yarn build
 ```
 
 SQLite is the default (`USE_SQLITE=true`). Use PostgreSQL only if several staff share one server.
-
-Seeded households are prefixed `TEST` and are fictional.

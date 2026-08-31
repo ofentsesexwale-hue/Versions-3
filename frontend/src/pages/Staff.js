@@ -137,6 +137,9 @@ export default function Staff() {
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{s.full_name || s.username}</p>
                 <p className="text-sm text-muted-foreground">{s.username} · {ROLE_LABELS[s.role] || s.role || "no role"}</p>
+                {s.is_training && (
+                  <p className="mt-1 text-[11px] font-medium text-amber-800">Training classroom login — dummy TEST files only</p>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Select value={s.role || "case-worker"} onValueChange={(v) => patch(s.id, { role: v })}>

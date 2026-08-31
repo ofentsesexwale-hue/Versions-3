@@ -8,7 +8,8 @@ if [ ! -d .venv ]; then
   .venv/bin/pip install -r requirements-runtime.txt
 fi
 .venv/bin/python manage.py migrate --noinput
-if [ ! -f frontend/build/index.html ]; then
+.venv/bin/python manage.py seed_data || true
+if [ ! -f "$ROOT/frontend/build/index.html" ]; then
   cd "$ROOT/frontend"
   yarn install --offline 2>/dev/null || yarn install
   CI=false yarn build

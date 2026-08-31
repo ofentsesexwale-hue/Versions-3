@@ -1,0 +1,16 @@
+{
+  "name": "OVC CaseFile",
+  "install": "cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-runtime.txt && cd ../frontend && yarn install",
+  "start": "cd backend && .venv/bin/python manage.py migrate --noinput && .venv/bin/python manage.py seed_data",
+  "terminals": [
+    {
+      "name": "API",
+      "command": "cd backend && .venv/bin/python manage.py runserver 127.0.0.1:8001"
+    },
+    {
+      "name": "Preview",
+      "command": "test -f frontend/build/index.html || (cd frontend && CI=false yarn build); python3 preview_server.py"
+    }
+  ],
+  "ports": [43141, 8001]
+}

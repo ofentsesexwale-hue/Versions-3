@@ -188,8 +188,14 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Welcome, {user?.full_name?.split(" ")[0] || "there"}</h1>
-        <p className="text-sm text-slate-600">Case management dashboard</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {user?.is_training ? "Training classroom" : `Welcome, ${user?.full_name?.split(" ")[0] || "there"}`}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {user?.is_training
+            ? "These TEST households are fictional and used for staff practice."
+            : "Live case files for your organisation. Training dummy files are not shown here."}
+        </p>
       </div>
 
       <form onSubmit={submitSearch} className="max-w-2xl">
@@ -377,8 +383,24 @@ export default function Dashboard() {
               {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           ) : list.length === 0 ? (
-            <div className="p-8 text-center text-slate-600" data-testid="empty-state">
-              {band ? "No households in this band." : q ? "No households found - try a different surname or ID number." : "No households yet."}
+            <div className="p-10 text-center" data-testid="empty-state">
+              {band ? (
+                <p className="text-muted-foreground">No households in this band.</p>
+              ) : q ? (
+                <p className="text-muted-foreground">No households found — try a different surname or ID number.</p>
+              ) : user?.is_training ? (
+                <p className="text-muted-foreground">No training households yet. Run seed_data on the server.</p>
+              ) : (
+                <div className="mx-auto max-w-md space-y-3">
+                  <p className="text-lg font-semibold tracking-tight">No live households yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    Dummy TEST files stay in the training classroom. Register a real household to start the office caseload.
+                  </p>
+                  <Button onClick={() => navigate("/households/new")} data-testid="empty-new-household-button">
+                    Register first household
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div>
