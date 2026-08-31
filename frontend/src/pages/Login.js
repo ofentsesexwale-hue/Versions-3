@@ -57,9 +57,7 @@ export default function Login() {
               data-testid="login-org-logo"
             />
           </div>
-          <h1 className="text-[28px] font-semibold tracking-tight">
-            {branding?.name && branding.name !== "OVC Organisation" ? branding.name : "Sebueng Itumeleng"}
-          </h1>
+          <h1 className="text-[28px] font-semibold tracking-tight">Welcome!!!</h1>
           <p className="mt-1 max-w-sm text-[15px] text-muted-foreground" data-testid="login-tagline">
             Re Emisa Sechaba
           </p>
