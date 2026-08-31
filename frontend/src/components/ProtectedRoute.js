@@ -1,16 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import LaunchScreen from "@/components/LaunchScreen";
 
 export function ProtectedRoute({ children, requireRole }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-slate-600" data-testid="loading-state">
-        Loading...
-      </div>
-    );
+    return <LaunchScreen message="Opening your office session…" />;
   }
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;

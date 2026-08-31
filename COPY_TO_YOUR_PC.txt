@@ -1,15 +1,21 @@
-Put everything in this zip here:
+Put this file on the office PC (copy it out of Downloads first):
 
-  C:\Users\sebue\ovc-case-manager
+  C:\Users\sebue\OVC-CaseFile\OVC-CaseFile.exe
 
-The Windows program is this file (same folder, not inside desktop\):
+Size should be about 95 MB. A 40 MB copy is incomplete — delete it and copy again.
 
-  C:\Users\sebue\ovc-case-manager\OVC-CaseFile.exe
+Double-click that file. Wait on the loading screen until the sign-in page appears.
 
-Do not open it from inside the zip. Copy it out first.
+Do not use C:\Users\sebue\ovc-case-manager (that is a different app).
 
-To install Python and the CaseFile engine in PowerShell:
+Live office Administrator
+  Username: OrphanCoordinator
+  Password: Khaya-File-7nQ2
 
-  Set-ExecutionPolicy -Scope Process Bypass
-  cd C:\Users\sebue\ovc-case-manager
-  .\install-python-and-engine.ps1
+Demo classroom (fictional TEST files only — same password for all)
+  Password: Practice-File-4kL9
+  demo.admin       Administrator (training)
+  demo.supervisor  Supervisor
+  demo.cycw        CYCW
+  demo.aux         Auxiliary
+  demo.capturer    Data capturer

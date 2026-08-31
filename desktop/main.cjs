@@ -67,6 +67,14 @@ function engineLogPath() {
   }
 }
 
+function setSplashStatus(text) {
+  if (!mainWindow || mainWindow.isDestroyed()) return Promise.resolve();
+  const msg = JSON.stringify(String(text || ""));
+  return mainWindow.webContents
+    .executeJavaScript(`(function(){ var el = document.getElementById('status'); if (el) el.textContent = ${msg}; })()`)
+    .catch(() => {});
+}
+
 function waitForHttp(url, timeoutMs = 45000) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
@@ -154,7 +162,7 @@ function createWindow() {
     icon: iconPath(),
     backgroundColor: "#f3ead8",
     autoHideMenuBar: true,
-    show: false,
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -175,7 +183,6 @@ function createWindow() {
     win.setTitle(APP_NAME);
   });
   win.loadFile(path.join(__dirname, "splash.html"));
-  win.once("ready-to-show", () => win.show());
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) {
       return {
@@ -228,13 +235,25 @@ async function boot() {
   );
 
   mainWindow = createWindow();
+  await new Promise((resolve) => {
+    if (!mainWindow.webContents.isLoading()) {
+      resolve();
+      return;
+    }
+    mainWindow.webContents.once("did-finish-load", resolve);
+    setTimeout(resolve, 2500);
+  });
   try {
-    await waitForHttp(UI_URL, 600);
+    await setSplashStatus("Starting the office engine…");
+    await waitForHttp(UI_URL, 800);
   } catch {
+    await setSplashStatus("Preparing the office file…");
     startOffice();
   }
   try {
+    await setSplashStatus("Opening the office file…");
     await waitForHttp(UI_URL, 90000);
+    await setSplashStatus("Almost ready…");
     await mainWindow.loadURL(UI_URL);
     mainWindow.setTitle(APP_NAME);
   } catch (err) {

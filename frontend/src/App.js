@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { installToastChimes } from "@/lib/chimes";
 
 installToastChimes(toast);
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import LaunchScreen from "@/components/LaunchScreen";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppShell } from "@/components/AppShell";
 import Login from "@/pages/Login";
@@ -31,10 +32,19 @@ import ServiceTargets from "@/pages/ServiceTargets";
 import WorkDiary from "@/pages/WorkDiary";
 import Partners from "@/pages/Partners";
 
+function BootGate({ children }) {
+  const { loading } = useAuth();
+  if (loading) {
+    return <LaunchScreen />;
+  }
+  return children;
+}
+
 function App() {
   return (
     <div className="App">
       <AuthProvider>
+        <BootGate>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -85,6 +95,7 @@ function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </BootGate>
         <Toaster position="top-right" richColors />
       </AuthProvider>
     </div>

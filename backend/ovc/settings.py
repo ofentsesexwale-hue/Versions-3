@@ -168,6 +168,7 @@ LIVE_OFFICE_TITLES = [
 # Seeded training logins. They only see TEST- households. Live staff never do.
 TRAINING_USERNAMES = frozenset({
     'admin', 'supervisor', 'caseworker', 'caseworker2', 'capturer',
+    'demo.admin', 'demo.supervisor', 'demo.cycw', 'demo.aux', 'demo.capturer',
 })
 TRAINING_HOUSEHOLD_PREFIX = 'TEST'
 LIVE_HOUSEHOLD_PREFIX = 'SI'

@@ -25,12 +25,18 @@ from core.models import (
 
 fake = Faker('en_US')
 
+DEMO_PASSWORD = 'Practice-File-4kL9'
 DEMO_USERS = [
     ('admin', 'admin123', 'admin', 'Amina', 'Ndlovu', True),
     ('supervisor', 'supervisor123', 'supervisor', 'Sipho', 'Khumalo', False),
     ('caseworker', 'caseworker123', 'case-worker', 'Cindy', 'Mokoena', False),
     ('caseworker2', 'caseworker123', 'case-worker', 'Thabo', 'Zulu', False),
     ('capturer', 'capturer123', 'data-capturer', 'Cathy', 'Dlamini', False),
+    ('demo.admin', DEMO_PASSWORD, 'admin', 'Demo', 'Administrator', True),
+    ('demo.supervisor', DEMO_PASSWORD, 'supervisor', 'Demo', 'Supervisor', False),
+    ('demo.cycw', DEMO_PASSWORD, 'cycw', 'Demo', 'CYCW', False),
+    ('demo.aux', DEMO_PASSWORD, 'auxiliary', 'Demo', 'Auxiliary', False),
+    ('demo.capturer', DEMO_PASSWORD, 'data-capturer', 'Demo', 'Capturer', False),
 ]
 
 LIVE_ADMIN_USERNAME = getattr(settings, 'SYSTEM_BUILDER_USERNAME', 'OrphanCoordinator')
@@ -246,11 +252,14 @@ class Command(BaseCommand):
 
     def _ensure_training_assignments(self, caseworker):
         cw2 = User.objects.filter(username='caseworker2').first()
+        demo_cycw = User.objects.filter(username='demo.cycw').first()
+        demo_aux = User.objects.filter(username='demo.aux').first()
+        field = [u for u in (caseworker, cw2, demo_cycw, demo_aux) if u]
         qs = Household.objects.filter(org_household_number__istartswith='TEST')
         for i, hh in enumerate(qs):
             if hh.assigned_to.exists():
                 continue
-            hh.assigned_to.add(caseworker if i % 2 == 0 else (cw2 or caseworker))
+            hh.assigned_to.add(field[i % len(field)])
 
     def _ensure_training_casework(self, admin_user, caseworker):
         """Sample partners, referrals and visits for training — never live office."""

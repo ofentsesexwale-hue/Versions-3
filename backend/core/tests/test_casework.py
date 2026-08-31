@@ -186,3 +186,19 @@ class CaseworkGoldStandardTests(TestCase):
         names = [u['username'] for u in listed.data]
         self.assertIn('OrphanCoordinator', names)
         self.assertNotIn('admin', names)
+
+    def test_demo_classroom_titles_can_sign_in(self):
+        from django.core.management import call_command
+        call_command('seed_data')
+        client = APIClient()
+        for username, role in (
+            ('demo.cycw', 'cycw'),
+            ('demo.aux', 'auxiliary'),
+            ('demo.admin', 'admin'),
+        ):
+            r = client.post('/api/auth/login/', {
+                'username': username, 'password': 'Practice-File-4kL9',
+            }, format='json')
+            self.assertEqual(r.status_code, 200, r.data)
+            self.assertEqual(r.data['user']['role'], role)
+            self.assertTrue(r.data['user']['is_training'])

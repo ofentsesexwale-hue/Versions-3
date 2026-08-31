@@ -65,16 +65,19 @@ Restore is administrator-only on the Organisation page (zip created by this app)
 
 This login is the live office **Administrator** (system builder). Staff accounts cannot demote or deactivate it. From **Staff accounts** this person can add users with a name, title, and login — CYCW, Auxiliary, Caregiver, Supervisor, Data capturer — each with its own permissions. Household caregiver logins can also be set on the caregiver form. Change this password after first sign-in. Dummy TEST- files never appear for this login.
 
-**Training classroom** (fictional TEST- households only — for staff practice):
+**Training classroom / demo** (fictional TEST- households only — for practice):
 
-| User | Password | Role |
+All demo classroom logins use the same password: `Practice-File-4kL9`
+
+| User | Password | Title |
 | --- | --- | --- |
-| admin | admin123 | admin |
-| supervisor | supervisor123 | supervisor |
-| caseworker | caseworker123 | case worker |
-| capturer | capturer123 | data capturer |
+| demo.admin | Practice-File-4kL9 | Administrator (training) |
+| demo.supervisor | Practice-File-4kL9 | Supervisor (QA) |
+| demo.cycw | Practice-File-4kL9 | CYCW |
+| demo.aux | Practice-File-4kL9 | Auxiliary |
+| demo.capturer | Practice-File-4kL9 | Data capturer |
 
-Open **Training classroom** on the sign-in screen to fill those usernames.
+These logins never see live office files. Live office (`OrphanCoordinator`) never sees TEST files.
 
 ## Software this build needs
 

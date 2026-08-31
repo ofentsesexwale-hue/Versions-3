@@ -1,3 +1,12 @@
 .App {
   min-height: 100vh;
 }
+
+.ovc-launch-bar {
+  animation: ovc-launch 1.15s ease-in-out infinite;
+}
+
+@keyframes ovc-launch {
+  0% { transform: translateX(-90%); }
+  100% { transform: translateX(280%); }
+}
