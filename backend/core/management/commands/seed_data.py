@@ -32,6 +32,9 @@ DEMO_USERS = [
     ('capturer', 'capturer123', 'data-capturer', 'Cathy', 'Dlamini', False),
 ]
 
+LIVE_ADMIN_USERNAME = 'OrphanCoordinator'
+LIVE_ADMIN_PASSWORD = 'Khaya-File-7nQ2'
+
 SA_SURNAMES = ['Nkosi', 'Dlamini', 'Mokoena', 'Khumalo', 'Ndlovu', 'Zulu', 'Sithole',
                'Mthembu', 'Mahlangu', 'Botha', 'Van der Merwe', 'Naidoo', 'Pillay',
                'Adams', 'Jacobs', 'Molefe', 'Radebe', 'Mabaso', 'Tshabalala', 'Cele']
@@ -100,6 +103,8 @@ class Command(BaseCommand):
             user.groups.add(Group.objects.get(name=role))
             users_by_role[role] = user
             self.stdout.write(f'  {username} / {password}  ({role})')
+
+        self._ensure_live_admin()
 
         admin_user = User.objects.get(username='admin')
         caseworker = User.objects.get(username='caseworker')
@@ -204,6 +209,29 @@ class Command(BaseCommand):
             f'{caseworker.assigned_households.count()} assigned'
             + (f'; caseworker2 has {extra}.' if cw2 else '.')))
         self._ensure_training_casework(admin_user, caseworker)
+
+    def _ensure_live_admin(self):
+        """Live office administrator — not a training classroom login."""
+        admin_group = Group.objects.get(name='admin')
+        old = User.objects.filter(username='npo.admin').first()
+        live = User.objects.filter(username=LIVE_ADMIN_USERNAME).first()
+        if old and not live:
+            old.username = LIVE_ADMIN_USERNAME
+            live = old
+        if not live:
+            live = User(username=LIVE_ADMIN_USERNAME)
+        live.first_name = 'Orphan'
+        live.last_name = 'Coordinator'
+        live.is_staff = True
+        live.is_superuser = True
+        live.is_active = True
+        live.set_password(LIVE_ADMIN_PASSWORD)
+        live.save()
+        live.groups.add(admin_group)
+        if old and old.pk != live.pk:
+            old.is_active = False
+            old.save(update_fields=['is_active'])
+        self.stdout.write(f'  {LIVE_ADMIN_USERNAME}  (live administrator)')
 
     def _apply_confirm_flags(self, person, admin_user):
         now = timezone.now()

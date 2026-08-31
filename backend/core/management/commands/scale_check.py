@@ -32,7 +32,7 @@ class Command(BaseCommand):
         prefix = 'SCALE-'
         Household.objects.filter(org_household_number__startswith=prefix).delete()
 
-        admin = User.objects.filter(username='npo.admin').first() or User.objects.filter(is_superuser=True).first()
+        admin = User.objects.filter(username='OrphanCoordinator').first() or User.objects.filter(is_superuser=True).first()
         if not admin:
             self.stderr.write('No live administrator found.')
             return
@@ -131,7 +131,7 @@ class Command(BaseCommand):
             self.stdout.write(f'  {label}: {resp.status_code} in {ms:.0f}ms')
             return ok, ms
 
-        self.stdout.write('Hot paths as npo.admin:')
+        self.stdout.write('Hot paths as OrphanCoordinator:')
         results = [
             timed('dashboard', '/api/dashboard/'),
             timed('household list', '/api/households/?page_size=50'),

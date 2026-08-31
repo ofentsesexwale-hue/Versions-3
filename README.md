@@ -61,7 +61,7 @@ Restore is administrator-only on the Organisation page (zip created by this app)
 
 | User | Password | Role |
 | --- | --- | --- |
-| npo.admin | Khaya-File-7nQ2 | Administrator |
+| OrphanCoordinator | Khaya-File-7nQ2 | Administrator |
 
 Change this password after first sign-in. Add real staff under **Staff accounts**. Dummy TEST- files never appear for this login.
 

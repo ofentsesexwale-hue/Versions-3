@@ -9,7 +9,7 @@ from core.models import Caregiver, Household, HouseholdMember, digits_only
 class IdLookupTests(TestCase):
     def setUp(self):
         Group.objects.get_or_create(name='admin')
-        self.user = User.objects.create_user('npo.admin', password='x', first_name='Office', last_name='Admin')
+        self.user = User.objects.create_user('OrphanCoordinator', password='x', first_name='Office', last_name='Admin')
         self.user.groups.add(Group.objects.get(name='admin'))
         self.token = Token.objects.create(user=self.user)
         self.client = APIClient()
