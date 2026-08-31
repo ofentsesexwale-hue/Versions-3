@@ -1,0 +1,12 @@
+If Windows says "another program is using this file":
+
+1. Do not run the program from inside the zip. Close the zip window.
+2. Run windows-close-locks.bat (double-click it).
+3. Close Cursor if that folder is open in Cursor.
+4. Copy OVC-CaseFile.exe onto your Desktop first, then into:
+
+   C:\Users\sebue\ovc-case-manager\OVC-CaseFile.exe
+
+5. Double-click that copy only.
+
+If it still says the file is in use, restart the PC, then copy again before opening Cursor.
