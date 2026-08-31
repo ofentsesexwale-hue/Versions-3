@@ -1,0 +1,23 @@
+{
+  "appId": "za.npo.ovccasefile",
+  "productName": "OVC CaseFile",
+  "copyright": "Offline office use",
+  "asar": true,
+  "files": ["main.cjs", "preload.cjs", "splash.html", "icons/**"],
+  "extraResources": [
+    {
+      "from": "../backend",
+      "to": "office/backend",
+      "filter": ["**/*", "!.venv/**", "!media/**", "!backups/**", "!**/__pycache__/**"]
+    },
+    { "from": "../frontend/build", "to": "office/frontend/build" },
+    { "from": "../preview_server.py", "to": "office/preview_server.py" }
+  ],
+  "win": {
+    "icon": "icons/icon.ico",
+    "signAndEditExecutable": false,
+    "target": [{ "target": "portable", "arch": ["x64"] }]
+  },
+  "portable": { "artifactName": "OVC-CaseFile.exe" },
+  "directories": { "output": "release" }
+}

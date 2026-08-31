@@ -19,6 +19,8 @@ import {
   Target,
   UserCog,
   Users,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +28,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { lookupHousehold, uniqueHousehold } from "@/lib/lookup";
+import { playChime } from "@/lib/chimes";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -150,7 +153,7 @@ export function AppShell() {
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [counts, setCounts] = useState({ verification: 0, diary: 0 });
-  const [org, setOrg] = useState(null);
+  const [muted, setMuted] = useState(() => localStorage.getItem("ovc_mute_sounds") === "1");
 
   useEffect(() => {
     api.get("/organisation/").then((r) => setOrg(r.data)).catch(() => {});
@@ -174,6 +177,7 @@ export function AppShell() {
   }, [user]);
 
   const onLogout = async () => {
+    playChime("logout");
     await logout();
     navigate("/login");
   };
@@ -186,7 +190,8 @@ export function AppShell() {
       const payload = await lookupHousehold(api, term);
       const hh = uniqueHousehold(payload);
       if (hh) {
-        toast.success(`Opened file for ${payload.matched_label || hh.org_household_number}`);
+        playChime("open");
+        toast.success(`Opened file for ${payload.matched_label || hh.org_household_number}`, { silent: true });
         setQ("");
         navigate(`/households/${hh.id}`);
         return;
@@ -236,6 +241,19 @@ export function AppShell() {
 
             <div className="ml-auto flex items-center gap-2">
               {logoUrl && <img src={logoUrl} alt="logo" className="hidden h-8 max-w-[120px] object-contain sm:block" data-testid="header-org-logo" />}
+              <Button
+                variant="ghost"
+                size="icon"
+                title={muted ? "Unmute office chimes" : "Mute office chimes"}
+                data-testid="mute-chimes-button"
+                onClick={() => {
+                  const next = !muted;
+                  setMuted(next);
+                  localStorage.setItem("ovc_mute_sounds", next ? "1" : "0");
+                }}
+              >
+                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </Button>
               <Button
                 onClick={() => navigate("/households/new")}
                 className="gap-2"

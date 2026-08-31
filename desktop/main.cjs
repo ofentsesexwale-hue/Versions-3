@@ -1,0 +1,232 @@
+/**
+ * OVC CaseFile desktop shell.
+ * Opens as its own application window (no browser chrome, no Chrome/Edge taskbar entry).
+ */
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell } = require("electron");
+const path = require("path");
+const fs = require("fs");
+const http = require("http");
+const { spawn, spawnSync } = require("child_process");
+
+const APP_NAME = "OVC CaseFile";
+const API_PORT = process.env.OVC_API_PORT || "18721";
+const UI_PORT = process.env.OVC_UI_PORT || "18722";
+const UI_URL = `http://127.0.0.1:${UI_PORT}`;
+
+app.setName(APP_NAME);
+app.setAppUserModelId("za.npo.ovccasefile");
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch("disable-dev-shm-usage");
+if (process.env.OVC_NO_SANDBOX !== "0") {
+  app.commandLine.appendSwitch("no-sandbox");
+}
+
+let mainWindow = null;
+let tray = null;
+let apiProc = null;
+let uiProc = null;
+let stopping = false;
+
+function packaged() {
+  return app.isPackaged;
+}
+
+function repoRoot() {
+  if (packaged()) return path.join(process.resourcesPath, "office");
+  return path.resolve(__dirname, "..");
+}
+
+function iconPath() {
+  const ico = path.join(__dirname, "icons", process.platform === "win32" ? "icon.ico" : "icon-256.png");
+  return fs.existsSync(ico) ? ico : path.join(__dirname, "icons", "icon.png");
+}
+
+function pythonBin() {
+  const root = repoRoot();
+  const candidates = [
+    path.join(root, "backend", ".venv", "Scripts", "python.exe"),
+    path.join(root, "backend", ".venv", "bin", "python"),
+    path.join(process.resourcesPath, "venv", "Scripts", "python.exe"),
+    path.join(process.resourcesPath, "venv", "bin", "python"),
+    process.platform === "win32" ? "python" : "python3",
+  ];
+  return candidates.find((p) => p === "python" || p === "python3" || fs.existsSync(p)) || "python3";
+}
+
+function waitForHttp(url, timeoutMs = 45000) {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      const req = http.get(url, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on("error", () => {
+        if (Date.now() - start > timeoutMs) reject(new Error("Office file took too long to open."));
+        else setTimeout(tick, 250);
+      });
+    };
+    tick();
+  });
+}
+
+function startOffice() {
+  const root = repoRoot();
+  const backend = path.join(root, "backend");
+  const uiRoot = fs.existsSync(path.join(root, "frontend", "build", "index.html"))
+    ? path.join(root, "frontend", "build")
+    : path.join(process.resourcesPath, "ui");
+  const preview = fs.existsSync(path.join(root, "preview_server.py"))
+    ? path.join(root, "preview_server.py")
+    : path.join(process.resourcesPath, "preview_server.py");
+  const py = pythonBin();
+  const env = {
+    ...process.env,
+    USE_SQLITE: "true",
+    PYTHONUNBUFFERED: "1",
+    OVC_API_PORT: API_PORT,
+    OVC_API_HOST: "127.0.0.1",
+    OVC_UI_PORT: UI_PORT,
+    OVC_UI_HOST: "127.0.0.1",
+    OVC_UI_ROOT: uiRoot,
+  };
+
+  spawnSync(py, ["manage.py", "migrate", "--noinput"], { cwd: backend, env, stdio: "ignore", windowsHide: true });
+
+  apiProc = spawn(py, ["manage.py", "runserver", `127.0.0.1:${API_PORT}`, "--noreload"], {
+    cwd: backend,
+    env,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  uiProc = spawn(py, [preview], {
+    cwd: root,
+    env,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  apiProc.on("exit", (code) => {
+    if (!stopping && code) console.error("engine exit", code);
+  });
+}
+
+function stopOffice() {
+  stopping = true;
+  for (const p of [apiProc, uiProc]) {
+    if (!p || p.killed) continue;
+    try {
+      if (process.platform === "win32") spawn("taskkill", ["/pid", String(p.pid), "/f", "/t"], { windowsHide: true });
+      else p.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1440,
+    height: 920,
+    minWidth: 1100,
+    minHeight: 700,
+    title: APP_NAME,
+    icon: iconPath(),
+    backgroundColor: "#f3ead8",
+    autoHideMenuBar: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  win.setMenuBarVisibility(false);
+  win.loadFile(path.join(__dirname, "splash.html"));
+  win.once("ready-to-show", () => win.show());
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          title: APP_NAME,
+          icon: iconPath(),
+          autoHideMenuBar: true,
+          backgroundColor: "#f3ead8",
+        },
+      };
+    }
+    shell.openPath(url).catch(() => {});
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith("http://127.0.0.1") && !url.startsWith("http://localhost") && !url.startsWith("file:")) {
+      event.preventDefault();
+    }
+  });
+  return win;
+}
+
+async function boot() {
+  const got = app.requestSingleInstanceLock();
+  if (!got) {
+    app.quit();
+    return;
+  }
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+
+  await app.whenReady();
+  Menu.setApplicationMenu(null);
+
+  const image = nativeImage.createFromPath(iconPath());
+  if (process.platform === "linux") app.dock?.hide?.();
+  tray = new Tray(image.resize({ width: 24, height: 24 }));
+  tray.setToolTip(APP_NAME);
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show office file", click: () => mainWindow?.show() },
+      { type: "separator" },
+      { label: "Quit", click: () => app.quit() },
+    ]),
+  );
+
+  mainWindow = createWindow();
+  try {
+    await waitForHttp(UI_URL, 800);
+  } catch {
+    startOffice();
+  }
+  try {
+    await waitForHttp(UI_URL);
+    await mainWindow.loadURL(UI_URL);
+    mainWindow.setTitle(APP_NAME);
+  } catch (err) {
+    await mainWindow.loadURL(
+      "data:text/html," +
+        encodeURIComponent(
+          `<body style="font-family:Segoe UI,sans-serif;background:#f3ead8;color:#3f3a32;padding:48px">
+           <h1>Could not open the office file</h1>
+           <p>${String(err.message || err)}</p>
+           <p>Python and the CaseFile engine must be installed on this computer.</p></body>`,
+        ),
+    );
+  }
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
+    else mainWindow.show();
+  });
+}
+
+app.on("before-quit", stopOffice);
+app.on("window-all-closed", () => {
+  stopOffice();
+  app.quit();
+});
+
+boot();

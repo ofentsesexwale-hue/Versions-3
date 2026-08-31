@@ -4,7 +4,31 @@ Offline case management for South African NPOs serving orphans and vulnerable ch
 
 The UI is iOS-style glass on a warm sand canvas. After Python and Node are installed, the office PC can run **without internet**.
 
-## Start on the office laptop
+## Desktop app (double-click, not a browser)
+
+The office file opens in its **own window** named OVC CaseFile — no Chrome/Edge/Firefox window, no address bar, no browser icon on the taskbar.
+
+**Windows:** double-click `start-desktop.bat`, or after a Windows build double-click `desktop/release/OVC-CaseFile.exe`.
+
+**Linux / this PC:** double-click `start-desktop.sh`, or the AppImage in `desktop/release/` after packing.
+
+```bash
+chmod +x start-desktop.sh
+./start-desktop.sh
+```
+
+Build installers (Linux AppImage; Windows `.exe` when Wine or a Windows PC is available):
+
+```bash
+chmod +x desktop/pack-desktop.sh
+./desktop/pack-desktop.sh
+```
+
+Office chimes play on sign-in, errors, successful saves, opening a file by ID, and sign-out. Mute them with the speaker button in the header.
+
+The engine still uses the local Python office file on this computer. Nothing is sent to the internet.
+
+## Browser preview (developers)
 
 ```bash
 ./start-local.sh          # macOS / Linux

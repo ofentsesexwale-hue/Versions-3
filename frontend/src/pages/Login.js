@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GraduationCap, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { playChime } from "@/lib/chimes";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +38,11 @@ export default function Login() {
     setLoading(true);
     try {
       await login(username, password);
-      toast.success("Signed in");
+      playChime("login");
+      toast.success("Signed in", { silent: true });
       navigate("/");
     } catch (err) {
+      playChime("error");
       toast.error("Invalid username or password");
     } finally {
       setLoading(false);

@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarClock, Download, HeartPulse, Home, IdCard, PieCh
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { digitsOnly, lookupHousehold, uniqueHousehold } from "@/lib/lookup";
+import { playChime } from "@/lib/chimes";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -180,7 +181,8 @@ export default function Dashboard() {
   const openUnique = (payload) => {
     const hh = uniqueHousehold(payload);
     if (!hh) return false;
-    toast.success(`Opened file for ${payload.matched_label || hh.org_household_number}`);
+    toast.success(`Opened file for ${payload.matched_label || hh.org_household_number}`, { silent: true });
+    playChime("open");
     navigate(`/households/${hh.id}`);
     return true;
   };

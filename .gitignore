@@ -90,7 +90,9 @@ credentials.json
 *.key
 .credentials
 agent-tools/
-backend/backups/
+desktop/node_modules/
+desktop/release/
+desktop/*.AppImage
 backend/media/
 *.sqlite3-wal
 *.sqlite3-shm

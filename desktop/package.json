@@ -1,0 +1,88 @@
+{
+  "name": "ovc-casefile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OVC CaseFile desktop office application",
+  "author": "OVC CaseFile",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "pack:linux": "electron-builder --linux AppImage dir",
+    "pack:win": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable --config electron-builder-win.json",
+    "pack:all": "electron-builder --linux AppImage --win portable"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "za.npo.ovccasefile",
+    "productName": "OVC CaseFile",
+    "copyright": "Offline office use",
+    "asar": true,
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "splash.html",
+      "icons/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "office/backend",
+        "filter": [
+          "**/*",
+          "!.venv/**",
+          "!media/**",
+          "!backups/**",
+          "!__pycache__/**",
+          "!**/__pycache__/**"
+        ]
+      },
+      {
+        "from": "../frontend/build",
+        "to": "office/frontend/build"
+      },
+      {
+        "from": "../preview_server.py",
+        "to": "office/preview_server.py"
+      },
+      {
+        "from": "../backend/.venv",
+        "to": "office/backend/.venv",
+        "filter": ["**/*", "!**/__pycache__/**"]
+      }
+    ],
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office",
+      "icon": "icons",
+      "executableName": "ovc-casefile",
+      "desktop": {
+        "Name": "OVC CaseFile",
+        "Comment": "Office case files for orphans and vulnerable children",
+        "Terminal": "false",
+        "StartupWMClass": "ovc-casefile"
+      }
+    },
+    "win": {
+      "icon": "icons/icon.ico",
+      "target": [
+        { "target": "portable", "arch": ["x64"] },
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "OVC CaseFile",
+      "uninstallDisplayName": "OVC CaseFile"
+    },
+    "portable": {
+      "artifactName": "OVC-CaseFile.exe"
+    },
+    "directories": {
+      "output": "release"
+    }
+  }
+}

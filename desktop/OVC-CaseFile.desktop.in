@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OVC CaseFile
+Comment=Office case files for orphans and vulnerable children
+Exec=PLACEHOLDER
+Icon=PLACEHOLDER_ICON
+Terminal=false
+Categories=Office;Education;
+StartupNotify=true
+StartupWMClass=ovc-casefile

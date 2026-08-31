@@ -7,13 +7,15 @@ tunnel, so this stdlib server is the preview entrypoint.
 from __future__ import annotations
 
 import http.client
+import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent / "frontend" / "build"
-DJANGO_HOST = "127.0.0.1"
-DJANGO_PORT = 8001
-LISTEN_PORT = 43141
+ROOT = Path(os.environ.get("OVC_UI_ROOT") or (Path(__file__).resolve().parent / "frontend" / "build"))
+DJANGO_HOST = os.environ.get("OVC_API_HOST", "127.0.0.1")
+DJANGO_PORT = int(os.environ.get("OVC_API_PORT", "8001"))
+LISTEN_HOST = os.environ.get("OVC_UI_HOST", "0.0.0.0")
+LISTEN_PORT = int(os.environ.get("OVC_UI_PORT", "43141"))
 HOP = {"host", "connection", "transfer-encoding", "keep-alive", "proxy-connection", "te", "trailer", "upgrade"}
 
 
@@ -81,7 +83,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
 def main():
     if not (ROOT / "index.html").is_file():
         raise SystemExit(f"Missing {ROOT / 'index.html'} — run: cd frontend && CI=false yarn build")
-    httpd = ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), PreviewHandler)
+    httpd = ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), PreviewHandler)
     print(f"Preview http://127.0.0.1:{LISTEN_PORT}  (API -> {DJANGO_HOST}:{DJANGO_PORT})")
     httpd.serve_forever()
 
