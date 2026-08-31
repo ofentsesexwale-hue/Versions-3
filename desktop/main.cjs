@@ -148,11 +148,10 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => {
     win.webContents.executeJavaScript(`document.documentElement.classList.add('ovc-desktop')`).catch(() => {});
     win.webContents.insertCSS(`
-      html.ovc-desktop .glass, html.ovc-desktop .glass-strong, html.ovc-desktop .glass-tint,
-      .glass, .glass-strong, .glass-tint {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-      }
+      html.ovc-desktop body { background-attachment: scroll !important; background-image: none !important; background-color: #efe4cf !important; }
+      html.ovc-desktop * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; filter: none !important; }
+      .glass, .glass-strong { background: #fffdf6 !important; }
+      .glass-tint { background: #efe6d4 !important; }
     `).catch(() => {});
     win.setTitle(APP_NAME);
   });
@@ -211,7 +210,7 @@ async function boot() {
 
   mainWindow = createWindow();
   try {
-    await waitForHttp(UI_URL, 800);
+    await waitForHttp(UI_URL, 600);
   } catch {
     startOffice();
   }
