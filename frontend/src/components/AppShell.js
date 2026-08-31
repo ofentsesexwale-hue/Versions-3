@@ -78,9 +78,9 @@ function NavItems({ role, counts, onNavigate }) {
             data-testid={`nav-item-${n.key}`}
             className={({ isActive }) =>
               cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base text-slate-700 hover:bg-slate-100",
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-base text-amber-100/80 hover:bg-amber-950/80",
                 isActive &&
-                  "bg-slate-100 font-medium text-slate-900 border-l-4 border-[color:var(--sa-green)]"
+                  "bg-amber-950 font-medium text-yellow-400 border-l-4 border-yellow-400"
               )
             }
           >
@@ -108,28 +108,28 @@ function SidebarContent({ user, counts, onLogout, onNavigate, logoUrl, orgName }
         {logoUrl ? (
           <img src={logoUrl} alt="logo" className="h-10 w-10 rounded-lg object-contain" data-testid="sidebar-org-logo" />
         ) : (
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-400 text-black">
             <ShieldCheck className="h-6 w-6" />
           </div>
         )}
         <div>
-          <p className="text-base font-semibold leading-tight text-slate-900">{orgName || "OVC CaseFile"}</p>
-          <p className="text-xs text-slate-500">Offline case management</p>
+          <p className="text-base font-semibold leading-tight text-yellow-400">{orgName || "OVC CaseFile"}</p>
+          <p className="text-xs text-amber-200/70">Offline case management</p>
         </div>
       </div>
       <div className="flex-1 px-3 py-2">
         <NavItems role={user?.role} counts={counts} onNavigate={onNavigate} />
       </div>
-      <div className="border-t border-slate-200 p-4">
+      <div className="border-t border-amber-900 p-4">
         <div className="mb-3">
-          <p className="truncate text-sm font-medium text-slate-900">{user?.full_name}</p>
+          <p className="truncate text-sm font-medium text-yellow-100">{user?.full_name}</p>
           <div className="mt-1">
             <RoleBadge role={user?.role} />
           </div>
         </div>
         <Button
           variant="outline"
-          className="w-full justify-start gap-2"
+          className="w-full justify-start gap-2 border-yellow-400/40 bg-transparent text-yellow-400 hover:bg-amber-950 hover:text-yellow-300"
           onClick={onLogout}
           data-testid="app-logout-button"
         >
@@ -176,10 +176,10 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-background">
       {/* Desktop sidebar */}
       <aside
-        className="hidden w-[280px] shrink-0 border-r border-slate-200 bg-white lg:block"
+        className="hidden w-[280px] shrink-0 border-r border-amber-950 bg-zinc-950 lg:block"
         data-testid="app-sidebar"
       >
         <div className="sticky top-0 h-screen">
@@ -189,7 +189,7 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top header */}
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-amber-800 bg-yellow-400">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -197,7 +197,7 @@ export function AppShell() {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-[280px] p-0">
+              <SheetContent side="left" className="w-[280px] bg-zinc-950 p-0 text-yellow-100">
                 <SidebarContent user={user} counts={counts} onLogout={onLogout} logoUrl={logoUrl} orgName={org?.name} onNavigate={() => setMobileOpen(false)} />
               </SheetContent>
             </Sheet>
@@ -217,7 +217,7 @@ export function AppShell() {
               {logoUrl && <img src={logoUrl} alt="logo" className="hidden h-9 max-w-[140px] object-contain sm:block" data-testid="header-org-logo" />}
               <Button
                 onClick={() => navigate("/households/new")}
-                className="gap-2 bg-slate-900 hover:bg-slate-800"
+                className="gap-2 border border-black/30 bg-zinc-950 text-yellow-400 hover:bg-zinc-800"
                 data-testid="header-new-household-button"
               >
                 <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Household</span>

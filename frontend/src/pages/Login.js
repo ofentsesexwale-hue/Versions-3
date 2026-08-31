@@ -47,22 +47,22 @@ export default function Login() {
   ];
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           {brandingLogo ? (
             <img src={brandingLogo} alt="logo" className="mb-3 h-16 max-w-[200px] object-contain" data-testid="login-org-logo" />
           ) : (
-            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-yellow-400 text-black">
               <ShieldCheck className="h-8 w-8" />
             </div>
           )}
-          <h1 className="text-2xl font-semibold text-slate-900">{branding?.name || "OVC CaseFile"}</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-semibold text-yellow-400">{branding?.name || "OVC CaseFile"}</h1>
+          <p className="mt-1 text-sm text-amber-200/80">
             Offline Case Management for Orphans &amp; Vulnerable Children
           </p>
           {branding?.login_tagline && (
-            <p className="mt-2 text-sm font-medium text-[color:var(--sa-green,#007a4d)]" data-testid="login-tagline">
+            <p className="mt-2 text-sm font-medium text-yellow-400" data-testid="login-tagline">
               {branding.login_tagline}
             </p>
           )}

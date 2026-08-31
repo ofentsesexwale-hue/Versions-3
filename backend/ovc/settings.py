@@ -69,17 +69,25 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ovc.wsgi.application'
 ASGI_APPLICATION = 'ovc.asgi.application'
 
-# --- Local PostgreSQL (plain local connection string) ---
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'ovc_db'),
-        'USER': os.environ.get('POSTGRES_USER', 'ovc_user'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'ovc_local_pass'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+# --- Database: SQLite by default (offline / preview). Set USE_SQLITE=false for PostgreSQL. ---
+if os.environ.get('USE_SQLITE', 'true').lower() in ('1', 'true', 'yes', 'on'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('POSTGRES_DB', 'ovc_db'),
+            'USER': os.environ.get('POSTGRES_USER', 'ovc_user'),
+            'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'ovc_local_pass'),
+            'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -129,6 +137,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     'https://ovc-casefiles.preview.emergentagent.com',
+    'http://127.0.0.1:43141',
+    'http://localhost:43141',
+    'http://127.0.0.1:8001',
 ]
 
 # Group / role names (also created as Django Groups).

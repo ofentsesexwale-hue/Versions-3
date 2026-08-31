@@ -62,7 +62,9 @@ chainlit.md
 .vercel
 
 # Data and databases
-agenthub/agents/youtube/db
+*.sqlite3
+backend/db.sqlite3
+backend/.venv/
 
 # Archive files and large assets
 **/*.zip
@@ -86,3 +88,4 @@ android-sdk/
 credentials.json
 *.key
 .credentials
+agent-tools/
