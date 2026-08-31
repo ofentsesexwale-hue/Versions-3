@@ -145,7 +145,16 @@ if (isDevServer) {
 }
 
 const configureDevServer = webpackConfig.devServer;
-webpackConfig.devServer = (devServerConfig) =>
-  makeDevServerV5Compatible(configureDevServer(devServerConfig));
+webpackConfig.devServer = (devServerConfig) => {
+  const cfg = makeDevServerV5Compatible(configureDevServer(devServerConfig));
+  cfg.allowedHosts = "all";
+  cfg.host = "0.0.0.0";
+  cfg.port = Number(process.env.PORT || 43141);
+  cfg.headers = {
+    ...cfg.headers,
+    "Access-Control-Allow-Origin": "*",
+  };
+  return cfg;
+};
 
 module.exports = webpackConfig;
