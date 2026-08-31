@@ -30,16 +30,16 @@ import api from "@/lib/api";
 import { lookupHousehold, uniqueHousehold } from "@/lib/lookup";
 import { playChime } from "@/lib/chimes";
 import { useAuth } from "@/context/AuthContext";
-import { ROLE_LABELS, SYSTEM_BUILDER_LABEL } from "@/lib/constants";
+import { ROLE_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", icon: Home, end: true },
   { key: "verification", label: "Verification", to: "/verification?field=id_number", icon: AlertTriangle, roles: ["admin", "supervisor"], badgeKey: "verification" },
   { key: "my-households", label: "My Households", to: "/my-households", icon: Briefcase },
-  { key: "work-diary", label: "Work diary", to: "/work-diary", icon: CalendarClock, badgeKey: "diary" },
-  { key: "services", label: "Daily Service Log", to: "/services", icon: HeartHandshake },
-  { key: "partners", label: "Partner directory", to: "/partners", icon: Landmark },
+  { key: "work-diary", label: "Work diary", to: "/work-diary", icon: CalendarClock, badgeKey: "diary", hideFor: ["caregiver"] },
+  { key: "services", label: "Daily Service Log", to: "/services", icon: HeartHandshake, hideFor: ["caregiver"] },
+  { key: "partners", label: "Partner directory", to: "/partners", icon: Landmark, hideFor: ["caregiver"] },
   { key: "reassign", label: "Reassign Caseload", to: "/reassign", icon: Users, roles: ["admin", "supervisor"] },
   { key: "print-center", label: "Print Center", to: "/print-center", icon: Printer, roles: ["admin", "supervisor"] },
   { key: "signoffs", label: "Sign-off History", to: "/signoffs", icon: ShieldCheck, roles: ["admin", "supervisor"] },
@@ -47,23 +47,29 @@ const NAV = [
   { key: "org-settings", label: "Organisation", to: "/settings/organisation", icon: Building2, adminOnly: true },
   { key: "staff", label: "Staff accounts", to: "/settings/staff", icon: UserCog, adminOnly: true },
   { key: "password", label: "Change password", to: "/settings/password", icon: Shield },
-  { key: "upload", label: "Upload Document", to: "/documents/upload", icon: FileText },
+  { key: "upload", label: "Upload Document", to: "/documents/upload", icon: FileText, hideFor: ["caregiver"] },
   { key: "audit", label: "Audit Log", to: "/audit", icon: Shield, adminOnly: true },
 ];
 
 function visibleNav(role) {
   return NAV.filter(
-    (n) => (!n.adminOnly || role === "admin") && (!n.roles || n.roles.includes(role))
+    (n) =>
+      (!n.adminOnly || role === "admin") &&
+      (!n.roles || n.roles.includes(role)) &&
+      (!n.hideFor || !n.hideFor.includes(role)),
   );
 }
 
 function RoleBadge({ role, isSystemBuilder }) {
+  const label = isSystemBuilder
+    ? "Administrator"
+    : (ROLE_LABELS[role] || role);
   return (
     <span
       className="rounded-full bg-white/50 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-foreground/80"
       data-testid="user-role-badge"
     >
-      {isSystemBuilder ? SYSTEM_BUILDER_LABEL : (ROLE_LABELS[role] || role)}
+      {label}
     </span>
   );
 }

@@ -233,7 +233,7 @@ class Command(BaseCommand):
         if old and old.pk != live.pk:
             old.is_active = False
             old.save(update_fields=['is_active'])
-        self.stdout.write(f'  {LIVE_ADMIN_USERNAME}  (live office — system builder, administrator)')
+        self.stdout.write(f'  {LIVE_ADMIN_USERNAME}  (live office — Administrator)')
 
     def _apply_confirm_flags(self, person, admin_user):
         now = timezone.now()

@@ -130,4 +130,59 @@ class CaseworkGoldStandardTests(TestCase):
         listed = c.get('/api/staff/')
         row = next(u for u in listed.data if u['username'] == 'OrphanCoordinator')
         self.assertTrue(row['is_system_builder'])
-        self.assertEqual(row['role'], 'admin')
+    def test_admin_creates_titled_staff_and_caregiver_login(self):
+        cycw = self.client.post('/api/staff/', {
+            'username': 'thandi.cycw',
+            'password': 'FieldWork99',
+            'first_name': 'Thandi',
+            'last_name': 'Nkosi',
+            'role': 'cycw',
+        }, format='json')
+        self.assertEqual(cycw.status_code, 201, cycw.data)
+        self.assertEqual(cycw.data['role'], 'cycw')
+        self.assertIn('caseload', cycw.data['permission_summary'].lower())
+
+        aux = self.client.post('/api/staff/', {
+            'username': 'lerato.aux',
+            'password': 'FieldWork99',
+            'first_name': 'Lerato',
+            'last_name': 'Molefe',
+            'job_title': 'auxiliary',
+        }, format='json')
+        self.assertEqual(aux.status_code, 201, aux.data)
+        self.assertEqual(aux.data['role'], 'auxiliary')
+
+        renamed = self.client.patch(
+            f'/api/staff/{cycw.data["id"]}/',
+            {'username': 'thandi.worker'},
+            format='json',
+        )
+        self.assertEqual(renamed.status_code, 200, renamed.data)
+        self.assertEqual(renamed.data['username'], 'thandi.worker')
+
+        login = self.client.post(
+            f'/api/caregivers/{self.hh.caregiver.id}/set-login/',
+            {'username': 'lindiwe.file', 'password': 'ViewOnly99'},
+            format='json',
+        )
+        self.assertEqual(login.status_code, 201, login.data)
+        self.assertEqual(login.data['role'], 'caregiver')
+        self.assertEqual(login.data['linked_household']['id'], self.hh.id)
+
+        login_user = User.objects.get(username='lindiwe.file')
+        tok = Token.objects.create(user=login_user)
+        portal = APIClient()
+        portal.credentials(HTTP_AUTHORIZATION=f'Token {tok.key}')
+        seen = portal.get(f'/api/households/{self.hh.id}/')
+        self.assertEqual(seen.status_code, 200)
+        blocked = portal.patch(
+            f'/api/households/{self.hh.id}/',
+            {'town': 'Hacked'},
+            format='json',
+        )
+        self.assertEqual(blocked.status_code, 403)
+
+        listed = self.client.get('/api/staff/')
+        names = [u['username'] for u in listed.data]
+        self.assertIn('OrphanCoordinator', names)
+        self.assertNotIn('admin', names)

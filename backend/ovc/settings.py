@@ -150,9 +150,20 @@ CSRF_TRUSTED_ORIGINS = [
 # Group / role names (also created as Django Groups).
 ROLE_DATA_CAPTURER = 'data-capturer'
 ROLE_CASE_WORKER = 'case-worker'
+ROLE_CYCW = 'cycw'
+ROLE_AUXILIARY = 'auxiliary'
+ROLE_CAREGIVER = 'caregiver'
 ROLE_SUPERVISOR = 'supervisor'
 ROLE_ADMIN = 'admin'
-ALL_ROLES = [ROLE_DATA_CAPTURER, ROLE_CASE_WORKER, ROLE_SUPERVISOR, ROLE_ADMIN]
+ALL_ROLES = [
+    ROLE_DATA_CAPTURER, ROLE_CASE_WORKER, ROLE_CYCW, ROLE_AUXILIARY,
+    ROLE_CAREGIVER, ROLE_SUPERVISOR, ROLE_ADMIN,
+]
+# Titles the live office administrator assigns when adding staff (not training aliases).
+LIVE_OFFICE_TITLES = [
+    ROLE_CYCW, ROLE_AUXILIARY, ROLE_CAREGIVER, ROLE_DATA_CAPTURER,
+    ROLE_SUPERVISOR, ROLE_ADMIN,
+]
 
 # Seeded training logins. They only see TEST- households. Live staff never do.
 TRAINING_USERNAMES = frozenset({

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,8 +18,14 @@ import { IdCheckHint } from "@/components/IdCheckHint";
 export default function CaregiverForm() {
   const { id } = useParams(); // household id
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [choices, setChoices] = useState(null);
   const [cgId, setCgId] = useState(null);
+  const [hasLogin, setHasLogin] = useState(false);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [savingLogin, setSavingLogin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const pf = usePersonForm({ id_type: "SA ID Number", nationality: "South African" });
@@ -29,6 +36,8 @@ export default function CaregiverForm() {
       const cg = h.data.caregiver;
       if (cg) {
         setCgId(cg.id);
+        setHasLogin(!!cg.has_login);
+        setLoginUsername(cg.login_username || "");
         pf.setForm(cg);
         pf.setConfirmed({
           surname: cg.surname_confirmed,
@@ -55,9 +64,18 @@ export default function CaregiverForm() {
       date_of_birth_confirmed: pf.confirmed.date_of_birth,
     };
     try {
-      if (cgId) await api.patch(`/caregivers/${cgId}/`, payload);
-      else await api.post("/caregivers/", payload);
+      let saved;
+      if (cgId) saved = (await api.patch(`/caregivers/${cgId}/`, payload)).data;
+      else saved = (await api.post("/caregivers/", payload)).data;
       toast.success("Caregiver saved");
+      if (isAdmin && loginUsername && loginPassword) {
+        setSavingLogin(true);
+        await api.post(`/caregivers/${saved.id}/set-login/`, {
+          username: loginUsername,
+          password: loginPassword,
+        });
+        toast.success(hasLogin ? "Caregiver login updated" : "Caregiver can sign in now");
+      }
       navigate(`/households/${id}`);
     } catch (e) {
       const data = e?.response?.data;
@@ -121,6 +139,29 @@ export default function CaregiverForm() {
           )}
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card data-testid="caregiver-login-card">
+          <CardHeader>
+            <CardTitle className="text-base">{hasLogin ? "Caregiver login" : "Give this caregiver a login"}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <p className="text-sm text-muted-foreground sm:col-span-2">
+              {hasLogin
+                ? "This caregiver can already sign in. Change the username or set a new password below, then save."
+                : "Optional. They will only see this household file and cannot change office records."}
+            </p>
+            <div className="space-y-1.5">
+              <Label>Username</Label>
+              <Input value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} data-testid="caregiver-login-username" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{hasLogin ? "New password" : "Password"}</Label>
+              <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} data-testid="caregiver-login-password" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
         <p className={pf.blocked ? "text-sm text-amber-800" : "text-sm text-emerald-800"} data-testid="save-blocked-unconfirmed-message">

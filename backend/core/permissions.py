@@ -5,8 +5,30 @@ from rest_framework import permissions
 
 ROLE_DATA_CAPTURER = settings.ROLE_DATA_CAPTURER
 ROLE_CASE_WORKER = settings.ROLE_CASE_WORKER
+ROLE_CYCW = settings.ROLE_CYCW
+ROLE_AUXILIARY = settings.ROLE_AUXILIARY
+ROLE_CAREGIVER = settings.ROLE_CAREGIVER
 ROLE_SUPERVISOR = settings.ROLE_SUPERVISOR
 ROLE_ADMIN = settings.ROLE_ADMIN
+
+FIELD_WORKER_ROLES = frozenset({
+    ROLE_CASE_WORKER, ROLE_CYCW, ROLE_AUXILIARY,
+})
+
+ROLE_PRIORITY = (
+    ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_CYCW, ROLE_CASE_WORKER,
+    ROLE_AUXILIARY, ROLE_DATA_CAPTURER, ROLE_CAREGIVER,
+)
+
+ROLE_PERMISSION_TEXT = {
+    ROLE_ADMIN: 'Full live office: all files, staff logins, organisation, and audit.',
+    ROLE_SUPERVISOR: 'All files, quality sign-off, and caseload reassignment. Cannot add staff.',
+    ROLE_CYCW: 'Own caseload: open files, capture caregivers and children, visits, and services.',
+    ROLE_CASE_WORKER: 'Own caseload (training title). Same field permissions as a CYCW.',
+    ROLE_AUXILIARY: 'Own caseload: support visits, services, and file capture. No sign-off or staff.',
+    ROLE_DATA_CAPTURER: 'All files for capturing. No sign-off, reassignment, or staff.',
+    ROLE_CAREGIVER: 'View the household file linked to this login. Cannot change office records.',
+}
 
 
 def is_training_user(user):
@@ -19,7 +41,7 @@ def system_builder_username():
 
 
 def is_system_builder(user):
-    """Orphan Coordinator — live office system builder (cannot be demoted)."""
+    """Orphan Coordinator — live office administrator (cannot be demoted)."""
     name = getattr(user, 'username', None) if user else None
     return bool(name) and name.lower() == system_builder_username().lower()
 
@@ -36,10 +58,14 @@ def user_role(user):
     if user.is_superuser:
         return ROLE_ADMIN
     groups = set(user.groups.values_list('name', flat=True))
-    for role in (ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_CASE_WORKER, ROLE_DATA_CAPTURER):
+    for role in ROLE_PRIORITY:
         if role in groups:
             return role
     return None
+
+
+def is_field_worker(user):
+    return user_role(user) in FIELD_WORKER_ROLES
 
 
 def can_view_all_households(user):
@@ -48,7 +74,10 @@ def can_view_all_households(user):
 
 def can_edit_records(user):
     """Who may create/edit Household/Caregiver/Member/Documents."""
-    return user_role(user) in (ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_CASE_WORKER, ROLE_DATA_CAPTURER)
+    return user_role(user) in (
+        ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_CASE_WORKER, ROLE_CYCW,
+        ROLE_AUXILIARY, ROLE_DATA_CAPTURER,
+    )
 
 
 def can_signoff_checklist(user):

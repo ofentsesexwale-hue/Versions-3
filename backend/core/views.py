@@ -49,11 +49,19 @@ from .models import (
 )
 from .sa_id import parse_sa_id
 from .permissions import (
+    FIELD_WORKER_ROLES,
     IsAdminRole,
     IsStaffRole,
     ROLE_ADMIN,
+    ROLE_AUXILIARY,
+    ROLE_CAREGIVER,
     ROLE_CASE_WORKER,
+    ROLE_CYCW,
+    ROLE_PERMISSION_TEXT,
+    can_edit_records,
     can_signoff_checklist,
+    can_view_audit,
+    is_field_worker,
     is_system_builder,
     is_training_user,
     training_households_filter,
@@ -168,14 +176,16 @@ def lookup_households_for_query(qs, raw):
 
 
 def scoped_household_qs(user):
-    """Case-workers only see assigned households. Training logins only see TEST- files."""
+    """Field workers only see assigned households. Caregivers see their linked file. Training logins only see TEST- files."""
     qs = Household.objects.all()
     if is_training_user(user):
         qs = qs.filter(training_households_filter())
     else:
         qs = qs.exclude(training_households_filter())
-    if user_role(user) == ROLE_CASE_WORKER:
+    if is_field_worker(user):
         qs = qs.filter(assigned_to=user)
+    elif user_role(user) == ROLE_CAREGIVER:
+        qs = qs.filter(caregiver__user=user)
     return qs
 
 
@@ -267,10 +277,11 @@ class MeView(APIView):
         data = UserSerializer(request.user).data
         role = data.get('role')
         data['permissions'] = {
-            'can_view_audit': role == 'admin',
-            'can_signoff_checklist': role in ('admin', 'supervisor'),
-            'can_edit_records': role in ('admin', 'supervisor', 'case-worker', 'data-capturer'),
-            'can_edit_checklist_evidence': role in ('admin', 'supervisor'),
+            'can_view_audit': can_view_audit(request.user),
+            'can_signoff_checklist': can_signoff_checklist(request.user),
+            'can_edit_records': can_edit_records(request.user),
+            'can_edit_checklist_evidence': can_signoff_checklist(request.user),
+            'can_manage_staff': user_role(request.user) == ROLE_ADMIN,
         }
         return Response(data)
 
@@ -361,15 +372,24 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         return Response(data)
 
     def perform_create(self, serializer):
+        if not can_edit_records(self.request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Your login can view this file but cannot change it.')
         obj = serializer.save()
         _ensure_checklist(obj)
         log_action(self.request.user, 'created', f'Household #{obj.pk} ({obj.org_household_number})')
 
     def perform_update(self, serializer):
+        if not can_edit_records(self.request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Your login can view this file but cannot change it.')
         obj = serializer.save(version=serializer.instance.version + 1)
         log_action(self.request.user, 'edited', f'Household #{obj.pk} ({obj.org_household_number})')
 
     def perform_destroy(self, instance):
+        if not can_edit_records(self.request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Your login can view this file but cannot change it.')
         desc = f'Household #{instance.pk} ({instance.org_household_number})'
         instance.delete()
         log_action(self.request.user, 'deleted', desc)
@@ -496,14 +516,23 @@ class _PersonViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(instance).data)
 
     def perform_create(self, serializer):
+        if not can_edit_records(self.request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Your login can view this file but cannot change it.')
         obj = serializer.save()
         log_action(self.request.user, 'created', self._desc(obj))
 
     def perform_update(self, serializer):
+        if not can_edit_records(self.request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Your login can view this file but cannot change it.')
         obj = serializer.save()
         log_action(self.request.user, 'edited', self._desc(obj))
 
     def perform_destroy(self, instance):
+        if not can_edit_records(self.request.user):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Your login can view this file but cannot change it.')
         desc = self._desc(instance)
         instance.delete()
         log_action(self.request.user, 'deleted', desc)
@@ -548,6 +577,54 @@ class CaregiverViewSet(_PersonViewSet):
     model = Caregiver
     serializer_class = CaregiverSerializer
     label = 'Caregiver'
+
+    @action(detail=True, methods=['post'], url_path='set-login')
+    def set_login(self, request, pk=None):
+        """Administrator: give this household caregiver a login, or update the password."""
+        if user_role(request.user) != ROLE_ADMIN:
+            return Response({'detail': 'Only administrators can set caregiver logins.'}, status=403)
+        cg = self.get_object()
+        username = (request.data.get('username') or '').strip()
+        password = request.data.get('password') or ''
+        if cg.user_id:
+            login = cg.user
+            if username and username != login.username:
+                if User.objects.filter(username=username).exclude(pk=login.pk).exists():
+                    return Response({'detail': 'That username is already in use.'}, status=400)
+                login.username = username
+            if password:
+                try:
+                    validate_password(password, user=login)
+                except DjangoValidationError as e:
+                    return Response({'detail': ' '.join(e.messages)}, status=400)
+                login.set_password(password)
+                Token.objects.filter(user=login).delete()
+            login.first_name = login.first_name or cg.name
+            login.last_name = login.last_name or cg.surname
+            login.save()
+            _set_user_role(login, ROLE_CAREGIVER)
+            log_action(request.user, 'edited', f'Caregiver login {login.username}')
+            return Response(UserSerializer(login).data)
+        if not username or not password:
+            return Response({'detail': 'Username and password are required for a new caregiver login.'}, status=400)
+        if User.objects.filter(username=username).exists():
+            return Response({'detail': 'That username is already in use.'}, status=400)
+        try:
+            validate_password(password)
+        except DjangoValidationError as e:
+            return Response({'detail': ' '.join(e.messages)}, status=400)
+        login = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=cg.name or '',
+            last_name=cg.surname or '',
+            is_active=True,
+        )
+        _set_user_role(login, ROLE_CAREGIVER)
+        cg.user = login
+        cg.save(update_fields=['user'])
+        log_action(request.user, 'created', f'Caregiver login {login.username} for Household #{cg.household_id}')
+        return Response(UserSerializer(login).data, status=201)
 
 
 class HouseholdMemberViewSet(_PersonViewSet):
@@ -887,17 +964,48 @@ class PartnerAgencyViewSet(viewsets.ModelViewSet):
         log_action(self.request.user, 'deleted', f'Partner {name}')
 
 
+def _unlink_caregiver_login(user):
+    try:
+        cg = user.household_caregiver
+    except Exception:
+        return
+    cg.user = None
+    cg.save(update_fields=['user'])
+
+
+def _link_caregiver_household(user, household_id):
+    from .models import Caregiver
+    hh = Household.objects.filter(pk=household_id).select_related('caregiver').first()
+    if not hh:
+        return 'Household not found.'
+    cg = getattr(hh, 'caregiver', None)
+    if not cg:
+        return 'Add the caregiver on that household file first, then give them a login.'
+    if cg.user_id and cg.user_id != user.pk:
+        return 'That caregiver already has a login.'
+    other = Caregiver.objects.filter(user=user).exclude(pk=cg.pk).first()
+    if other:
+        other.user = None
+        other.save(update_fields=['user'])
+    cg.user = user
+    cg.save(update_fields=['user'])
+    return None
+
+
 def _set_user_role(user, role):
     if role not in settings.ALL_ROLES:
         raise ValueError(f'Unknown role: {role}')
     if is_system_builder(user) and role != ROLE_ADMIN:
-        raise ValueError('The system builder keeps administrator privileges.')
+        raise ValueError('The administrator keeps administrator privileges.')
+    previous = user_role(user)
     user.groups.clear()
     group, _ = Group.objects.get_or_create(name=role)
     user.groups.add(group)
     user.is_staff = role == ROLE_ADMIN or is_system_builder(user)
     user.is_superuser = role == ROLE_ADMIN or is_system_builder(user)
     user.save()
+    if previous == ROLE_CAREGIVER and role != ROLE_CAREGIVER:
+        _unlink_caregiver_login(user)
 
 
 class StaffViewSet(viewsets.ViewSet):
@@ -905,19 +1013,21 @@ class StaffViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated, IsAdminRole]
 
     def list(self, request):
-        users = User.objects.all().order_by('username')
+        users = User.objects.all().select_related('household_caregiver__household').order_by('username')
+        if not is_training_user(request.user):
+            users = users.exclude(username__in=settings.TRAINING_USERNAMES)
         return Response(UserSerializer(users, many=True).data)
 
     def create(self, request):
         username = (request.data.get('username') or '').strip()
         password = request.data.get('password') or ''
-        role = request.data.get('role') or ROLE_CASE_WORKER
+        role = request.data.get('role') or request.data.get('job_title') or ROLE_CYCW
         if not username:
             return Response({'detail': 'Username is required.'}, status=400)
         if User.objects.filter(username=username).exists():
             return Response({'detail': 'That username is already in use.'}, status=400)
         if role not in settings.ALL_ROLES:
-            return Response({'detail': 'Choose a valid role.'}, status=400)
+            return Response({'detail': 'Choose a valid title.'}, status=400)
         try:
             validate_password(password)
         except DjangoValidationError as e:
@@ -931,6 +1041,14 @@ class StaffViewSet(viewsets.ViewSet):
             is_active=request.data.get('is_active', True) is not False,
         )
         _set_user_role(user, role)
+        household_id = request.data.get('household') or request.data.get('household_id')
+        if household_id in ('', None):
+            household_id = None
+        if role == ROLE_CAREGIVER and household_id:
+            err = _link_caregiver_household(user, household_id)
+            if err:
+                user.delete()
+                return Response({'detail': err}, status=400)
         log_action(request.user, 'created', f'Staff account {user.username} ({role})')
         return Response(UserSerializer(user).data, status=201)
 
@@ -944,11 +1062,23 @@ class StaffViewSet(viewsets.ViewSet):
             user.last_name = request.data.get('last_name') or ''
         if 'email' in request.data:
             user.email = request.data.get('email') or ''
+        if 'username' in request.data:
+            new_name = (request.data.get('username') or '').strip()
+            if is_system_builder(user) and new_name.lower() != user.username.lower():
+                return Response(
+                    {'detail': 'The live office administrator username cannot be changed.'},
+                    status=400,
+                )
+            if not new_name:
+                return Response({'detail': 'Username is required.'}, status=400)
+            if User.objects.filter(username=new_name).exclude(pk=user.pk).exists():
+                return Response({'detail': 'That username is already in use.'}, status=400)
+            user.username = new_name
         if 'is_active' in request.data:
             active = bool(request.data.get('is_active'))
             if not active and is_system_builder(user):
                 return Response(
-                    {'detail': 'The system builder account cannot be deactivated.'},
+                    {'detail': 'The administrator account cannot be deactivated.'},
                     status=400,
                 )
             if not active and user.pk == request.user.pk:
@@ -961,13 +1091,13 @@ class StaffViewSet(viewsets.ViewSet):
             if not active:
                 Token.objects.filter(user=user).delete()
         user.save()
-        if request.data.get('role'):
-            role = request.data.get('role')
+        role = request.data.get('role') or request.data.get('job_title')
+        if role:
             if role not in settings.ALL_ROLES:
-                return Response({'detail': 'Choose a valid role.'}, status=400)
+                return Response({'detail': 'Choose a valid title.'}, status=400)
             if is_system_builder(user) and role != ROLE_ADMIN:
                 return Response(
-                    {'detail': 'The system builder keeps administrator privileges.'},
+                    {'detail': 'The live office administrator keeps administrator privileges.'},
                     status=400,
                 )
             if user_role(user) == ROLE_ADMIN and role != ROLE_ADMIN:
@@ -975,6 +1105,13 @@ class StaffViewSet(viewsets.ViewSet):
                 if not any(user_role(u) == ROLE_ADMIN for u in others):
                     return Response({'detail': 'Keep at least one administrator.'}, status=400)
             _set_user_role(user, role)
+        household_id = request.data.get('household') or request.data.get('household_id')
+        if household_id in ('', None):
+            household_id = None
+        if household_id and user_role(user) == ROLE_CAREGIVER:
+            err = _link_caregiver_household(user, household_id)
+            if err:
+                return Response({'detail': err}, status=400)
         log_action(request.user, 'edited', f'Staff account {user.username}')
         return Response(UserSerializer(user).data)
 
@@ -1034,8 +1171,8 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
         return qs
 
     def _check_caseload(self, household):
-        """Case-workers may only log for households assigned to them."""
-        if user_role(self.request.user) == ROLE_CASE_WORKER:
+        """Field workers may only log for households assigned to them."""
+        if is_field_worker(self.request.user):
             if not household.assigned_to.filter(pk=self.request.user.pk).exists():
                 return False
         return True
@@ -1124,7 +1261,7 @@ class ServiceDeliveryViewSet(viewsets.ModelViewSet):
                 household__in=scoped_household_qs(request.user),
                 service_date__gte=start, service_date__lt=nxt).values('delivered_by').annotate(c=Count('id'))}
             targets = {t.user_id: t.monthly_goal for t in ServiceTarget.objects.all()}
-            workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct()
+            workers = User.objects.filter(is_active=True, groups__name__in=FIELD_WORKER_ROLES).distinct()
             names = settings.TRAINING_USERNAMES
             if is_training_user(request.user):
                 workers = workers.filter(username__in=names)
@@ -1404,7 +1541,23 @@ def choices_view(request):
         'protection_types': [{'value': c[0], 'label': c[1]} for c in choices.PROTECTION_TYPE_CHOICES],
         'incident_status': [{'value': c[0], 'label': c[1]} for c in choices.INCIDENT_STATUS_CHOICES],
         'evaluation_recommendation': [{'value': c[0], 'label': c[1]} for c in choices.EVALUATION_RECOMMENDATION_CHOICES],
-        'staff_roles': [{'value': r, 'label': r} for r in settings.ALL_ROLES],
+        'staff_roles': [
+            {
+                'value': r,
+                'label': {
+                    'cycw': 'CYCW',
+                    'auxiliary': 'Auxiliary',
+                    'caregiver': 'Caregiver',
+                    'data-capturer': 'Data capturer',
+                    'case-worker': 'Case worker (SSP)',
+                    'supervisor': 'Supervisor (QA)',
+                    'admin': 'Administrator',
+                }.get(r, r),
+                'permissions': ROLE_PERMISSION_TEXT.get(r, ''),
+                'live_office': r in getattr(settings, 'LIVE_OFFICE_TITLES', []),
+            }
+            for r in settings.ALL_ROLES
+        ],
         'partner_kinds': [{'value': c[0], 'label': c[1]} for c in choices.PARTNER_KIND_CHOICES],
         'referral_status': [{'value': c[0], 'label': c[1]} for c in choices.REFERRAL_STATUS_CHOICES],
         'referral_reasons': [{'value': c[0], 'label': c[1]} for c in choices.REFERRAL_REASON_CHOICES],
@@ -1461,7 +1614,7 @@ class ServiceTargetView(APIView):
             return Response({'detail': 'Only supervisors/administrators may view service targets.'},
                             status=status.HTTP_403_FORBIDDEN)
         targets = {t.user_id: t.monthly_goal for t in ServiceTarget.objects.all()}
-        workers = User.objects.filter(is_active=True, groups__name=ROLE_CASE_WORKER).distinct().order_by('username')
+        workers = User.objects.filter(is_active=True, groups__name__in=FIELD_WORKER_ROLES).distinct().order_by('username')
         names = settings.TRAINING_USERNAMES
         if is_training_user(request.user):
             workers = workers.filter(username__in=names)
@@ -1483,8 +1636,8 @@ class ServiceTargetView(APIView):
             goal = max(0, int(request.data.get('monthly_goal') or 0))
         except (TypeError, ValueError):
             return Response({'detail': 'monthly_goal must be a number.'}, status=400)
-        if not User.objects.filter(pk=uid, groups__name=ROLE_CASE_WORKER).exists():
-            return Response({'detail': 'Targets can only be set for case workers.'}, status=404)
+        if not User.objects.filter(pk=uid, groups__name__in=FIELD_WORKER_ROLES).exists():
+            return Response({'detail': 'Targets can only be set for field workers (CYCW / Auxiliary).'}, status=404)
         ServiceTarget.objects.update_or_create(user_id=uid, defaults={'monthly_goal': goal})
         log_action(request.user, 'edited', f'Set monthly service target ({goal}) for user #{uid}')
         return Response({'user_id': uid, 'monthly_goal': goal})

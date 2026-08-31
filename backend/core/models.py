@@ -151,6 +151,14 @@ class Caregiver(PersonBase):
     cell_number = models.CharField(max_length=64, blank=True)
     home_language = models.CharField(max_length=128, blank=True)
     headship_type = models.CharField(max_length=64, choices=choices.HEADSHIP_TYPE_CHOICES, blank=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='household_caregiver',
+        help_text='Optional login so this household caregiver can view their own file.',
+    )
 
     documents = GenericRelation('SupportingDocument')
 

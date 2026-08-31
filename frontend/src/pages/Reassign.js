@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
+import { isFieldWorker } from "@/lib/constants";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +50,7 @@ export default function Reassign() {
     );
   }
 
-  const workers = users.filter((u) => u.role === "case-worker");
+  const workers = users.filter((u) => isFieldWorker(u.role));
   const selectedIds = households.filter((h) => selected[h.id]).map((h) => h.id);
   const allChecked = households.length > 0 && selectedIds.length === households.length;
 

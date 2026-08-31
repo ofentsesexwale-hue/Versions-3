@@ -13,7 +13,7 @@ import { DateField } from "@/components/DateField";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { CASE_STATUS_LABELS } from "@/lib/constants";
+import { CASE_STATUS_LABELS, isFieldWorker } from "@/lib/constants";
 
 const FILE_FIELD = [
   "org_household_number",
@@ -51,7 +51,7 @@ export default function HouseholdForm() {
   useEffect(() => {
     if (canAssign) {
       api.get("/users/").then((res) =>
-        setCaseworkers(res.data.filter((u) => u.role === "case-worker"))
+        setCaseworkers(res.data.filter((u) => isFieldWorker(u.role)))
       );
     }
     if (isEdit) {

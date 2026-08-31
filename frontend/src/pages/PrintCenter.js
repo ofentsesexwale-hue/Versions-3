@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { toast } from "sonner";
+import { isFieldWorker } from "@/lib/constants";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,7 @@ export default function PrintCenter() {
     () => [...new Set(households.map((h) => h.district).filter(Boolean))].sort(),
     [households]
   );
-  const workers = users.filter((u) => u.role === "case-worker");
+  const workers = users.filter((u) => isFieldWorker(u.role));
 
   const matchedIds = useMemo(() => {
     if (scope === "all") return households.map((h) => h.id);

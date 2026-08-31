@@ -1,11 +1,37 @@
 export const ROLE_LABELS = {
-  "data-capturer": "Data Capturer",
-  "case-worker": "Case Worker (SSP)",
+  "data-capturer": "Data capturer",
+  "case-worker": "Case worker (SSP)",
+  cycw: "CYCW",
+  auxiliary: "Auxiliary",
+  caregiver: "Caregiver",
   supervisor: "Supervisor (QA)",
   admin: "Administrator",
 };
 
-export const SYSTEM_BUILDER_LABEL = "System builder";
+export const LIVE_OFFICE_TITLES = [
+  "cycw",
+  "auxiliary",
+  "caregiver",
+  "data-capturer",
+  "supervisor",
+  "admin",
+];
+
+export const ROLE_PERMISSIONS = {
+  admin: "Full live office: all files, staff logins, organisation, and audit.",
+  supervisor: "All files, quality sign-off, and caseload reassignment. Cannot add staff.",
+  cycw: "Own caseload: open files, capture caregivers and children, visits, and services.",
+  "case-worker": "Own caseload (training title). Same field permissions as a CYCW.",
+  auxiliary: "Own caseload: support visits, services, and file capture. No sign-off or staff.",
+  "data-capturer": "All files for capturing. No sign-off, reassignment, or staff.",
+  caregiver: "View the household file linked to this login. Cannot change office records.",
+};
+
+export const FIELD_WORKER_ROLES = ["case-worker", "cycw", "auxiliary"];
+
+export function isFieldWorker(role) {
+  return FIELD_WORKER_ROLES.includes(role);
+}
 
 export const CASE_STATUS_LABELS = {
   open: "Open",

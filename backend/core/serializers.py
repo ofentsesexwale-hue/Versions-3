@@ -65,19 +65,26 @@ def checklist_progress(household):
 
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
+    job_title = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
     is_training = serializers.SerializerMethodField()
     is_system_builder = serializers.SerializerMethodField()
+    linked_household = serializers.SerializerMethodField()
+    permission_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'first_name', 'last_name', 'full_name', 'email',
-            'role', 'is_active', 'last_login', 'date_joined', 'is_training',
-            'is_system_builder',
+            'role', 'job_title', 'is_active', 'last_login', 'date_joined',
+            'is_training', 'is_system_builder', 'linked_household',
+            'permission_summary',
         ]
 
     def get_role(self, obj):
+        return user_role(obj)
+
+    def get_job_title(self, obj):
         return user_role(obj)
 
     def get_full_name(self, obj):
@@ -88,6 +95,23 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_is_system_builder(self, obj):
         return is_system_builder(obj)
+
+    def get_linked_household(self, obj):
+        try:
+            cg = obj.household_caregiver
+        except Caregiver.DoesNotExist:
+            return None
+        if not cg:
+            return None
+        return {
+            'id': cg.household_id,
+            'org_household_number': cg.household.org_household_number,
+            'caregiver_id': cg.id,
+        }
+
+    def get_permission_summary(self, obj):
+        from .permissions import ROLE_PERMISSION_TEXT
+        return ROLE_PERMISSION_TEXT.get(user_role(obj) or '', '')
 
 
 class ConfirmMixin(serializers.ModelSerializer):
@@ -167,6 +191,8 @@ class CaregiverSerializer(ConfirmMixin):
     surname_confirmed_by = serializers.StringRelatedField(read_only=True)
     id_number_confirmed_by = serializers.StringRelatedField(read_only=True)
     date_of_birth_confirmed_by = serializers.StringRelatedField(read_only=True)
+    has_login = serializers.SerializerMethodField()
+    login_username = serializers.SerializerMethodField()
 
     class Meta:
         model = Caregiver
@@ -174,11 +200,18 @@ class CaregiverSerializer(ConfirmMixin):
             'id', 'household', 'id_type', 'id_number', 'name', 'surname', 'known_as',
             'nationality', 'date_of_birth', 'sex', 'race', 'marital_status',
             'disability', 'disability_description', 'cell_number', 'home_language',
-            'headship_type', 'date_joined',
+            'headship_type', 'date_joined', 'has_login', 'login_username',
         ] + CONFIRM_READ_FIELDS
         read_only_fields = [
             'surname_confirmed_at', 'id_number_confirmed_at', 'date_of_birth_confirmed_at',
+            'has_login', 'login_username',
         ]
+
+    def get_has_login(self, obj):
+        return bool(obj.user_id)
+
+    def get_login_username(self, obj):
+        return obj.user.username if obj.user_id else ''
 
 
 class HouseholdMemberSerializer(EmptyBlankDatesMixin, ConfirmMixin):
