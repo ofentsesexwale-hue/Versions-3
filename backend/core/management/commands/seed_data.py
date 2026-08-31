@@ -6,6 +6,7 @@ Household numbers are prefixed with "TEST" to make this unmistakable.
 import random
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -32,7 +33,7 @@ DEMO_USERS = [
     ('capturer', 'capturer123', 'data-capturer', 'Cathy', 'Dlamini', False),
 ]
 
-LIVE_ADMIN_USERNAME = 'OrphanCoordinator'
+LIVE_ADMIN_USERNAME = getattr(settings, 'SYSTEM_BUILDER_USERNAME', 'OrphanCoordinator')
 LIVE_ADMIN_PASSWORD = 'Khaya-File-7nQ2'
 
 SA_SURNAMES = ['Nkosi', 'Dlamini', 'Mokoena', 'Khumalo', 'Ndlovu', 'Zulu', 'Sithole',
@@ -211,7 +212,7 @@ class Command(BaseCommand):
         self._ensure_training_casework(admin_user, caseworker)
 
     def _ensure_live_admin(self):
-        """Live office administrator — not a training classroom login."""
+        """Live office system builder — full administrator, not a training login."""
         admin_group = Group.objects.get(name='admin')
         old = User.objects.filter(username='npo.admin').first()
         live = User.objects.filter(username=LIVE_ADMIN_USERNAME).first()
@@ -227,11 +228,12 @@ class Command(BaseCommand):
         live.is_active = True
         live.set_password(LIVE_ADMIN_PASSWORD)
         live.save()
+        live.groups.clear()
         live.groups.add(admin_group)
         if old and old.pk != live.pk:
             old.is_active = False
             old.save(update_fields=['is_active'])
-        self.stdout.write(f'  {LIVE_ADMIN_USERNAME}  (live administrator)')
+        self.stdout.write(f'  {LIVE_ADMIN_USERNAME}  (live office — system builder, administrator)')
 
     def _apply_confirm_flags(self, person, admin_user):
         now = timezone.now()

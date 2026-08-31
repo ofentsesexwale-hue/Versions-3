@@ -13,7 +13,10 @@ from core.sa_id import parse_sa_id
 class CaseworkGoldStandardTests(TestCase):
     def setUp(self):
         Group.objects.get_or_create(name='admin')
-        self.user = User.objects.create_user('OrphanCoordinator', password='x', first_name='Office', last_name='Admin')
+        self.user = User.objects.create_user(
+            'OrphanCoordinator', password='x', first_name='Orphan', last_name='Coordinator',
+            is_staff=True, is_superuser=True,
+        )
         self.user.groups.add(Group.objects.get(name='admin'))
         self.token = Token.objects.create(user=self.user)
         self.client = APIClient()
@@ -84,3 +87,47 @@ class CaseworkGoldStandardTests(TestCase):
         peek = self.client.get('/api/households/next-file-number/')
         self.assertEqual(peek.status_code, 200)
         self.assertEqual(peek.data['org_household_number'], 'SI-0003')
+
+    def test_system_builder_cannot_be_demoted_or_deactivated(self):
+        me = self.client.get('/api/auth/me/')
+        self.assertEqual(me.status_code, 200)
+        self.assertTrue(me.data['is_system_builder'])
+        self.assertEqual(me.data['role'], 'admin')
+
+        demote = self.client.patch(
+            f'/api/staff/{self.user.pk}/',
+            {'role': 'case-worker'},
+            format='json',
+        )
+        self.assertEqual(demote.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_superuser)
+        self.assertTrue(self.user.groups.filter(name='admin').exists())
+
+        off = self.client.patch(
+            f'/api/staff/{self.user.pk}/',
+            {'is_active': False},
+            format='json',
+        )
+        self.assertEqual(off.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_active)
+
+        other = User.objects.create_user(
+            'office.lead', password='OfficeLead99',
+            is_staff=True, is_superuser=True,
+        )
+        other.groups.add(Group.objects.get(name='admin'))
+        tok = Token.objects.create(user=other)
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f'Token {tok.key}')
+        blocked = c.patch(
+            f'/api/staff/{self.user.pk}/',
+            {'role': 'supervisor'},
+            format='json',
+        )
+        self.assertEqual(blocked.status_code, 400)
+        listed = c.get('/api/staff/')
+        row = next(u for u in listed.data if u['username'] == 'OrphanCoordinator')
+        self.assertTrue(row['is_system_builder'])
+        self.assertEqual(row['role'], 'admin')

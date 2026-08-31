@@ -160,3 +160,6 @@ TRAINING_USERNAMES = frozenset({
 })
 TRAINING_HOUSEHOLD_PREFIX = 'TEST'
 LIVE_HOUSEHOLD_PREFIX = 'SI'
+
+# Live office owner. Always an administrator; Staff cannot demote or deactivate this login.
+SYSTEM_BUILDER_USERNAME = 'OrphanCoordinator'

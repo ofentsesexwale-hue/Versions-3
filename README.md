@@ -61,9 +61,9 @@ Restore is administrator-only on the Organisation page (zip created by this app)
 
 | User | Password | Role |
 | --- | --- | --- |
-| OrphanCoordinator | Khaya-File-7nQ2 | Administrator |
+| OrphanCoordinator | Khaya-File-7nQ2 | System builder (administrator) |
 
-Change this password after first sign-in. Add real staff under **Staff accounts**. Dummy TEST- files never appear for this login.
+This login is the live office **system builder**: Django superuser, staff, and the admin group. Staff accounts cannot demote or deactivate it. Change this password after first sign-in. Add real staff under **Staff accounts**. Dummy TEST- files never appear for this login.
 
 **Training classroom** (fictional TEST- households only — for staff practice):
 

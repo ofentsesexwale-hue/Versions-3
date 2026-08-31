@@ -30,7 +30,7 @@ import api from "@/lib/api";
 import { lookupHousehold, uniqueHousehold } from "@/lib/lookup";
 import { playChime } from "@/lib/chimes";
 import { useAuth } from "@/context/AuthContext";
-import { ROLE_LABELS } from "@/lib/constants";
+import { ROLE_LABELS, SYSTEM_BUILDER_LABEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -57,13 +57,13 @@ function visibleNav(role) {
   );
 }
 
-function RoleBadge({ role }) {
+function RoleBadge({ role, isSystemBuilder }) {
   return (
     <span
       className="rounded-full bg-white/50 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-foreground/80"
       data-testid="user-role-badge"
     >
-      {ROLE_LABELS[role] || role}
+      {isSystemBuilder ? SYSTEM_BUILDER_LABEL : (ROLE_LABELS[role] || role)}
     </span>
   );
 }
@@ -130,7 +130,7 @@ function SidebarContent({ user, counts, onLogout, onNavigate, logoUrl, orgName }
         )}
         <p className="truncate text-sm font-medium">{user?.full_name}</p>
         <div className="mt-1.5">
-          <RoleBadge role={user?.role} />
+          <RoleBadge role={user?.role} isSystemBuilder={user?.is_system_builder} />
         </div>
         <Button
           variant="ghost"

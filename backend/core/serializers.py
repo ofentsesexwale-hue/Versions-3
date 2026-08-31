@@ -28,7 +28,7 @@ from .models import (
     SiteConfig,
     SupportingDocument,
 )
-from .permissions import is_training_user, user_role
+from .permissions import is_system_builder, is_training_user, user_role
 
 
 class EmptyBlankDatesMixin:
@@ -67,12 +67,14 @@ class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
     is_training = serializers.SerializerMethodField()
+    is_system_builder = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'first_name', 'last_name', 'full_name', 'email',
             'role', 'is_active', 'last_login', 'date_joined', 'is_training',
+            'is_system_builder',
         ]
 
     def get_role(self, obj):
@@ -83,6 +85,9 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_is_training(self, obj):
         return is_training_user(obj)
+
+    def get_is_system_builder(self, obj):
+        return is_system_builder(obj)
 
 
 class ConfirmMixin(serializers.ModelSerializer):

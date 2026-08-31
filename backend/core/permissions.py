@@ -14,6 +14,16 @@ def is_training_user(user):
     return bool(user and getattr(user, 'username', None) in settings.TRAINING_USERNAMES)
 
 
+def system_builder_username():
+    return getattr(settings, 'SYSTEM_BUILDER_USERNAME', 'OrphanCoordinator')
+
+
+def is_system_builder(user):
+    """Orphan Coordinator — live office system builder (cannot be demoted)."""
+    name = getattr(user, 'username', None) if user else None
+    return bool(name) and name.lower() == system_builder_username().lower()
+
+
 def training_households_filter():
     prefix = getattr(settings, 'TRAINING_HOUSEHOLD_PREFIX', 'TEST')
     return Q(org_household_number__istartswith=prefix)

@@ -3,7 +3,7 @@ import { KeyRound, Plus, Save, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { ROLE_LABELS } from "@/lib/constants";
+import { ROLE_LABELS, SYSTEM_BUILDER_LABEL } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -136,20 +136,37 @@ export default function Staff() {
             <div key={s.id} className="flex flex-col gap-3 rounded-2xl border border-white/50 bg-white/40 p-4 sm:flex-row sm:items-center" data-testid={`staff-row-${s.id}`}>
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{s.full_name || s.username}</p>
-                <p className="text-sm text-muted-foreground">{s.username} · {ROLE_LABELS[s.role] || s.role || "no role"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {s.username} · {s.is_system_builder ? SYSTEM_BUILDER_LABEL : (ROLE_LABELS[s.role] || s.role || "no role")}
+                </p>
+                {s.is_system_builder && (
+                  <p className="mt-1 text-[11px] font-medium text-emerald-800">
+                    System builder — live office administrator. These privileges cannot be removed.
+                  </p>
+                )}
                 {s.is_training && (
                   <p className="mt-1 text-[11px] font-medium text-amber-800">Training classroom login — dummy TEST files only</p>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={s.role || "case-worker"} onValueChange={(v) => patch(s.id, { role: v })}>
-                  <SelectTrigger className="h-10 w-[180px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {s.is_system_builder ? (
+                  <span className="inline-flex h-10 items-center rounded-md border border-white/60 bg-white/50 px-3 text-sm">
+                    {SYSTEM_BUILDER_LABEL}
+                  </span>
+                ) : (
+                  <Select value={s.role || "case-worker"} onValueChange={(v) => patch(s.id, { role: v })}>
+                    <SelectTrigger className="h-10 w-[180px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(ROLE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
                 <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={!!s.is_active} onCheckedChange={(v) => patch(s.id, { is_active: !!v })} />
+                  <Checkbox
+                    checked={!!s.is_active}
+                    disabled={!!s.is_system_builder}
+                    onCheckedChange={(v) => patch(s.id, { is_active: !!v })}
+                  />
                   Active
                 </label>
                 <Button variant="outline" size="sm" className="gap-1" onClick={() => { setPwUser(s); setNewPw(""); }}>

@@ -54,6 +54,7 @@ from .permissions import (
     ROLE_ADMIN,
     ROLE_CASE_WORKER,
     can_signoff_checklist,
+    is_system_builder,
     is_training_user,
     training_households_filter,
     user_role,
@@ -889,11 +890,13 @@ class PartnerAgencyViewSet(viewsets.ModelViewSet):
 def _set_user_role(user, role):
     if role not in settings.ALL_ROLES:
         raise ValueError(f'Unknown role: {role}')
+    if is_system_builder(user) and role != ROLE_ADMIN:
+        raise ValueError('The system builder keeps administrator privileges.')
     user.groups.clear()
     group, _ = Group.objects.get_or_create(name=role)
     user.groups.add(group)
-    user.is_staff = role == ROLE_ADMIN
-    user.is_superuser = role == ROLE_ADMIN
+    user.is_staff = role == ROLE_ADMIN or is_system_builder(user)
+    user.is_superuser = role == ROLE_ADMIN or is_system_builder(user)
     user.save()
 
 
@@ -943,6 +946,11 @@ class StaffViewSet(viewsets.ViewSet):
             user.email = request.data.get('email') or ''
         if 'is_active' in request.data:
             active = bool(request.data.get('is_active'))
+            if not active and is_system_builder(user):
+                return Response(
+                    {'detail': 'The system builder account cannot be deactivated.'},
+                    status=400,
+                )
             if not active and user.pk == request.user.pk:
                 return Response({'detail': 'You cannot deactivate your own account.'}, status=400)
             if not active and user_role(user) == ROLE_ADMIN:
@@ -957,6 +965,11 @@ class StaffViewSet(viewsets.ViewSet):
             role = request.data.get('role')
             if role not in settings.ALL_ROLES:
                 return Response({'detail': 'Choose a valid role.'}, status=400)
+            if is_system_builder(user) and role != ROLE_ADMIN:
+                return Response(
+                    {'detail': 'The system builder keeps administrator privileges.'},
+                    status=400,
+                )
             if user_role(user) == ROLE_ADMIN and role != ROLE_ADMIN:
                 others = User.objects.filter(is_active=True).exclude(pk=user.pk)
                 if not any(user_role(u) == ROLE_ADMIN for u in others):

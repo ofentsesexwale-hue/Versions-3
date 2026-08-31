@@ -5,6 +5,8 @@ export const ROLE_LABELS = {
   admin: "Administrator",
 };
 
+export const SYSTEM_BUILDER_LABEL = "System builder";
+
 export const CASE_STATUS_LABELS = {
   open: "Open",
   graduated: "Graduated",
