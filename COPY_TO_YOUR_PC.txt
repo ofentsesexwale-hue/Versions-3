@@ -8,7 +8,8 @@ The Windows program is this file (same folder, not inside desktop\):
 
 Do not open it from inside the zip. Copy it out first.
 
-If Windows says another program is using this file, double-click windows-close-locks.bat, then read IF_FILE_IN_USE.txt.
+To install Python and the CaseFile engine in PowerShell:
 
-Double-click OVC-CaseFile.exe to open the office window.
-Double-click desktop\install-desktop-shortcut.bat to put the Sebueng Itumeleng icon on your Desktop.
+  Set-ExecutionPolicy -Scope Process Bypass
+  cd C:\Users\sebue\ovc-case-manager
+  .\install-python-and-engine.ps1

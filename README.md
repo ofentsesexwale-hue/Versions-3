@@ -10,7 +10,15 @@ The office file opens in its **own window** named OVC CaseFile — no Chrome/Edg
 
 **Windows (office PC):** download the new `OVC-CaseFile.exe` (Python and the CaseFile engine are inside it). Put it in `C:\Users\sebue\ovc-case-manager` and double-click it.
 
-If an older `.exe` still asks for Python, double-click `install-python-and-engine.bat` once (needs internet that first time).
+If an older `.exe` still asks for Python, open **PowerShell** and paste:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+cd C:\Users\sebue\ovc-case-manager
+.\install-python-and-engine.ps1
+```
+
+Or double-click `install-python-and-engine.bat` once (needs internet that first time).
 
 **Linux / this PC:** double-click `start-desktop.sh`, or the AppImage in `desktop/release/` after packing. Put a shortcut on the desktop with `./desktop/install-desktop-shortcut.sh`.
 
