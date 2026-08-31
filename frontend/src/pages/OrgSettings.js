@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, Save } from "lucide-react";
+import { Building2, HardDrive, Save } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -85,6 +85,87 @@ export default function OrgSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <BackupPanel />
     </div>
+  );
+}
+
+function BackupPanel() {
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    api.get("/backups/").then((r) => setRows(r.data.backups || [])).catch(() => {});
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const downloadBlob = async (path, filename) => {
+    const res = await api.get(path, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post("/backups/create/", {}, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ovc-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Backup saved on this computer");
+      load();
+    } catch {
+      toast.error("Could not create backup");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restore = async (file) => {
+    if (!file) return;
+    if (!window.confirm("This replaces the office file on this PC with the backup. Continue?")) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    setBusy(true);
+    try {
+      await api.post("/backups/restore/", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success("Restored. Refresh the page.");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Restore failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card data-testid="backup-panel">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base"><HardDrive className="h-4 w-4" /> Local backup</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">Copies the database and uploaded files onto this PC. No internet, no cloud drive.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={create} disabled={busy} data-testid="backup-create-button">Create backup zip</Button>
+          <label className="inline-flex">
+            <input type="file" accept=".zip" className="hidden" onChange={(e) => restore(e.target.files?.[0])} data-testid="backup-restore-input" />
+            <Button type="button" variant="outline" disabled={busy} onClick={(e) => e.currentTarget.parentElement.querySelector("input").click()}>Restore from zip</Button>
+          </label>
+        </div>
+        {rows.slice(0, 8).map((b) => (
+          <button key={b.name} className="block w-full rounded-xl border border-white/50 px-3 py-2 text-left text-sm hover:bg-white/50" onClick={() => downloadBlob(`/backups/${encodeURIComponent(b.name)}/download/`, b.name)}>
+            {b.name} · {(b.size / 1024).toFixed(0)} KB
+          </button>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

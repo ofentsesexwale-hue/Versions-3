@@ -1,6 +1,7 @@
 """API views enforcing server-side RBAC + audit logging."""
 import csv
 from datetime import timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -21,11 +22,12 @@ from rest_framework.views import APIView
 
 from . import choices
 from .audit import log_action
+from .backup_ops import backup_dir, create_backup_zip, list_backups, restore_from_zip
+from .models import digits_only
 from .models import (
     AuditLogEntry,
     Assessment,
     Caregiver,
-    digits_only,
     CaseFileChecklistItem,
     ConsentRecord,
     Cow1Plan,
@@ -35,13 +37,17 @@ from .models import (
     Household,
     HouseholdMember,
     Organisation,
+    PartnerAgency,
+    PlannedVisit,
     ProcessNote,
     ProtectionIncident,
+    Referral,
     ServiceDelivery,
     ServiceTarget,
     SiteConfig,
     SupportingDocument,
 )
+from .sa_id import parse_sa_id
 from .permissions import (
     IsAdminRole,
     IsStaffRole,
@@ -67,8 +73,11 @@ from .serializers import (
     HouseholdSerializer,
     HouseholdMemberSerializer,
     OrganisationSerializer,
+    PartnerAgencySerializer,
+    PlannedVisitSerializer,
     ProcessNoteSerializer,
     ProtectionIncidentSerializer,
+    ReferralSerializer,
     ServiceDeliverySerializer,
     SiteConfigSerializer,
     SupportingDocumentSerializer,
@@ -810,6 +819,65 @@ class GroupWorkSessionViewSet(_HouseholdChildViewSet):
     audit_label = 'GRW group session'
 
 
+class ReferralViewSet(_HouseholdChildViewSet):
+    model = Referral
+    serializer_class = ReferralSerializer
+    audit_label = 'Referral'
+
+    def get_queryset(self):
+        return super().get_queryset().select_related('household', 'household__caregiver', 'partner', 'member', 'created_by')
+
+
+class PlannedVisitViewSet(_HouseholdChildViewSet):
+    model = PlannedVisit
+    serializer_class = PlannedVisitSerializer
+    audit_label = 'Planned visit'
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('household', 'household__caregiver', 'assigned_to', 'created_by')
+        status = self.request.query_params.get('status')
+        if status:
+            qs = qs.filter(status=status)
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def mark_done(self, request, pk=None):
+        visit = self.get_object()
+        visit.status = 'done'
+        visit.completed_at = timezone.localdate()
+        visit.save()
+        log_action(request.user, 'edited', f'Completed visit #{visit.pk} for Household #{visit.household_id}')
+        return Response(PlannedVisitSerializer(visit).data)
+
+    @action(detail=True, methods=['post'])
+    def mark_missed(self, request, pk=None):
+        visit = self.get_object()
+        visit.status = 'missed'
+        visit.save()
+        log_action(request.user, 'edited', f'Missed visit #{visit.pk} for Household #{visit.household_id}')
+        return Response(PlannedVisitSerializer(visit).data)
+
+
+class PartnerAgencyViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsStaffRole]
+    serializer_class = PartnerAgencySerializer
+
+    def get_queryset(self):
+        qs = PartnerAgency.objects.all()
+        if is_training_user(self.request.user):
+            return qs.filter(is_training=True)
+        return qs.filter(is_training=False)
+
+    def perform_create(self, serializer):
+        obj = serializer.save(is_training=is_training_user(self.request.user))
+        log_action(self.request.user, 'created', f'Partner {obj.name}')
+
+    def perform_destroy(self, instance):
+        name = instance.name
+        instance.delete()
+        log_action(self.request.user, 'deleted', f'Partner {name}')
+
+
 def _set_user_role(user, role):
     if role not in settings.ALL_ROLES:
         raise ValueError(f'Unknown role: {role}')
@@ -1246,6 +1314,13 @@ def dashboard(request):
         | Q(content_type__model='caregiver', object_id__in=Caregiver.objects.filter(household__in=qs).values('id'))
         | Q(content_type__model='householdmember', object_id__in=HouseholdMember.objects.filter(household__in=qs).values('id'))
     ).count()
+    today = timezone.localdate()
+    stats['overdue_visits'] = PlannedVisit.objects.filter(
+        household__in=qs, status='planned', visit_date__lt=today
+    ).count()
+    stats['open_referrals'] = Referral.objects.filter(household__in=qs).exclude(
+        status__in=('completed', 'declined', 'no_show')
+    ).count()
 
     completeness_bands = None
     if role in ('supervisor', 'admin'):
@@ -1309,6 +1384,11 @@ def choices_view(request):
         'incident_status': [{'value': c[0], 'label': c[1]} for c in choices.INCIDENT_STATUS_CHOICES],
         'evaluation_recommendation': [{'value': c[0], 'label': c[1]} for c in choices.EVALUATION_RECOMMENDATION_CHOICES],
         'staff_roles': [{'value': r, 'label': r} for r in settings.ALL_ROLES],
+        'partner_kinds': [{'value': c[0], 'label': c[1]} for c in choices.PARTNER_KIND_CHOICES],
+        'referral_status': [{'value': c[0], 'label': c[1]} for c in choices.REFERRAL_STATUS_CHOICES],
+        'referral_reasons': [{'value': c[0], 'label': c[1]} for c in choices.REFERRAL_REASON_CHOICES],
+        'visit_types': [{'value': c[0], 'label': c[1]} for c in choices.VISIT_TYPE_CHOICES],
+        'visit_status': [{'value': c[0], 'label': c[1]} for c in choices.VISIT_STATUS_CHOICES],
     })
 
 
@@ -1420,3 +1500,128 @@ class ChoicesView(APIView):
 
     def get(self, request):
         return choices_view(request)
+
+
+class IdCheckView(APIView):
+    """Checksum / DOB from an SA ID, plus duplicate people already on file."""
+    permission_classes = [IsAuthenticated, IsStaffRole]
+
+    def get(self, request):
+        raw = request.query_params.get('q') or request.query_params.get('id_number') or ''
+        parsed = parse_sa_id(raw)
+        digits = parsed['digits']
+        duplicates = []
+        exclude_hh = request.query_params.get('exclude_household')
+        exclude_cg = request.query_params.get('exclude_caregiver')
+        exclude_mem = request.query_params.get('exclude_member')
+        if len(digits) >= 6:
+            hh_qs = scoped_household_qs(request.user)
+            cg_qs = Caregiver.objects.filter(household__in=hh_qs, id_number_digits=digits)
+            mem_qs = HouseholdMember.objects.filter(household__in=hh_qs, id_number_digits=digits)
+            if exclude_hh and exclude_hh.isdigit():
+                cg_qs = cg_qs.exclude(household_id=int(exclude_hh))
+                mem_qs = mem_qs.exclude(household_id=int(exclude_hh))
+            if exclude_cg and exclude_cg.isdigit():
+                cg_qs = cg_qs.exclude(pk=int(exclude_cg))
+            if exclude_mem and exclude_mem.isdigit():
+                mem_qs = mem_qs.exclude(pk=int(exclude_mem))
+            for p in cg_qs.select_related('household')[:10]:
+                duplicates.append({
+                    'role': 'caregiver',
+                    'name': f'{p.name} {p.surname}'.strip(),
+                    'id_number': p.id_number,
+                    'household_id': p.household_id,
+                    'org_household_number': p.household.org_household_number,
+                })
+            for p in mem_qs.select_related('household')[:10]:
+                duplicates.append({
+                    'role': 'member',
+                    'name': f'{p.name} {p.surname}'.strip(),
+                    'id_number': p.id_number,
+                    'household_id': p.household_id,
+                    'org_household_number': p.household.org_household_number,
+                })
+        parsed['duplicates'] = duplicates
+        return Response(parsed)
+
+
+class WorkDiaryView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffRole]
+
+    def get(self, request):
+        hh = scoped_household_qs(request.user)
+        today = timezone.localdate()
+        horizon = today + timedelta(days=14)
+        visits = PlannedVisit.objects.filter(household__in=hh).select_related(
+            'household', 'household__caregiver', 'assigned_to'
+        )
+        overdue = visits.filter(status='planned', visit_date__lt=today).order_by('visit_date')
+        upcoming = visits.filter(status='planned', visit_date__gte=today, visit_date__lte=horizon).order_by('visit_date')
+        open_ref = Referral.objects.filter(household__in=hh).exclude(
+            status__in=('completed', 'declined', 'no_show')
+        ).select_related('household', 'household__caregiver', 'partner', 'member').order_by('follow_up_date', '-referred_on')
+        overdue_ref = open_ref.filter(follow_up_date__isnull=False, follow_up_date__lt=today)
+        return Response({
+            'counts': {
+                'overdue_visits': overdue.count(),
+                'upcoming_visits': upcoming.count(),
+                'open_referrals': open_ref.count(),
+                'overdue_referrals': overdue_ref.count(),
+            },
+            'overdue_visits': PlannedVisitSerializer(overdue[:50], many=True).data,
+            'upcoming_visits': PlannedVisitSerializer(upcoming[:50], many=True).data,
+            'open_referrals': ReferralSerializer(open_ref[:50], many=True).data,
+        })
+
+
+class BackupListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def get(self, request):
+        return Response({
+            'engine': settings.DATABASES['default']['ENGINE'],
+            'sqlite': settings.DATABASES['default']['ENGINE'].endswith('sqlite3'),
+            'backups': list_backups(),
+        })
+
+
+class BackupCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def post(self, request):
+        path = create_backup_zip()
+        log_action(request.user, 'downloaded', f'Created office backup {path.name}')
+        return FileResponse(open(path, 'rb'), as_attachment=True, filename=path.name)
+
+
+class BackupDownloadView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def get(self, request, name):
+        path = (backup_dir() / name).resolve()
+        if path.parent != backup_dir().resolve() or not path.name.startswith('ovc-backup-') or path.suffix != '.zip':
+            return Response({'detail': 'Invalid backup name.'}, status=400)
+        if not path.exists():
+            raise Http404
+        log_action(request.user, 'downloaded', f'Downloaded office backup {path.name}')
+        return FileResponse(open(path, 'rb'), as_attachment=True, filename=path.name)
+
+
+class BackupRestoreView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminRole]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        upload = request.FILES.get('file')
+        if not upload:
+            return Response({'detail': 'Choose a backup zip created by this office.'}, status=400)
+        dest = backup_dir() / f'uploaded-{Path(upload.name).name}'
+        with dest.open('wb') as out:
+            for chunk in upload.chunks():
+                out.write(chunk)
+        try:
+            restore_from_zip(dest)
+        except Exception as exc:
+            return Response({'detail': str(exc)}, status=400)
+        log_action(request.user, 'edited', f'Restored office file from {dest.name}')
+        return Response({'detail': 'Office file restored. Refresh the page.'})

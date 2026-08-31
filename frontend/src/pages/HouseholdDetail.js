@@ -45,6 +45,7 @@ import { PrintFormsPanel } from "@/components/PrintFormsPanel";
 import { ProcessNotes } from "@/components/ProcessNotes";
 import { ServicesPanel } from "@/components/ServicesPanel";
 import { CaseRecords } from "@/components/CaseRecords";
+import { CaseworkPanels } from "@/components/CaseworkPanels";
 import { printTimeline } from "@/lib/print";
 import { CASE_STATUS_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, formatDate, formatDateTime } from "@/lib/constants";
 
@@ -411,6 +412,8 @@ export default function HouseholdDetail() {
       <ProcessNotes householdId={id} />
 
       <ServicesPanel householdId={id} caregiver={hh.caregiver} members={hh.members} />
+
+      <CaseworkPanels householdId={id} members={hh.members || []} caregiver={hh.caregiver} />
 
       <CaseRecords householdId={id} household={hh} members={hh.members || []} caregiver={hh.caregiver} />
 

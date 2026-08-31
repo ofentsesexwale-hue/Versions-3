@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateField } from "@/components/DateField";
 import { ConfirmableField } from "@/components/ConfirmableField";
 import { ChoiceSelect, usePersonForm } from "@/components/PersonFormKit";
+import { IdCheckHint } from "@/components/IdCheckHint";
 
 export default function MemberForm() {
   const { id } = useParams();
@@ -86,6 +87,15 @@ export default function MemberForm() {
           <ConfirmableField fieldKey="id_number" label="ID / Passport number" hasValue={pf.hasVal("id_number")} confirmed={pf.confirmed.id_number} confirmedBy={pf.meta.id_number?.by} confirmedAt={pf.meta.id_number?.at} onConfirm={() => pf.setConfirmed((c) => ({ ...c, id_number: true }))}>
             <Input value={f.id_number || ""} onChange={(e) => pf.setConfirmable("id_number", e.target.value)} className="h-11" data-testid="member-id_number-input" />
           </ConfirmableField>
+          <IdCheckHint
+            idNumber={f.id_number}
+            idType={f.id_type}
+            excludeMember={memberId}
+            currentDob={f.date_of_birth}
+            currentSex={f.sex}
+            onApplyDob={(v) => pf.setConfirmable("date_of_birth", v)}
+            onApplySex={(v) => pf.set("sex", v)}
+          />
           <ConfirmableField fieldKey="date_of_birth" label="Date of birth" hasValue={pf.hasVal("date_of_birth")} confirmed={pf.confirmed.date_of_birth} confirmedBy={pf.meta.date_of_birth?.by} confirmedAt={pf.meta.date_of_birth?.at} onConfirm={() => pf.setConfirmed((c) => ({ ...c, date_of_birth: true }))}>
             <DateField value={f.date_of_birth} onChange={(v) => pf.setConfirmable("date_of_birth", v)} testId="date-picker-member-dob" />
           </ConfirmableField>

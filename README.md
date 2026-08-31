@@ -13,11 +13,13 @@ start-local.bat           # Windows
 
 Open http://127.0.0.1:43141 (API on 8001; the UI proxies `/api`).
 
-Backup SQLite and uploaded files:
+Backup SQLite and uploaded files from **Organisation** in the app, or:
 
 ```bash
 cd backend && .venv/bin/python manage.py backup
 ```
+
+Restore is administrator-only on the Organisation page (zip created by this app). That stays on the office PC.
 
 ## Logins
 
@@ -63,6 +65,10 @@ If several people share a partial number, you get a list. If nobody matches, you
 - School, grade, and grant types (CSG / FCG / CDG and others)
 - Child HIVSTAT: status, ART, viral load, last test (need-to-know health data)
 - Dated consent (services, information sharing, photo) with caregiver sign-off and child assent
+- Work diary: planned home/school visits, overdue follow-ups
+- External referrals (SASSA, clinic, school, SAPS) with status until closed
+- Local partner directory (typed in on this PC — never looked up online)
+- SA ID checksum, date-of-birth/sex from the 13 digits, and a warning if that ID is already on another file
 - Family care plan rows that print filled
 - CW 09 assessments, CW 11 process notes, CW 12 evaluations
 - COW 1 community plans, GRW group sessions, Form 22 protection incidents

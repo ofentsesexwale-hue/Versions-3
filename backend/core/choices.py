@@ -260,3 +260,50 @@ SERVICE_TYPE_CHOICES = [
     ('Psychosocial Support', 'Psychosocial Support'),
     ('Other', 'Other'),
 ]
+
+PARTNER_KIND_CHOICES = [
+    ('sassa', 'SASSA'),
+    ('clinic', 'Clinic / hospital'),
+    ('school', 'School'),
+    ('police', 'SAPS / police'),
+    ('dsd', 'DSD / social work'),
+    ('home_affairs', 'Home Affairs'),
+    ('ngo', 'Partner NGO'),
+    ('other', 'Other'),
+]
+
+REFERRAL_STATUS_CHOICES = [
+    ('draft', 'Draft'),
+    ('sent', 'Sent'),
+    ('accepted', 'Accepted by partner'),
+    ('completed', 'Completed'),
+    ('declined', 'Declined'),
+    ('no_show', 'No show'),
+]
+
+REFERRAL_REASON_CHOICES = [
+    ('grant', 'Social grant (CSG / FCG / CDG)'),
+    ('hiv_test', 'HIV testing'),
+    ('art', 'ART / chronic care'),
+    ('school', 'School enrolment or support'),
+    ('birth_cert', 'Birth certificate / ID'),
+    ('protection', 'Child protection / SAPS'),
+    ('food', 'Food or material relief'),
+    ('counselling', 'Counselling'),
+    ('other', 'Other'),
+]
+
+VISIT_TYPE_CHOICES = [
+    ('home', 'Home visit'),
+    ('school', 'School visit'),
+    ('office', 'Office appointment'),
+    ('phone', 'Telephone follow-up'),
+    ('other', 'Other'),
+]
+
+VISIT_STATUS_CHOICES = [
+    ('planned', 'Planned'),
+    ('done', 'Completed'),
+    ('missed', 'Missed'),
+    ('cancelled', 'Cancelled'),
+]

@@ -4,9 +4,11 @@ import {
   AlertTriangle,
   Briefcase,
   Building2,
+  CalendarClock,
   FileText,
   HeartHandshake,
   Home,
+  Landmark,
   LogOut,
   Menu,
   Plus,
@@ -32,7 +34,9 @@ const NAV = [
   { key: "dashboard", label: "Dashboard", to: "/", icon: Home, end: true },
   { key: "verification", label: "Verification", to: "/verification?field=id_number", icon: AlertTriangle, roles: ["admin", "supervisor"], badgeKey: "verification" },
   { key: "my-households", label: "My Households", to: "/my-households", icon: Briefcase },
+  { key: "work-diary", label: "Work diary", to: "/work-diary", icon: CalendarClock, badgeKey: "diary" },
   { key: "services", label: "Daily Service Log", to: "/services", icon: HeartHandshake },
+  { key: "partners", label: "Partner directory", to: "/partners", icon: Landmark },
   { key: "reassign", label: "Reassign Caseload", to: "/reassign", icon: Users, roles: ["admin", "supervisor"] },
   { key: "print-center", label: "Print Center", to: "/print-center", icon: Printer, roles: ["admin", "supervisor"] },
   { key: "signoffs", label: "Sign-off History", to: "/signoffs", icon: ShieldCheck, roles: ["admin", "supervisor"] },
@@ -145,7 +149,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [counts, setCounts] = useState({ verification: 0 });
+  const [counts, setCounts] = useState({ verification: 0, diary: 0 });
   const [org, setOrg] = useState(null);
 
   useEffect(() => {
@@ -157,10 +161,14 @@ export function AppShell() {
     : null;
 
   useEffect(() => {
+    api.get("/work-diary/").then((r) => {
+      const c = r.data.counts || {};
+      setCounts((prev) => ({ ...prev, diary: (c.overdue_visits || 0) + (c.overdue_referrals || 0) }));
+    }).catch(() => {});
     if (user?.role === "admin" || user?.role === "supervisor") {
       api
         .get("/households/verification_count/")
-        .then((r) => setCounts({ verification: r.data.total }))
+        .then((r) => setCounts((prev) => ({ ...prev, verification: r.data.total })))
         .catch(() => {});
     }
   }, [user]);

@@ -24,6 +24,8 @@ import ChangePassword from "@/pages/ChangePassword";
 import SignoffHistory from "@/pages/SignoffHistory";
 import ServiceLog from "@/pages/ServiceLog";
 import ServiceTargets from "@/pages/ServiceTargets";
+import WorkDiary from "@/pages/WorkDiary";
+import Partners from "@/pages/Partners";
 
 function App() {
   return (
@@ -42,6 +44,8 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="my-households" element={<MyHouseholds />} />
               <Route path="services" element={<ServiceLog />} />
+              <Route path="work-diary" element={<WorkDiary />} />
+              <Route path="partners" element={<Partners />} />
               <Route path="reassign" element={<Reassign />} />
               <Route path="print-center" element={<PrintCenter />} />
               <Route path="signoffs" element={<SignoffHistory />} />

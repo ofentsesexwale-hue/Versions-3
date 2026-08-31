@@ -24,6 +24,9 @@ router.register(r'protection-incidents', views.ProtectionIncidentViewSet, basena
 router.register(r'cow1', views.Cow1PlanViewSet, basename='cow1')
 router.register(r'evaluations', views.EvaluationViewSet, basename='evaluation')
 router.register(r'group-sessions', views.GroupWorkSessionViewSet, basename='groupsession')
+router.register(r'referrals', views.ReferralViewSet, basename='referral')
+router.register(r'visits', views.PlannedVisitViewSet, basename='visit')
+router.register(r'partners', views.PartnerAgencyViewSet, basename='partner')
 router.register(r'staff', views.StaffViewSet, basename='staff')
 
 api_patterns = [
@@ -36,6 +39,12 @@ api_patterns = [
     path('users/', views.UsersListView.as_view()),
     path('organisation/', views.OrganisationView.as_view()),
     path('site-config/', views.SiteConfigView.as_view()),
+    path('id-check/', views.IdCheckView.as_view()),
+    path('work-diary/', views.WorkDiaryView.as_view()),
+    path('backups/', views.BackupListView.as_view()),
+    path('backups/create/', views.BackupCreateView.as_view()),
+    path('backups/restore/', views.BackupRestoreView.as_view()),
+    path('backups/<str:name>/download/', views.BackupDownloadView.as_view()),
     path('service-targets/', views.ServiceTargetView.as_view()),
     path('branding/', views.BrandingView.as_view()),
     path('print/timeline/', print_views.print_timeline),

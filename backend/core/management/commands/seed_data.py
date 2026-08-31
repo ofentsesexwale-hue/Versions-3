@@ -17,6 +17,9 @@ from core.models import (
     CaseFileChecklistItem,
     Household,
     HouseholdMember,
+    PartnerAgency,
+    PlannedVisit,
+    Referral,
 )
 
 fake = Faker('en_US')
@@ -109,6 +112,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 'Training households already exist; skipping data seed. Use --force to reseed TEST- files only.'))
             self._ensure_training_assignments(caseworker)
+            self._ensure_training_casework(admin_user, caseworker)
             self.stdout.write(self.style.SUCCESS('Done.'))
             return
 
@@ -199,6 +203,7 @@ class Command(BaseCommand):
             f'Seeded {count} training households. "{caseworker.username}" has '
             f'{caseworker.assigned_households.count()} assigned'
             + (f'; caseworker2 has {extra}.' if cw2 else '.')))
+        self._ensure_training_casework(admin_user, caseworker)
 
     def _apply_confirm_flags(self, person, admin_user):
         now = timezone.now()
@@ -216,6 +221,40 @@ class Command(BaseCommand):
             if hh.assigned_to.exists():
                 continue
             hh.assigned_to.add(caseworker if i % 2 == 0 else (cw2 or caseworker))
+
+    def _ensure_training_casework(self, admin_user, caseworker):
+        """Sample partners, referrals and visits for training — never live office."""
+        if not PartnerAgency.objects.filter(is_training=True).exists():
+            PartnerAgency.objects.bulk_create([
+                PartnerAgency(name='Umlazi SASSA office', kind='sassa', phone='031 000 0000',
+                              address='Mangosuthu Highway', is_training=True),
+                PartnerAgency(name='Prince Mshiyeni clinic', kind='clinic', phone='031 000 1111',
+                              address='Umlazi', is_training=True),
+                PartnerAgency(name='SAPS Umlazi', kind='police', phone='10111', is_training=True),
+                PartnerAgency(name='Home Affairs Durban', kind='home_affairs', is_training=True),
+            ])
+        hh = Household.objects.filter(org_household_number='TEST-0001').first()
+        if not hh:
+            return
+        partner = PartnerAgency.objects.filter(is_training=True, kind='sassa').first()
+        if not Referral.objects.filter(household=hh).exists():
+            Referral.objects.create(
+                household=hh, partner=partner, reason='grant',
+                client_name='Joseph Adams', details='Apply for CSG',
+                status='sent', follow_up_date=timezone.localdate() - timedelta(days=2),
+                created_by=admin_user,
+            )
+        if not PlannedVisit.objects.filter(household=hh).exists():
+            PlannedVisit.objects.create(
+                household=hh, visit_date=timezone.localdate() - timedelta(days=3),
+                visit_type='home', purpose='Follow up on grant application',
+                status='planned', assigned_to=caseworker, created_by=admin_user,
+            )
+            PlannedVisit.objects.create(
+                household=hh, visit_date=timezone.localdate() + timedelta(days=2),
+                visit_type='school', purpose='Teacher feedback',
+                status='planned', assigned_to=caseworker, created_by=admin_user,
+            )
 
 
 def choices_all_roles():

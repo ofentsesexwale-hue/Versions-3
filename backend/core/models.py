@@ -517,3 +517,83 @@ class GroupWorkSession(models.Model):
 
     def __str__(self):
         return f"GRW {self.group_name} Household #{self.household_id}"
+
+
+class PartnerAgency(models.Model):
+    """Local directory of clinics, SASSA, schools, SAPS — typed in by this office."""
+    name = models.CharField(max_length=255)
+    kind = models.CharField(max_length=32, choices=choices.PARTNER_KIND_CHOICES, default='other')
+    contact_person = models.CharField(max_length=255, blank=True)
+    phone = models.CharField(max_length=64, blank=True)
+    address = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    is_training = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Referral(models.Model):
+    """Tracked external referral (CW 04B as a live record, not only a blank print)."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='referrals')
+    member = models.ForeignKey(
+        HouseholdMember, null=True, blank=True, on_delete=models.SET_NULL, related_name='referrals'
+    )
+    client_name = models.CharField(max_length=255, blank=True)
+    partner = models.ForeignKey(
+        PartnerAgency, null=True, blank=True, on_delete=models.SET_NULL, related_name='referrals'
+    )
+    agency_name = models.CharField(max_length=255, blank=True)
+    reason = models.CharField(max_length=32, choices=choices.REFERRAL_REASON_CHOICES, default='other')
+    details = models.TextField(blank=True)
+    referred_on = models.DateField(default=today)
+    follow_up_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=choices.REFERRAL_STATUS_CHOICES, default='sent', db_index=True)
+    outcome = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='referrals',
+    )
+
+    class Meta:
+        ordering = ['-referred_on', '-id']
+
+    def display_agency(self):
+        if self.partner_id:
+            return self.partner.name
+        return self.agency_name or '—'
+
+    def __str__(self):
+        return f"Referral {self.display_agency()} Household #{self.household_id}"
+
+
+class PlannedVisit(models.Model):
+    """Diary of planned home/school/office visits — the case-worker work list."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='planned_visits')
+    visit_date = models.DateField(db_index=True)
+    visit_type = models.CharField(max_length=16, choices=choices.VISIT_TYPE_CHOICES, default='home')
+    purpose = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=16, choices=choices.VISIT_STATUS_CHOICES, default='planned', db_index=True)
+    notes = models.TextField(blank=True)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='planned_visits',
+    )
+    completed_at = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_visits',
+    )
+
+    class Meta:
+        ordering = ['visit_date', 'id']
+
+    def __str__(self):
+        return f"Visit {self.visit_date} Household #{self.household_id}"

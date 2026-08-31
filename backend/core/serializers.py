@@ -19,8 +19,11 @@ from .models import (
     Household,
     HouseholdMember,
     Organisation,
+    PartnerAgency,
+    PlannedVisit,
     ProcessNote,
     ProtectionIncident,
+    Referral,
     ServiceDelivery,
     SiteConfig,
     SupportingDocument,
@@ -608,3 +611,74 @@ class GroupWorkSessionSerializer(EmptyBlankDatesMixin, serializers.ModelSerializ
             'created_at', 'created_by',
         ]
         read_only_fields = ['created_at', 'created_by']
+
+
+class PartnerAgencySerializer(serializers.ModelSerializer):
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+
+    class Meta:
+        model = PartnerAgency
+        fields = [
+            'id', 'name', 'kind', 'kind_display', 'contact_person', 'phone',
+            'address', 'notes', 'is_training', 'created_at',
+        ]
+        read_only_fields = ['created_at', 'is_training']
+
+
+class ReferralSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+    reason_display = serializers.CharField(source='get_reason_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    partner_name = serializers.SerializerMethodField()
+    member_name = serializers.SerializerMethodField()
+    household_number = serializers.CharField(source='household.org_household_number', read_only=True)
+    caregiver_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Referral
+        fields = [
+            'id', 'household', 'household_number', 'caregiver_name', 'member', 'member_name',
+            'client_name', 'partner', 'partner_name', 'agency_name', 'reason', 'reason_display',
+            'details', 'referred_on', 'follow_up_date', 'status', 'status_display', 'outcome',
+            'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
+
+    def get_partner_name(self, obj):
+        return obj.display_agency()
+
+    def get_member_name(self, obj):
+        if not obj.member:
+            return obj.client_name
+        return f'{obj.member.name} {obj.member.surname}'.strip() or obj.client_name
+
+    def get_caregiver_name(self, obj):
+        cg = getattr(obj.household, 'caregiver', None)
+        return f'{cg.name} {cg.surname}'.strip() if cg else ''
+
+
+class PlannedVisitSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    visit_type_display = serializers.CharField(source='get_visit_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    household_number = serializers.CharField(source='household.org_household_number', read_only=True)
+    caregiver_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlannedVisit
+        fields = [
+            'id', 'household', 'household_number', 'caregiver_name', 'visit_date',
+            'visit_type', 'visit_type_display', 'purpose', 'status', 'status_display',
+            'notes', 'assigned_to', 'assigned_to_name', 'completed_at', 'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
+
+    def get_assigned_to_name(self, obj):
+        if not obj.assigned_to:
+            return ''
+        return obj.assigned_to.get_full_name() or obj.assigned_to.username
+
+    def get_caregiver_name(self, obj):
+        cg = getattr(obj.household, 'caregiver', None)
+        return f'{cg.name} {cg.surname}'.strip() if cg else ''

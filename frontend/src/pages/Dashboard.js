@@ -242,6 +242,8 @@ export default function Dashboard() {
           <KpiCard icon={Home} label="Total households" value={data?.stats?.total_households ?? "\u2014"} testId="kpi-card-total" />
           <KpiCard icon={Home} label="Open cases" value={data?.stats?.open_households ?? "\u2014"} testId="kpi-card-open" onClick={() => navigate("/my-households")} />
           <KpiCard icon={UserSquare2} label="People on file" value={data?.stats?.total_people ?? "\u2014"} testId="kpi-card-people" />
+          <KpiCard icon={CalendarClock} label="Overdue visits" value={data?.stats?.overdue_visits ?? 0} testId="kpi-card-overdue-visits" accent onClick={() => navigate("/work-diary")} />
+          <KpiCard icon={HeartPulse} label="Open referrals" value={data?.stats?.open_referrals ?? 0} testId="kpi-card-open-referrals" accent onClick={() => navigate("/work-diary")} />
           {isSup && (
             <>
               <KpiCard icon={IdCard} label="With unconfirmed ID numbers" value={unconfirmed.id_number ?? 0} testId="kpi-card-unconfirmed-id" accent onClick={() => navigate("/verification?field=id_number")} />
