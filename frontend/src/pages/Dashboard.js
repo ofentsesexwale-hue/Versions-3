@@ -225,7 +225,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {user?.is_training ? "Training classroom" : `Welcome, ${user?.full_name?.split(" ")[0] || "there"}`}
+          {user?.is_training ? "Training classroom" : `Welcome, ${user?.full_name || "there"}`}
         </h1>
         <p className="text-sm text-muted-foreground">
           {user?.is_training
