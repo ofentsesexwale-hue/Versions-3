@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { playChime } from "@/lib/chimes";
 import api from "@/lib/api";
@@ -16,6 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [branding, setBranding] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     api.get("/branding/").then((r) => setBranding(r.data)).catch(() => {});
@@ -74,14 +75,26 @@ export default function Login() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                data-testid="login-password-input"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="pr-12"
+                  data-testid="login-password-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-muted-foreground hover:bg-white/50 hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  data-testid="login-password-visibility"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <Button type="submit" disabled={loading} className="h-12 w-full text-[15px]" data-testid="login-form-submit-button">
               {loading && <Loader2 className="h-4 w-4 animate-spin" />} Continue
