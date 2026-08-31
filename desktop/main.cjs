@@ -17,6 +17,8 @@ app.setName(APP_NAME);
 app.setAppUserModelId("za.npo.ovccasefile");
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch("disable-dev-shm-usage");
+app.commandLine.appendSwitch("enable-software-rasterizer");
+app.commandLine.appendSwitch("disable-gpu");
 if (process.env.OVC_NO_SANDBOX !== "0") {
   app.commandLine.appendSwitch("no-sandbox");
 }
@@ -138,10 +140,22 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
+      backgroundThrottling: false,
     },
   });
   win.setMenuBarVisibility(false);
+  win.webContents.on("did-finish-load", () => {
+    win.webContents.executeJavaScript(`document.documentElement.classList.add('ovc-desktop')`).catch(() => {});
+    win.webContents.insertCSS(`
+      html.ovc-desktop .glass, html.ovc-desktop .glass-strong, html.ovc-desktop .glass-tint,
+      .glass, .glass-strong, .glass-tint {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+    `).catch(() => {});
+    win.setTitle(APP_NAME);
+  });
   win.loadFile(path.join(__dirname, "splash.html"));
   win.once("ready-to-show", () => win.show());
   win.webContents.setWindowOpenHandler(({ url }) => {

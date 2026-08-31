@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/index.css";
 import App from "@/App";
 
+if (typeof window !== "undefined" && window.ovcDesktop?.isDesktop) {
+  document.documentElement.classList.add("ovc-desktop");
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

@@ -94,4 +94,16 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.12),
       0 16px 48px rgba(20, 16, 10, 0.22);
   }
+  /* Desktop window: no GPU blur — solid panels so the file always paints. */
+  html.ovc-desktop .glass,
+  html.ovc-desktop .glass-strong {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #fffdf6;
+  }
+  html.ovc-desktop .glass-tint {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #efe6d4;
+  }
 }
