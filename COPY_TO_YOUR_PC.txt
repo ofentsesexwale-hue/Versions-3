@@ -1,0 +1,10 @@
+Put everything in this zip here:
+
+  C:\Users\sebue\ovc-case-manager
+
+The Windows program is this file (same folder, not inside desktop\):
+
+  C:\Users\sebue\ovc-case-manager\OVC-CaseFile.exe
+
+Double-click OVC-CaseFile.exe to open the office window.
+Double-click desktop\install-desktop-shortcut.bat to put the Sebueng Itumeleng icon on your Desktop.
