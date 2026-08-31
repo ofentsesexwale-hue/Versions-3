@@ -6,6 +6,7 @@ set "ROOT=%CD%"
 set "ICON=%ROOT%\desktop\icons\icon.ico"
 set "TARGET=%ROOT%\start-desktop.bat"
 if exist "%ROOT%\desktop\release\OVC-CaseFile.exe" set "TARGET=%ROOT%\desktop\release\OVC-CaseFile.exe"
+if exist "%ROOT%\OVC-CaseFile.exe" set "TARGET=%ROOT%\OVC-CaseFile.exe"
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$desk = [Environment]::GetFolderPath('Desktop');" ^
   "$lnk = Join-Path $desk 'OVC CaseFile.lnk';" ^

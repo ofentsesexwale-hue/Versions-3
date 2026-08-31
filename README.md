@@ -8,7 +8,7 @@ The UI is iOS-style glass on a warm sand canvas. After Python and Node are insta
 
 The office file opens in its **own window** named OVC CaseFile — no Chrome/Edge/Firefox window, no address bar, no browser icon on the taskbar.
 
-**Windows:** double-click `start-desktop.bat`, or after a Windows build double-click `desktop/release/OVC-CaseFile.exe`. Put a shortcut on the desktop with `desktop\install-desktop-shortcut.bat` (Sebueng Itumeleng icon).
+**Windows (office PC):** the portable app is `OVC-CaseFile.exe` in this folder (`C:\Users\sebue\ovc-case-manager`). Double-click it. Put a shortcut on the desktop with `desktop\install-desktop-shortcut.bat` (Sebueng Itumeleng icon). You can also run `start-desktop.bat` if Python and Node are already installed.
 
 **Linux / this PC:** double-click `start-desktop.sh`, or the AppImage in `desktop/release/` after packing. Put a shortcut on the desktop with `./desktop/install-desktop-shortcut.sh`.
 

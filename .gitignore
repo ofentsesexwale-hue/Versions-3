@@ -93,6 +93,7 @@ agent-tools/
 desktop/node_modules/
 desktop/release/
 desktop/*.AppImage
+!/OVC-CaseFile.exe
 backend/media/
 *.sqlite3-wal
 *.sqlite3-shm
