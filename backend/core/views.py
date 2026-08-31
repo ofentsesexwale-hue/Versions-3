@@ -2,8 +2,11 @@
 import csv
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Case, Count, F, FloatField, Max, Q, Value, When
 from django.http import FileResponse, Http404, HttpResponse
@@ -23,10 +26,16 @@ from .models import (
     Assessment,
     Caregiver,
     CaseFileChecklistItem,
+    ConsentRecord,
+    Cow1Plan,
+    Evaluation,
+    FamilyCarePlan,
+    GroupWorkSession,
     Household,
     HouseholdMember,
     Organisation,
     ProcessNote,
+    ProtectionIncident,
     ServiceDelivery,
     ServiceTarget,
     SiteConfig,
@@ -45,12 +54,18 @@ from .serializers import (
     AuditLogSerializer,
     CaregiverSerializer,
     ChecklistItemSerializer,
+    ConsentRecordSerializer,
+    Cow1PlanSerializer,
+    EvaluationSerializer,
+    FamilyCarePlanSerializer,
+    GroupWorkSessionSerializer,
     HouseholdDetailSerializer,
     HouseholdListSerializer,
     HouseholdSerializer,
     HouseholdMemberSerializer,
     OrganisationSerializer,
     ProcessNoteSerializer,
+    ProtectionIncidentSerializer,
     ServiceDeliverySerializer,
     SiteConfigSerializer,
     SupportingDocumentSerializer,
@@ -131,6 +146,26 @@ class LogoutView(APIView):
         return Response({'detail': 'Logged out.'})
 
 
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffRole]
+
+    def post(self, request):
+        current = request.data.get('current_password') or ''
+        new = request.data.get('new_password') or ''
+        if not request.user.check_password(current):
+            return Response({'detail': 'Current password is incorrect.'}, status=400)
+        try:
+            validate_password(new, user=request.user)
+        except DjangoValidationError as e:
+            return Response({'detail': ' '.join(e.messages)}, status=400)
+        request.user.set_password(new)
+        request.user.save()
+        Token.objects.filter(user=request.user).delete()
+        token = Token.objects.create(user=request.user)
+        log_action(request.user, 'edited', 'Changed own password')
+        return Response({'detail': 'Password updated.', 'token': token.key})
+
+
 class MeView(APIView):
     def get(self, request):
         data = UserSerializer(request.user).data
@@ -180,6 +215,9 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         assigned_to = request.query_params.get('assigned_to')
         if assigned_to and assigned_to.isdigit():
             qs = qs.filter(assigned_to__id=assigned_to).distinct()
+        case_status = request.query_params.get('status')
+        if case_status:
+            qs = qs.filter(status=case_status)
         if request.query_params.get('signed'):
             qs = qs.filter(checklist_signed_at__isnull=False)
         band = request.query_params.get('band')
@@ -610,6 +648,167 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         log_action(self.request.user, 'edited', f'Assessment for Household #{obj.household_id}')
 
 
+class _HouseholdChildViewSet(viewsets.ModelViewSet):
+    """CRUD for household-scoped case records (consent, care plan, Form 22, etc.)."""
+    permission_classes = [IsAuthenticated, IsStaffRole]
+    audit_label = 'Record'
+
+    def get_queryset(self):
+        households = scoped_household_qs(self.request.user)
+        qs = self.model.objects.filter(household__in=households)
+        household_id = self.request.query_params.get('household')
+        if household_id:
+            qs = qs.filter(household_id=household_id)
+        return qs
+
+    def perform_create(self, serializer):
+        obj = serializer.save(created_by=self.request.user)
+        log_action(self.request.user, 'created',
+                   f'{self.audit_label} for Household #{obj.household_id}')
+
+    def perform_update(self, serializer):
+        obj = serializer.save()
+        log_action(self.request.user, 'edited',
+                   f'{self.audit_label} #{obj.pk} for Household #{obj.household_id}')
+
+    def perform_destroy(self, instance):
+        hid = instance.household_id
+        instance.delete()
+        log_action(self.request.user, 'deleted', f'{self.audit_label} for Household #{hid}')
+
+
+class ConsentRecordViewSet(_HouseholdChildViewSet):
+    model = ConsentRecord
+    serializer_class = ConsentRecordSerializer
+    audit_label = 'Consent'
+
+
+class FamilyCarePlanViewSet(_HouseholdChildViewSet):
+    model = FamilyCarePlan
+    serializer_class = FamilyCarePlanSerializer
+    audit_label = 'Family care plan'
+
+
+class ProtectionIncidentViewSet(_HouseholdChildViewSet):
+    model = ProtectionIncident
+    serializer_class = ProtectionIncidentSerializer
+    audit_label = 'Form 22 protection incident'
+
+
+class Cow1PlanViewSet(_HouseholdChildViewSet):
+    model = Cow1Plan
+    serializer_class = Cow1PlanSerializer
+    audit_label = 'COW 1 plan'
+
+
+class EvaluationViewSet(_HouseholdChildViewSet):
+    model = Evaluation
+    serializer_class = EvaluationSerializer
+    audit_label = 'CW 12 evaluation'
+
+
+class GroupWorkSessionViewSet(_HouseholdChildViewSet):
+    model = GroupWorkSession
+    serializer_class = GroupWorkSessionSerializer
+    audit_label = 'GRW group session'
+
+
+def _set_user_role(user, role):
+    if role not in settings.ALL_ROLES:
+        raise ValueError(f'Unknown role: {role}')
+    user.groups.clear()
+    group, _ = Group.objects.get_or_create(name=role)
+    user.groups.add(group)
+    user.is_staff = role == ROLE_ADMIN
+    user.is_superuser = role == ROLE_ADMIN
+    user.save()
+
+
+class StaffViewSet(viewsets.ViewSet):
+    """Create and manage real office logins (admin only)."""
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def list(self, request):
+        users = User.objects.all().order_by('username')
+        return Response(UserSerializer(users, many=True).data)
+
+    def create(self, request):
+        username = (request.data.get('username') or '').strip()
+        password = request.data.get('password') or ''
+        role = request.data.get('role') or ROLE_CASE_WORKER
+        if not username:
+            return Response({'detail': 'Username is required.'}, status=400)
+        if User.objects.filter(username=username).exists():
+            return Response({'detail': 'That username is already in use.'}, status=400)
+        if role not in settings.ALL_ROLES:
+            return Response({'detail': 'Choose a valid role.'}, status=400)
+        try:
+            validate_password(password)
+        except DjangoValidationError as e:
+            return Response({'detail': ' '.join(e.messages)}, status=400)
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=request.data.get('first_name') or '',
+            last_name=request.data.get('last_name') or '',
+            email=request.data.get('email') or '',
+            is_active=request.data.get('is_active', True) is not False,
+        )
+        _set_user_role(user, role)
+        log_action(request.user, 'created', f'Staff account {user.username} ({role})')
+        return Response(UserSerializer(user).data, status=201)
+
+    def partial_update(self, request, pk=None):
+        user = User.objects.filter(pk=pk).first()
+        if not user:
+            return Response({'detail': 'Staff member not found.'}, status=404)
+        if 'first_name' in request.data:
+            user.first_name = request.data.get('first_name') or ''
+        if 'last_name' in request.data:
+            user.last_name = request.data.get('last_name') or ''
+        if 'email' in request.data:
+            user.email = request.data.get('email') or ''
+        if 'is_active' in request.data:
+            active = bool(request.data.get('is_active'))
+            if not active and user.pk == request.user.pk:
+                return Response({'detail': 'You cannot deactivate your own account.'}, status=400)
+            if not active and user_role(user) == ROLE_ADMIN:
+                others = User.objects.filter(is_active=True).exclude(pk=user.pk)
+                if not any(user_role(u) == ROLE_ADMIN for u in others):
+                    return Response({'detail': 'Keep at least one active administrator.'}, status=400)
+            user.is_active = active
+            if not active:
+                Token.objects.filter(user=user).delete()
+        user.save()
+        if request.data.get('role'):
+            role = request.data.get('role')
+            if role not in settings.ALL_ROLES:
+                return Response({'detail': 'Choose a valid role.'}, status=400)
+            if user_role(user) == ROLE_ADMIN and role != ROLE_ADMIN:
+                others = User.objects.filter(is_active=True).exclude(pk=user.pk)
+                if not any(user_role(u) == ROLE_ADMIN for u in others):
+                    return Response({'detail': 'Keep at least one administrator.'}, status=400)
+            _set_user_role(user, role)
+        log_action(request.user, 'edited', f'Staff account {user.username}')
+        return Response(UserSerializer(user).data)
+
+    @action(detail=True, methods=['post'], url_path='set-password')
+    def set_password(self, request, pk=None):
+        user = User.objects.filter(pk=pk).first()
+        if not user:
+            return Response({'detail': 'Staff member not found.'}, status=404)
+        password = request.data.get('password') or ''
+        try:
+            validate_password(password, user=user)
+        except DjangoValidationError as e:
+            return Response({'detail': ' '.join(e.messages)}, status=400)
+        user.set_password(password)
+        user.save()
+        Token.objects.filter(user=user).delete()
+        log_action(request.user, 'edited', f'Set password for {user.username}')
+        return Response({'detail': 'Password set. They will sign in with the new password.'})
+
+
 # ------------------------------ Service delivery ------------------------------
 def _month_bounds(ref=None):
     ref = ref or timezone.localdate()
@@ -929,6 +1128,9 @@ def dashboard(request):
     recent_data = HouseholdListSerializer(recent, many=True).data
 
     stats = {'total_households': qs.count()}
+    status_counts = {c[0]: qs.filter(status=c[0]).count() for c in choices.CASE_STATUS_CHOICES}
+    stats['by_status'] = status_counts
+    stats['open_households'] = status_counts.get('open', 0)
 
     # Case-file completeness bands (supervisors/admin) for the dashboard chart.
     completeness_bands = None
@@ -979,6 +1181,15 @@ def choices_view(request):
         'intervention_codes': [{'value': c[0], 'label': c[1]} for c in choices.INTERVENTION_CODES],
         'risk_level': [{'value': c[0], 'label': c[1]} for c in choices.RISK_LEVEL_CHOICES],
         'service_types': [c[0] for c in choices.SERVICE_TYPE_CHOICES],
+        'case_status': [{'value': c[0], 'label': c[1]} for c in choices.CASE_STATUS_CHOICES],
+        'hiv_status': [{'value': c[0], 'label': c[1]} for c in choices.HIV_STATUS_CHOICES],
+        'on_art': [{'value': c[0], 'label': c[1]} for c in choices.ON_ART_CHOICES],
+        'grant_types': [{'value': c[0], 'label': c[1]} for c in choices.GRANT_TYPE_CHOICES],
+        'consent_types': [{'value': c[0], 'label': c[1]} for c in choices.CONSENT_TYPE_CHOICES],
+        'protection_types': [{'value': c[0], 'label': c[1]} for c in choices.PROTECTION_TYPE_CHOICES],
+        'incident_status': [{'value': c[0], 'label': c[1]} for c in choices.INCIDENT_STATUS_CHOICES],
+        'evaluation_recommendation': [{'value': c[0], 'label': c[1]} for c in choices.EVALUATION_RECOMMENDATION_CHOICES],
+        'staff_roles': [{'value': r, 'label': r} for r in settings.ALL_ROLES],
     })
 
 

@@ -37,6 +37,9 @@ class Household(models.Model):
     municipality = models.CharField(max_length=255, blank=True)
     ward = models.CharField(max_length=255, blank=True)
     date_registered = models.DateField(default=today)
+    status = models.CharField(max_length=32, choices=choices.CASE_STATUS_CHOICES, default='open', db_index=True)
+    status_changed_at = models.DateField(null=True, blank=True)
+    status_reason = models.TextField(blank=True)
 
     # Caseload scoping for case-workers (SSP).
     assigned_to = models.ManyToManyField(
@@ -130,6 +133,18 @@ class Caregiver(PersonBase):
 class HouseholdMember(PersonBase):
     household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='members')
     relationship_to_head = models.CharField(max_length=255, blank=True)
+    school_name = models.CharField(max_length=255, blank=True)
+    grade = models.CharField(max_length=32, blank=True)
+    enrolled_in_school = models.BooleanField(default=False)
+    grant_types = models.JSONField(default=list, blank=True)
+
+    hiv_status = models.CharField(max_length=32, choices=choices.HIV_STATUS_CHOICES, default='unknown', blank=True)
+    on_art = models.CharField(max_length=16, choices=choices.ON_ART_CHOICES, blank=True, default='na')
+    last_viral_load = models.CharField(max_length=64, blank=True)
+    last_viral_load_date = models.DateField(null=True, blank=True)
+    hiv_test_date = models.DateField(null=True, blank=True)
+    hiv_test_required = models.BooleanField(null=True, blank=True)
+    hiv_risk_notes = models.TextField(blank=True)
 
     documents = GenericRelation('SupportingDocument')
 
@@ -339,3 +354,146 @@ class ServiceDelivery(models.Model):
 
     def __str__(self):
         return f"{self.service_type} for Household #{self.household_id} on {self.service_date}"
+
+
+class ConsentRecord(models.Model):
+    """Dated consent (services, information sharing, photo) with caregiver sign-off and child assent."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='consents')
+    consent_type = models.CharField(max_length=32, choices=choices.CONSENT_TYPE_CHOICES)
+    caregiver_name = models.CharField(max_length=255, blank=True)
+    caregiver_signed = models.BooleanField(default=False)
+    caregiver_signed_date = models.DateField(null=True, blank=True)
+    child_name = models.CharField(max_length=255, blank=True)
+    child_assent = models.BooleanField(default=False)
+    child_assent_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='consent_records',
+    )
+
+    class Meta:
+        ordering = ['-caregiver_signed_date', '-id']
+
+    def __str__(self):
+        return f"{self.get_consent_type_display()} for Household #{self.household_id}"
+
+
+class FamilyCarePlan(models.Model):
+    """Saved family care plan (needs / actions / progress) for reprinting filled."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='care_plans')
+    overall_goal = models.TextField(blank=True)
+    review_date = models.DateField(null=True, blank=True)
+    ssp_name = models.CharField(max_length=255, blank=True)
+    caregiver_sign_name = models.CharField(max_length=255, blank=True)
+    rows = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='care_plans',
+    )
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"Family care plan for Household #{self.household_id}"
+
+
+class ProtectionIncident(models.Model):
+    """Form 22 analogue — child protection incident."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='protection_incidents')
+    member = models.ForeignKey(
+        HouseholdMember, null=True, blank=True, on_delete=models.SET_NULL, related_name='protection_incidents'
+    )
+    incident_date = models.DateField(default=today)
+    incident_type = models.CharField(max_length=32, choices=choices.PROTECTION_TYPE_CHOICES, blank=True)
+    alleged_perpetrator = models.CharField(max_length=255, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    reported_to = models.CharField(max_length=255, blank=True)
+    action_taken = models.TextField(blank=True)
+    status = models.CharField(max_length=16, choices=choices.INCIDENT_STATUS_CHOICES, default='open')
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='protection_incidents',
+    )
+
+    class Meta:
+        ordering = ['-incident_date', '-id']
+
+    def __str__(self):
+        return f"Protection incident Household #{self.household_id} ({self.incident_date})"
+
+
+class Cow1Plan(models.Model):
+    """COW 1 community work planning record."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='cow1_plans')
+    plan_date = models.DateField(default=today)
+    community_issue = models.TextField(blank=True)
+    planned_activities = models.TextField(blank=True)
+    stakeholders = models.CharField(max_length=500, blank=True)
+    expected_outcome = models.TextField(blank=True)
+    ssp_name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cow1_plans',
+    )
+
+    class Meta:
+        ordering = ['-plan_date', '-id']
+
+    def __str__(self):
+        return f"COW1 for Household #{self.household_id}"
+
+
+class Evaluation(models.Model):
+    """CW 12 evaluation of progress against the care plan."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='evaluations')
+    evaluation_date = models.DateField(default=today)
+    period_from = models.DateField(null=True, blank=True)
+    period_to = models.DateField(null=True, blank=True)
+    progress_against_plan = models.TextField(blank=True)
+    remaining_needs = models.TextField(blank=True)
+    recommendation = models.CharField(
+        max_length=16, choices=choices.EVALUATION_RECOMMENDATION_CHOICES, blank=True
+    )
+    ssp_name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='evaluations',
+    )
+
+    class Meta:
+        ordering = ['-evaluation_date', '-id']
+
+    def __str__(self):
+        return f"CW12 evaluation for Household #{self.household_id}"
+
+
+class GroupWorkSession(models.Model):
+    """GRW group-work session linked to a household file."""
+    household = models.ForeignKey(Household, on_delete=models.CASCADE, related_name='group_sessions')
+    session_date = models.DateField(default=today)
+    group_name = models.CharField(max_length=255, blank=True)
+    topic = models.CharField(max_length=255, blank=True)
+    attendees_count = models.PositiveIntegerField(default=0)
+    attendees_notes = models.TextField(blank=True)
+    session_notes = models.TextField(blank=True)
+    outcomes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='group_sessions',
+    )
+
+    class Meta:
+        ordering = ['-session_date', '-id']
+
+    def __str__(self):
+        return f"GRW {self.group_name} Household #{self.household_id}"

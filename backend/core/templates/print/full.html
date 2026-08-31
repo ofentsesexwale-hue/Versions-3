@@ -6,6 +6,8 @@
   <table>
     <tr><th style="width:22%;">Household Number</th><td>{{ hh.org_household_number }}</td>
         <th style="width:22%;">Date Registered</th><td>{{ hh.date_registered|date:"Y-m-d" }}</td></tr>
+    <tr><th>Case status</th><td>{{ hh.get_status_display }}</td>
+        <th>Status date</th><td>{{ hh.status_changed_at|date:"Y-m-d"|default:"" }}</td></tr>
     <tr><th>Head of Household</th><td>{{ cg.name }} {{ cg.surname }}</td><th>ID Number</th><td>{{ cg.id_number }}</td></tr>
     <tr><th>Headship Type</th><td>{{ cg.headship_type }}</td><th>Cell Number</th><td>{{ cg.cell_number }}</td></tr>
     <tr><th>Address</th><td colspan="3">{{ hh.house_number }} {{ hh.street }}, {{ hh.town }}, {{ hh.municipality }}, {{ hh.district }}, {{ hh.province }}</td></tr>

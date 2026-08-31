@@ -199,6 +199,7 @@ export default function Dashboard() {
       {!q && !band && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard icon={Home} label="Total households" value={data?.stats?.total_households ?? "\u2014"} testId="kpi-card-total" />
+          <KpiCard icon={Home} label="Open cases" value={data?.stats?.open_households ?? "\u2014"} testId="kpi-card-open" onClick={() => navigate("/my-households")} />
           {isSup && (
             <>
               <KpiCard icon={IdCard} label="With unconfirmed ID numbers" value={unconfirmed.id_number ?? 0} testId="kpi-card-unconfirmed-id" accent onClick={() => navigate("/verification?field=id_number")} />

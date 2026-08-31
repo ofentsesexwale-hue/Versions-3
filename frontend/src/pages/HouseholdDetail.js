@@ -44,8 +44,9 @@ import { DocumentViewer } from "@/components/DocumentViewer";
 import { PrintFormsPanel } from "@/components/PrintFormsPanel";
 import { ProcessNotes } from "@/components/ProcessNotes";
 import { ServicesPanel } from "@/components/ServicesPanel";
+import { CaseRecords } from "@/components/CaseRecords";
 import { printTimeline } from "@/lib/print";
-import { CATEGORY_LABELS, CATEGORY_ORDER, formatDate, formatDateTime } from "@/lib/constants";
+import { CASE_STATUS_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, formatDate, formatDateTime } from "@/lib/constants";
 
 function ConfirmChips({ person }) {
   const fields = [
@@ -170,6 +171,11 @@ export default function HouseholdDetail() {
           <h1 className="text-2xl font-semibold text-slate-900" data-testid="household-title">
             {hh.org_household_number}
           </h1>
+          <p className="mt-1">
+            <Badge className="rounded-full" data-testid="household-status-badge">
+              {CASE_STATUS_LABELS[hh.status] || hh.status || "Open"}
+            </Badge>
+          </p>
           <p className="text-sm text-slate-600">
             {[hh.house_number, hh.street, hh.town, hh.municipality, hh.district, hh.province]
               .filter(Boolean)
@@ -292,6 +298,9 @@ export default function HouseholdDetail() {
                   <div>
                     <p className="font-medium text-slate-900">{m.name} {m.surname}</p>
                     <p className="text-sm text-slate-600">{m.relationship_to_head || "\u2014"} · {m.date_of_birth ? formatDate(m.date_of_birth) : <span className="font-medium text-amber-700" data-testid={`member-dob-missing-${m.id}`}>Add date of birth</span>}</p>
+                    {(m.school_name || m.grade) && (
+                      <p className="text-xs text-slate-500">{m.enrolled_in_school ? "Enrolled" : "Not enrolled"}{m.school_name ? ` · ${m.school_name}` : ""}{m.grade ? ` · Grade ${m.grade}` : ""}</p>
+                    )}
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/members/${m.id}/edit`)} data-testid={`edit-member-${m.id}`}>
@@ -390,6 +399,8 @@ export default function HouseholdDetail() {
       <ProcessNotes householdId={id} />
 
       <ServicesPanel householdId={id} caregiver={hh.caregiver} members={hh.members} />
+
+      <CaseRecords householdId={id} household={hh} members={hh.members || []} caregiver={hh.caregiver} />
 
       <Card data-testid="household-timeline-card">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

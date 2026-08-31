@@ -18,11 +18,19 @@ router.register(r'process-notes', views.ProcessNoteViewSet, basename='processnot
 router.register(r'assessments', views.AssessmentViewSet, basename='assessment')
 router.register(r'services', views.ServiceDeliveryViewSet, basename='service')
 router.register(r'audit', views.AuditLogViewSet, basename='audit')
+router.register(r'consents', views.ConsentRecordViewSet, basename='consent')
+router.register(r'care-plans', views.FamilyCarePlanViewSet, basename='careplan')
+router.register(r'protection-incidents', views.ProtectionIncidentViewSet, basename='protection')
+router.register(r'cow1', views.Cow1PlanViewSet, basename='cow1')
+router.register(r'evaluations', views.EvaluationViewSet, basename='evaluation')
+router.register(r'group-sessions', views.GroupWorkSessionViewSet, basename='groupsession')
+router.register(r'staff', views.StaffViewSet, basename='staff')
 
 api_patterns = [
     path('auth/login/', views.LoginView.as_view()),
     path('auth/logout/', views.LogoutView.as_view()),
     path('auth/me/', views.MeView.as_view()),
+    path('auth/change-password/', views.ChangePasswordView.as_view()),
     path('dashboard/', views.DashboardView.as_view()),
     path('choices/', views.ChoicesView.as_view()),
     path('users/', views.UsersListView.as_view()),

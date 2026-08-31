@@ -182,6 +182,67 @@ RISK_LEVEL_CHOICES = [
     ('Mild', 'Mild (2-3 weeks)'),
 ]
 
+CASE_STATUS_CHOICES = [
+    ('open', 'Open'),
+    ('graduated', 'Graduated'),
+    ('transferred', 'Transferred'),
+    ('lost_to_follow_up', 'Lost to follow-up'),
+    ('closed', 'Closed'),
+]
+
+HIV_STATUS_CHOICES = [
+    ('unknown', 'Unknown'),
+    ('negative', 'Negative'),
+    ('positive', 'Positive'),
+    ('not_disclosed', 'Not disclosed'),
+]
+
+ON_ART_CHOICES = [
+    ('na', 'Not applicable'),
+    ('yes', 'On ART'),
+    ('no', 'Not on ART'),
+    ('unknown', 'Unknown'),
+]
+
+GRANT_TYPE_CHOICES = [
+    ('CSG', 'Child Support Grant (CSG)'),
+    ('FCG', 'Foster Child Grant (FCG)'),
+    ('CDG', 'Care Dependency Grant (CDG)'),
+    ('OAG', "Older Person's Grant"),
+    ('DG', 'Disability Grant'),
+    ('other', 'Other'),
+]
+
+CONSENT_TYPE_CHOICES = [
+    ('services', 'Consent to services'),
+    ('information_sharing', 'Information sharing'),
+    ('photo', 'Photo / media consent'),
+]
+
+PROTECTION_TYPE_CHOICES = [
+    ('physical_abuse', 'Physical abuse'),
+    ('sexual_abuse', 'Sexual abuse'),
+    ('neglect', 'Neglect'),
+    ('emotional_abuse', 'Emotional / psychological abuse'),
+    ('exploitation', 'Exploitation'),
+    ('abandonment', 'Abandonment'),
+    ('gbv', 'Gender-based violence'),
+    ('other', 'Other'),
+]
+
+INCIDENT_STATUS_CHOICES = [
+    ('open', 'Open'),
+    ('referred', 'Referred'),
+    ('closed', 'Closed'),
+]
+
+EVALUATION_RECOMMENDATION_CHOICES = [
+    ('continue', 'Continue services'),
+    ('close', 'Close / graduate'),
+    ('refer', 'Refer'),
+    ('transfer', 'Transfer'),
+]
+
 # Service delivery types (fixed list agreed with the NPO).
 SERVICE_TYPE_CHOICES = [
     ('Individual Counselling', 'Individual Counselling'),

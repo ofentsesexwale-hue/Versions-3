@@ -1,0 +1,21 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with p=hh.cow1 cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">COW 1 Community Work Plan</div>
+  <table>
+    <tr><th>Household / community file</th><td>{{ hh.org_household_number }}</td><th>Date</th><td>{{ p.plan_date|date:"Y-m-d"|default:"" }}</td></tr>
+    <tr><th>Caregiver / contact</th><td colspan="3">{{ cg.name }} {{ cg.surname }}</td></tr>
+  </table>
+  <h3 class="sub">Community issue identified</h3>
+  <div class="ans">{{ p.community_issue|default:""|linebreaksbr }}</div>
+  <h3 class="sub">Planned activities</h3>
+  <div class="ans">{{ p.planned_activities|default:""|linebreaksbr }}</div>
+  <div class="fld"><span class="lbl">Stakeholders:</span> {{ p.stakeholders }}</div>
+  <h3 class="sub">Expected outcome</h3>
+  <div class="ans">{{ p.expected_outcome|default:""|linebreaksbr }}</div>
+  <div class="fld"><span class="lbl">SSP:</span> {{ p.ssp_name }}</div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

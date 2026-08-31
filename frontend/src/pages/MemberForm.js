@@ -110,6 +110,74 @@ export default function MemberForm() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader><CardTitle className="text-base">School and grants</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="flex items-center gap-3 pt-2 sm:col-span-2">
+            <Checkbox checked={!!f.enrolled_in_school} onCheckedChange={(v) => pf.set("enrolled_in_school", !!v)} data-testid="member-enrolled-checkbox" />
+            <Label>Currently enrolled in school</Label>
+          </div>
+          <div className="space-y-1.5"><Label>School name</Label><Input value={f.school_name || ""} onChange={(e) => pf.set("school_name", e.target.value)} className="h-11" data-testid="member-school-input" /></div>
+          <div className="space-y-1.5"><Label>Grade</Label><Input value={f.grade || ""} onChange={(e) => pf.set("grade", e.target.value)} className="h-11" data-testid="member-grade-input" /></div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Grant types</Label>
+            <div className="flex flex-wrap gap-3 pt-1">
+              {(choices.grant_types || []).map((g) => {
+                const val = g.value || g;
+                const label = g.label || g;
+                const selected = (f.grant_types || []).includes(val);
+                return (
+                  <label key={val} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={selected}
+                      onCheckedChange={(v) => {
+                        const cur = f.grant_types || [];
+                        pf.set("grant_types", v ? [...cur, val] : cur.filter((x) => x !== val));
+                      }}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">HIVSTAT (need-to-know)</CardTitle>
+          <p className="text-sm text-muted-foreground">Store HIV status, ART and viral load on the child&apos;s record so HIV risk printouts are filled. Share only with staff who need this to deliver services.</p>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <ChoiceSelect
+            label="HIV status"
+            value={f.hiv_status || "unknown"}
+            onChange={(v) => pf.set("hiv_status", v)}
+            options={(choices.hiv_status || []).map((x) => x.value)}
+            testId="member-hiv-status-select"
+          />
+          <ChoiceSelect
+            label="On ART"
+            value={f.on_art || "na"}
+            onChange={(v) => pf.set("on_art", v)}
+            options={(choices.on_art || []).map((x) => x.value)}
+            testId="member-on-art-select"
+          />
+          <div className="space-y-1.5"><Label>Last viral load</Label><Input value={f.last_viral_load || ""} onChange={(e) => pf.set("last_viral_load", e.target.value)} className="h-11" /></div>
+          <div className="space-y-1.5"><Label>Viral load date</Label><DateField value={f.last_viral_load_date} onChange={(v) => pf.set("last_viral_load_date", v)} /></div>
+          <div className="space-y-1.5"><Label>Last HIV test date</Label><DateField value={f.hiv_test_date} onChange={(v) => pf.set("hiv_test_date", v)} /></div>
+          <ChoiceSelect
+            label="HIV test required"
+            value={f.hiv_test_required === true ? "yes" : f.hiv_test_required === false ? "no" : "unknown"}
+            onChange={(v) => pf.set("hiv_test_required", v === "yes" ? true : v === "no" ? false : null)}
+            options={["unknown", "yes", "no"]}
+            testId="member-hiv-test-required-select"
+          />
+          <div className="space-y-1.5 sm:col-span-2"><Label>HIV notes</Label><Textarea value={f.hiv_risk_notes || ""} onChange={(e) => pf.set("hiv_risk_notes", e.target.value)} /></div>
+        </CardContent>
+      </Card>
+
       <div className="sticky bottom-0 flex items-center justify-between border-t border-slate-200 bg-white/95 p-3 backdrop-blur">
         <p className={pf.blocked ? "text-sm text-amber-800" : "text-sm text-emerald-800"} data-testid="save-blocked-unconfirmed-message">
           {pf.blocked ? "Confirm the highlighted fields before saving." : "All required confirmations complete."}

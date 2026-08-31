@@ -19,6 +19,8 @@ import Reassign from "@/pages/Reassign";
 import PrintCenter from "@/pages/PrintCenter";
 import AssessmentForm from "@/pages/AssessmentForm";
 import OrgSettings from "@/pages/OrgSettings";
+import Staff from "@/pages/Staff";
+import ChangePassword from "@/pages/ChangePassword";
 import SignoffHistory from "@/pages/SignoffHistory";
 import ServiceLog from "@/pages/ServiceLog";
 import ServiceTargets from "@/pages/ServiceTargets";
@@ -44,6 +46,15 @@ function App() {
               <Route path="print-center" element={<PrintCenter />} />
               <Route path="signoffs" element={<SignoffHistory />} />
               <Route path="settings/organisation" element={<OrgSettings />} />
+              <Route
+                path="settings/staff"
+                element={
+                  <ProtectedRoute requireRole="admin">
+                    <Staff />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="settings/password" element={<ChangePassword />} />
               <Route path="settings/targets" element={<ServiceTargets />} />
               <Route path="households/:id/assessment" element={<AssessmentForm />} />
               <Route path="verification" element={<Verification />} />

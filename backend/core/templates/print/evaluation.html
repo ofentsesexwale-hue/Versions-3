@@ -1,0 +1,20 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with ev=hh.evaluation cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">CW 12 Evaluation</div>
+  <table>
+    <tr><th>Client / household</th><td>{{ hh.org_household_number }} — {{ cg.name }} {{ cg.surname }}</td>
+        <th>Evaluation date</th><td>{{ ev.evaluation_date|date:"Y-m-d"|default:"" }}</td></tr>
+    <tr><th>Period</th><td>{{ ev.period_from|date:"Y-m-d"|default:"" }} to {{ ev.period_to|date:"Y-m-d"|default:"" }}</td>
+        <th>Recommendation</th><td>{{ ev.get_recommendation_display }}</td></tr>
+  </table>
+  <h3 class="sub">Progress against the family care plan</h3>
+  <div class="ans" style="min-height:80px;">{{ ev.progress_against_plan|default:""|linebreaksbr }}</div>
+  <h3 class="sub">Remaining needs</h3>
+  <div class="ans">{{ ev.remaining_needs|default:""|linebreaksbr }}</div>
+  <div class="fld"><span class="lbl">SSP:</span> {{ ev.ssp_name }}</div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

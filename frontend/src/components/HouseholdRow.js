@@ -1,7 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { formatDate } from "@/lib/constants";
+import { formatDate, CASE_STATUS_LABELS } from "@/lib/constants";
 
 export function HouseholdRow({ hh, onClick }) {
   const p = hh.checklist_progress || { percent: 0, yes: 0, total: 0 };
@@ -14,6 +14,9 @@ export function HouseholdRow({ hh, onClick }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="font-medium text-slate-900">{hh.org_household_number}</span>
+          {hh.status && hh.status !== "open" && (
+            <Badge variant="secondary">{CASE_STATUS_LABELS[hh.status] || hh.status}</Badge>
+          )}
           {hh.has_unconfirmed && (
             <Badge className="gap-1 border border-amber-200 bg-amber-50 text-amber-800">
               <AlertTriangle className="h-3 w-3" /> Unconfirmed

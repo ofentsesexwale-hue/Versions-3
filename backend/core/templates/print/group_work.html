@@ -1,0 +1,20 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}
+<div class="sheet">
+  <div class="orghead">{% if org_logo %}<img class="logo" src="{{ org_logo }}">{% endif %}<div class="on">{{ org_name }}</div><div>GRW Group Work Session</div></div>
+  <p>Household file: {{ hh.org_household_number }}</p>
+  {% for s in hh.group_list %}
+  <h3 class="sub">{{ s.session_date|date:"Y-m-d" }} — {{ s.group_name }} — {{ s.topic }}</h3>
+  <table>
+    <tr><th>Attendees</th><td>{{ s.attendees_count }}</td></tr>
+    <tr><th>Who attended</th><td>{{ s.attendees_notes }}</td></tr>
+    <tr><th>Session notes</th><td>{{ s.session_notes|linebreaksbr }}</td></tr>
+    <tr><th>Outcomes</th><td>{{ s.outcomes|linebreaksbr }}</td></tr>
+  </table>
+  {% empty %}
+  <p>No group-work sessions recorded on this file.</p>
+  {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

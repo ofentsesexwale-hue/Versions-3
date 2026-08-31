@@ -10,6 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateField } from "@/components/DateField";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { CASE_STATUS_LABELS } from "@/lib/constants";
 
 const FIELDS = [
   ["org_household_number", "Organisation household number", true],
@@ -120,6 +124,21 @@ export default function HouseholdForm() {
             <Label>Date registered</Label>
             <DateField value={dateRegistered} onChange={setDateRegistered} testId="date-picker-date_registered" />
           </div>
+          <div className="space-y-1.5">
+            <Label>Case status</Label>
+            <Select value={form.status || "open"} onValueChange={(v) => set("status", v)}>
+              <SelectTrigger className="h-11" data-testid="household-status-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(CASE_STATUS_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {form.status && form.status !== "open" && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Status reason / notes</Label>
+              <Input value={form.status_reason || ""} onChange={(e) => set("status_reason", e.target.value)} data-testid="household-status-reason-input" />
+            </div>
+          )}
         </CardContent>
       </Card>
 

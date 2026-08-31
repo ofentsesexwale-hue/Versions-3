@@ -5,6 +5,14 @@ export const ROLE_LABELS = {
   admin: "Administrator",
 };
 
+export const CASE_STATUS_LABELS = {
+  open: "Open",
+  graduated: "Graduated",
+  transferred: "Transferred",
+  lost_to_follow_up: "Lost to follow-up",
+  closed: "Closed",
+};
+
 export const CATEGORY_LABELS = {
   intake_form: "Intake Forms",
   family_care_plan: "Family Care Plans",

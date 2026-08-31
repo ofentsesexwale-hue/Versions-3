@@ -1,0 +1,29 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  <div class="orghead">{% if org_logo %}<img class="logo" src="{{ org_logo }}">{% endif %}<div class="on">{{ org_name }}</div><div>Child HIVSTAT Record</div></div>
+  <table>
+    <tr><th>Household</th><td>{{ hh.org_household_number }}</td><th>Caregiver</th><td>{{ cg.name }} {{ cg.surname }}</td></tr>
+    <tr><th>Case status</th><td>{{ hh.get_status_display }}</td><th>Printed</th><td>{{ now|date:"Y-m-d" }}</td></tr>
+  </table>
+  <p class="muted">Need-to-know health information. Store and share only with staff who need it to deliver services.</p>
+  <table>
+    <tr><th>Child</th><th>Age</th><th>HIV status</th><th>On ART</th><th>Last test</th><th>Viral load</th><th>Test required</th></tr>
+    {% for m in hh.member_list %}
+    <tr>
+      <td>{{ m.name }} {{ m.surname }}</td>
+      <td>{{ m.age }}</td>
+      <td>{{ m.get_hiv_status_display }}</td>
+      <td>{{ m.get_on_art_display }}</td>
+      <td>{{ m.hiv_test_date|date:"Y-m-d"|default:"" }}</td>
+      <td>{{ m.last_viral_load }} {% if m.last_viral_load_date %}({{ m.last_viral_load_date|date:"Y-m-d" }}){% endif %}</td>
+      <td>{% if m.hiv_test_required %}Yes{% elif m.hiv_test_required == False %}No{% else %}—{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7">No children on this file.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

@@ -18,7 +18,7 @@
     {% for m in hh.member_list %}
     <tr>
       <td>{{ m.surname }}</td><td>{{ m.name }}</td><td>{{ m.sex|slice:":1" }}</td><td>{{ m.age }}</td>
-      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td>{{ m.school_name }}</td><td>{{ m.grade }}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td style="text-align:center;"><span class="chk"></span>Y <span class="chk"></span>N</td>
       <td style="text-align:center;"><span class="chk"></span></td>
     </tr>

@@ -1,0 +1,25 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  <div class="orghead">{% if org_logo %}<img class="logo" src="{{ org_logo }}">{% endif %}<div class="on">{{ org_name }}</div><div>Consent Record</div></div>
+  <table>
+    <tr><th>Household</th><td>{{ hh.org_household_number }}</td><th>Caregiver</th><td>{{ cg.name }} {{ cg.surname }}</td></tr>
+  </table>
+  {% for c in hh.consents_list %}
+  <h3 class="sub">{{ c.get_consent_type_display }}</h3>
+  <table>
+    <tr><th>Caregiver</th><td>{{ c.caregiver_name }}</td><th>Signed</th><td>{% if c.caregiver_signed %}Yes — {{ c.caregiver_signed_date|date:"Y-m-d" }}{% else %}No{% endif %}</td></tr>
+    <tr><th>Child</th><td>{{ c.child_name }}</td><th>Assent</th><td>{% if c.child_assent %}Yes — {{ c.child_assent_date|date:"Y-m-d" }}{% else %}No / not applicable{% endif %}</td></tr>
+    <tr><th>Notes</th><td colspan="3">{{ c.notes }}</td></tr>
+  </table>
+  {% empty %}
+  <p>No dated consent records captured yet.</p>
+  {% endfor %}
+  <div class="sigrow">
+    <div><div class="sigline">Caregiver signature</div></div>
+    <div><div class="sigline">Practitioner signature</div></div>
+  </div>
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

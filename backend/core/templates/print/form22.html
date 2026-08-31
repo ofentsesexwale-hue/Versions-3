@@ -1,0 +1,25 @@
+{% extends 'print/base_form.html' %}
+{% block content %}
+{% for hh in households %}{% with cg=hh.cg %}
+<div class="sheet">
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">Form 22 — Child Protection Incident</div>
+  <table>
+    <tr><th>Household</th><td>{{ hh.org_household_number }}</td><th>Caregiver</th><td>{{ cg.name }} {{ cg.surname }}</td></tr>
+  </table>
+  {% for inc in hh.incidents_list %}
+  <h3 class="sub">Incident {{ inc.incident_date|date:"Y-m-d" }} — {{ inc.get_incident_type_display }} ({{ inc.get_status_display }})</h3>
+  <table>
+    <tr><th>Child involved</th><td>{% if inc.member %}{{ inc.member.name }} {{ inc.member.surname }}{% endif %}</td>
+        <th>Location</th><td>{{ inc.location }}</td></tr>
+    <tr><th>Alleged perpetrator</th><td colspan="3">{{ inc.alleged_perpetrator }}</td></tr>
+    <tr><th>Description</th><td colspan="3">{{ inc.description|linebreaksbr }}</td></tr>
+    <tr><th>Reported to</th><td>{{ inc.reported_to }}</td><th>Recorded by</th><td>{{ inc.created_by }}</td></tr>
+    <tr><th>Action taken</th><td colspan="3">{{ inc.action_taken|linebreaksbr }}</td></tr>
+  </table>
+  {% empty %}
+  <p>No protection incidents recorded on this file.</p>
+  {% endfor %}
+</div>
+{% endwith %}{% endfor %}
+{% endblock %}

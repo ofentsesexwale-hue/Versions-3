@@ -40,6 +40,12 @@ FORMS = {
     'success_story': ('print/success_story.html', 'Success Story'),
     'monthly_report': ('print/monthly_report.html', 'C06 Monthly Household Services Report'),
     'hiv_risk': ('print/hiv_risk.html', 'HIV Risk Assessment Form'),
+    'hivstat': ('print/hivstat.html', 'Child HIVSTAT Record'),
+    'consent': ('print/consent.html', 'Consent Record'),
+    'cow1': ('print/cow1.html', 'COW 1 Community Work Plan'),
+    'evaluation': ('print/evaluation.html', 'CW 12 Evaluation'),
+    'group_work': ('print/group_work.html', 'GRW Group Work Session'),
+    'form22': ('print/form22.html', 'Form 22 Protection Incident'),
     'full': ('print/full.html', 'Full Case File'),
 }
 
@@ -68,7 +74,9 @@ def print_form(request, form):
     template, title = FORMS[form]
 
     qs = scoped_household_qs(user).prefetch_related(
-        'members', 'caregiver', 'checklist_items', 'process_notes', 'assessments'
+        'members', 'caregiver', 'checklist_items', 'process_notes', 'assessments',
+        'care_plans', 'consents', 'protection_incidents', 'cow1_plans',
+        'evaluations', 'group_sessions',
     )
     hid = request.GET.get('household_id')
     ids = request.GET.get('household_ids')
@@ -108,6 +116,15 @@ def print_form(request, form):
         assessments = list(hh.assessments.all())
         hh.assessment = (next((a for a in assessments if str(a.pk) == aid), None)
                          if aid else (assessments[0] if assessments else None))
+        plans = list(hh.care_plans.all())
+        hh.care_plan = plans[0] if plans else None
+        hh.consents_list = list(hh.consents.all())
+        hh.incidents_list = list(hh.protection_incidents.all())
+        cow1s = list(hh.cow1_plans.all())
+        hh.cow1 = cow1s[0] if cow1s else None
+        evals = list(hh.evaluations.all())
+        hh.evaluation = evals[0] if evals else None
+        hh.group_list = list(hh.group_sessions.all())
         log_action(user, 'printed', f'Printed "{title}" for Household #{hh.pk} ({hh.org_household_number})')
 
     ctx = {

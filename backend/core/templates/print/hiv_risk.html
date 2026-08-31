@@ -1,23 +1,36 @@
 {% extends 'print/base_form.html' %}
 {% block content %}
 {% for hh in households %}{% with cg=hh.cg %}
+{% for m in hh.member_list %}
 <div class="sheet">
   {% include 'print/_gov.html' %}
   <div class="ftitle">HIV Risk Assessment Form</div>
   <table>
     <tr><th style="width:26%;">Organisation/Service Point</th><td>{{ org_name }}</td>
-        <th style="width:20%;">Date of assessment</th><td></td></tr>
+        <th style="width:20%;">Date of assessment</th><td>{{ m.hiv_test_date|date:"Y-m-d"|default:"" }}</td></tr>
     <tr><th>Parent's/Legal Guardian/Caregiver Full Name</th><td>{{ cg.name }} {{ cg.surname }}</td>
         <th>Contact Details</th><td>{{ cg.cell_number }}</td></tr>
-    <tr><th>Child's Full Name</th><td></td><th>Child's ID Number/Date of Birth</th><td></td></tr>
-    <tr><th>Gender</th><td><span class="chk"></span>Male <span class="chk"></span>Female</td>
-        <th>Disability? Y/N</th><td></td></tr>
+    <tr><th>Child's Full Name</th><td>{{ m.name }} {{ m.surname }}</td>
+        <th>Child's ID Number/Date of Birth</th><td>{{ m.id_number }} / {{ m.date_of_birth|date:"Y-m-d" }}</td></tr>
+    <tr><th>Gender</th><td>{% if m.sex == 'Male' %}<span class="chk">X</span>Male <span class="chk"></span>Female{% elif m.sex == 'Female' %}<span class="chk"></span>Male <span class="chk">X</span>Female{% else %}<span class="chk"></span>Male <span class="chk"></span>Female{% endif %}</td>
+        <th>Disability? Y/N</th><td>{% if m.disability %}Yes{% else %}No{% endif %}</td></tr>
   </table>
-  <h2 class="sec">Part 1: HIV Screening</h2>
-  <div class="fld">Is the child's HIV status known? <span class="chk"></span>Yes <span class="chk"></span>No</div>
+  <h2 class="sec">Part 1: HIV Screening (HIVSTAT)</h2>
+  <div class="fld">Is the child's HIV status known?
+    {% if m.hiv_status and m.hiv_status != 'unknown' %}<span class="chk">X</span>Yes <span class="chk"></span>No
+    {% else %}<span class="chk"></span>Yes <span class="chk">X</span>No{% endif %}
+  </div>
   <div class="fld">What is the status?
-    <span class="chk"></span>Positive Status <span class="chk"></span>Negative Status <span class="chk"></span>Unknown Status</div>
-  <p class="muted">If NEGATIVE: determine when the test was conducted. If more than 6 months ago and child is over 13 and sexually active, proceed with risk assessment (Part 2). If tested within last 6 months, HIV test NOT needed.</p>
+    <span class="chk">{% if m.hiv_status == 'positive' %}X{% endif %}</span>Positive Status
+    <span class="chk">{% if m.hiv_status == 'negative' %}X{% endif %}</span>Negative Status
+    <span class="chk">{% if m.hiv_status == 'unknown' or m.hiv_status == 'not_disclosed' or not m.hiv_status %}X{% endif %}</span>Unknown / not disclosed
+  </div>
+  <div class="fld">On ART: {{ m.get_on_art_display }} &nbsp; Last viral load: {{ m.last_viral_load }} {{ m.last_viral_load_date|date:"Y-m-d" }}</div>
+  <div class="fld">Last HIV test date: {{ m.hiv_test_date|date:"Y-m-d"|default:"—" }} &nbsp; Test required:
+    {% if m.hiv_test_required %}<span class="chk">X</span>Yes{% elif m.hiv_test_required == False %}<span class="chk">X</span>No{% else %}Not recorded{% endif %}
+  </div>
+  {% if m.hiv_risk_notes %}<div class="ans">{{ m.hiv_risk_notes|linebreaksbr }}</div>{% endif %}
+  <p class="muted">Need-to-know: this health information is stored on the household file for care planning. Print and share only with staff who need it to deliver services.</p>
   <h2 class="sec">Part 2: Risk Indicators &mdash; Circumstantial (Parental/Family)</h2>
   <table>
     <tr><th>Indicator</th><th style="width:8%;">Yes</th><th style="width:8%;">No</th></tr>
@@ -29,33 +42,12 @@
   </table>
   <p class="muted">If YES to any of the above, the CHILD IS AT RISK of HIV and supportive referral for TESTING IS ADVISED (obtain consent prior to referral).</p>
 </div>
-
+{% empty %}
 <div class="sheet">
-  <div class="conf">HIV RISK ASSESSMENT FORM</div>
-  <h2 class="sec">Health Indicators</h2>
-  <table>
-    <tr><th>Indicator</th><th style="width:8%;">Yes</th><th style="width:8%;">No</th></tr>
-    <tr><td>Does the child get sick often or has he/she been sick for more than three weeks at a time?</td><td style="text-align:center;"><span class="chk"></span></td><td style="text-align:center;"><span class="chk"></span></td></tr>
-    <tr><td>Is the child small and/or underweight for his/her age?</td><td style="text-align:center;"><span class="chk"></span></td><td style="text-align:center;"><span class="chk"></span></td></tr>
-    <tr><td>Has the child been diagnosed with TB?</td><td style="text-align:center;"><span class="chk"></span></td><td style="text-align:center;"><span class="chk"></span></td></tr>
-    <tr><td>Has the child been admitted to hospital in the past six months?</td><td style="text-align:center;"><span class="chk"></span></td><td style="text-align:center;"><span class="chk"></span></td></tr>
-  </table>
-  <h2 class="sec">Behavioral Indicators</h2>
-  <table>
-    <tr><th>Indicator</th><th style="width:8%;">Yes</th><th style="width:8%;">No</th></tr>
-    <tr><td>Do you suspect that the child may have been exposed to sexual violence?</td><td style="text-align:center;"><span class="chk"></span></td><td style="text-align:center;"><span class="chk"></span></td></tr>
-    <tr><td>Do you know if the child has been sexually abused?</td><td style="text-align:center;"><span class="chk"></span></td><td style="text-align:center;"><span class="chk"></span></td></tr>
-  </table>
-  <h2 class="sec">Part 3: Assessment Result and Action</h2>
-  <div class="fld"><span class="lbl">Outcome:</span>
-    <span class="chk"></span>Test Required <span class="chk"></span>Test Not Required
-    <span class="chk"></span>Routine testing every six months required</div>
-  <div class="fld">Child Referred for HIV Testing (indicate health facility): __________________________</div>
-  <div class="fld"><span class="lbl">Date for Follow-up:</span> ______________</div>
-  <table style="margin-top:10px;">
-    <tr><th>SSP Name and Surname</th><th>Signature</th><th>SACSSP Number</th><th>Date</th></tr>
-    <tr><td>{{ user.get_full_name|default:user.username }}</td><td>&nbsp;</td><td></td><td></td></tr>
-  </table>
+  {% include 'print/_gov.html' %}
+  <div class="ftitle">HIV Risk Assessment Form</div>
+  <p>No household members captured yet. Add children to this file, then reprint.</p>
 </div>
+{% endfor %}
 {% endwith %}{% endfor %}
 {% endblock %}

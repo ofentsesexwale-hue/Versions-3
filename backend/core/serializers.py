@@ -11,15 +11,36 @@ from .models import (
     Assessment,
     Caregiver,
     CaseFileChecklistItem,
+    ConsentRecord,
+    Cow1Plan,
+    Evaluation,
+    FamilyCarePlan,
+    GroupWorkSession,
     Household,
     HouseholdMember,
     Organisation,
     ProcessNote,
+    ProtectionIncident,
     ServiceDelivery,
     SiteConfig,
     SupportingDocument,
 )
 from .permissions import user_role
+
+
+class EmptyBlankDatesMixin:
+    """Treat empty date strings as null so household forms can omit optional dates."""
+
+    def to_internal_value(self, data):
+        if hasattr(data, 'copy'):
+            data = data.copy()
+        else:
+            data = dict(data)
+        for name, field in self.fields.items():
+            if isinstance(field, serializers.DateField) and data.get(name) == '':
+                data[name] = None
+        return super().to_internal_value(data)
+
 
 PARENT_MODEL_MAP = {
     'household': Household,
@@ -45,7 +66,10 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'full_name', 'email', 'role']
+        fields = [
+            'id', 'username', 'first_name', 'last_name', 'full_name', 'email',
+            'role', 'is_active', 'last_login', 'date_joined',
+        ]
 
     def get_role(self, obj):
         return user_role(obj)
@@ -145,7 +169,7 @@ class CaregiverSerializer(ConfirmMixin):
         ]
 
 
-class HouseholdMemberSerializer(ConfirmMixin):
+class HouseholdMemberSerializer(EmptyBlankDatesMixin, ConfirmMixin):
     surname_confirmed_by = serializers.StringRelatedField(read_only=True)
     id_number_confirmed_by = serializers.StringRelatedField(read_only=True)
     date_of_birth_confirmed_by = serializers.StringRelatedField(read_only=True)
@@ -156,6 +180,9 @@ class HouseholdMemberSerializer(ConfirmMixin):
             'id', 'household', 'id_type', 'id_number', 'name', 'surname', 'known_as',
             'nationality', 'date_of_birth', 'sex', 'race', 'disability',
             'disability_description', 'relationship_to_head', 'date_joined',
+            'school_name', 'grade', 'enrolled_in_school', 'grant_types',
+            'hiv_status', 'on_art', 'last_viral_load', 'last_viral_load_date',
+            'hiv_test_date', 'hiv_test_required', 'hiv_risk_notes',
         ] + CONFIRM_READ_FIELDS
         read_only_fields = [
             'surname_confirmed_at', 'id_number_confirmed_at', 'date_of_birth_confirmed_at',
@@ -246,6 +273,7 @@ class HouseholdListSerializer(serializers.ModelSerializer):
             'date_registered', 'caregiver_name', 'member_count', 'has_unconfirmed',
             'checklist_progress', 'assigned_to_ids', 'assigned_to_names',
             'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
+            'status', 'status_changed_at', 'status_reason',
         ]
 
     def get_caregiver_name(self, obj):
@@ -288,8 +316,14 @@ class HouseholdSerializer(serializers.ModelSerializer):
             'province', 'district', 'municipality', 'ward', 'date_registered',
             'assigned_to', 'assigned_to_names', 'checklist_progress', 'created_at',
             'checklist_signed_name', 'checklist_signed_sacssp', 'checklist_signed_at',
-            'version',
+            'status', 'status_changed_at', 'status_reason', 'version',
         ]
+
+    def update(self, instance, validated_data):
+        new_status = validated_data.get('status', instance.status)
+        if new_status != instance.status:
+            validated_data['status_changed_at'] = timezone.localdate()
+        return super().update(instance, validated_data)
 
     def get_assigned_to_names(self, obj):
         return [u.get_full_name() or u.username for u in obj.assigned_to.all()]
@@ -428,3 +462,89 @@ class ServiceDeliverySerializer(serializers.ModelSerializer):
             validated_data['beneficiary_content_type'] = ContentType.objects.get_for_model(model)
             validated_data['beneficiary_object_id'] = bid
         return super().create(validated_data)
+
+
+class ConsentRecordSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+    consent_type_display = serializers.CharField(source='get_consent_type_display', read_only=True)
+
+    class Meta:
+        model = ConsentRecord
+        fields = [
+            'id', 'household', 'consent_type', 'consent_type_display',
+            'caregiver_name', 'caregiver_signed', 'caregiver_signed_date',
+            'child_name', 'child_assent', 'child_assent_date', 'notes',
+            'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
+
+
+class FamilyCarePlanSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = FamilyCarePlan
+        fields = [
+            'id', 'household', 'overall_goal', 'review_date', 'ssp_name',
+            'caregiver_sign_name', 'rows', 'created_at', 'updated_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+
+class ProtectionIncidentSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+    incident_type_display = serializers.CharField(source='get_incident_type_display', read_only=True)
+    member_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProtectionIncident
+        fields = [
+            'id', 'household', 'member', 'member_name', 'incident_date', 'incident_type',
+            'incident_type_display', 'alleged_perpetrator', 'location', 'description',
+            'reported_to', 'action_taken', 'status', 'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
+
+    def get_member_name(self, obj):
+        if not obj.member:
+            return ''
+        return f'{obj.member.name} {obj.member.surname}'.strip()
+
+
+class Cow1PlanSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Cow1Plan
+        fields = [
+            'id', 'household', 'plan_date', 'community_issue', 'planned_activities',
+            'stakeholders', 'expected_outcome', 'ssp_name', 'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
+
+
+class EvaluationSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+    recommendation_display = serializers.CharField(source='get_recommendation_display', read_only=True)
+
+    class Meta:
+        model = Evaluation
+        fields = [
+            'id', 'household', 'evaluation_date', 'period_from', 'period_to',
+            'progress_against_plan', 'remaining_needs', 'recommendation',
+            'recommendation_display', 'ssp_name', 'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
+
+
+class GroupWorkSessionSerializer(EmptyBlankDatesMixin, serializers.ModelSerializer):
+    created_by = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = GroupWorkSession
+        fields = [
+            'id', 'household', 'session_date', 'group_name', 'topic',
+            'attendees_count', 'attendees_notes', 'session_notes', 'outcomes',
+            'created_at', 'created_by',
+        ]
+        read_only_fields = ['created_at', 'created_by']
