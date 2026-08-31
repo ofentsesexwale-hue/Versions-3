@@ -26,6 +26,10 @@ class PreviewHandler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[preview] {self.address_string()} {fmt % args}")
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        super().end_headers()
+
     def do_GET(self):
         if self.path.startswith("/api"):
             return self.proxy()
