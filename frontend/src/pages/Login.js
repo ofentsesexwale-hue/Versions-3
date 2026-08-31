@@ -22,7 +22,7 @@ export default function Login() {
   }, []);
 
   const brandingLogo = branding?.logo
-    ? (branding.logo.startsWith("http") ? branding.logo : `${process.env.REACT_APP_BACKEND_URL}${branding.logo}`)
+    ? (branding.logo.startsWith("http") ? branding.logo : `${process.env.REACT_APP_BACKEND_URL || ""}${branding.logo}`)
     : null;
 
   const submit = async (e) => {

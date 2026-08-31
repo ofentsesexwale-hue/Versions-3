@@ -153,7 +153,7 @@ export function AppShell() {
   }, []);
 
   const logoUrl = org?.logo
-    ? (org.logo.startsWith("http") ? org.logo : `${process.env.REACT_APP_BACKEND_URL}${org.logo}`)
+    ? (org.logo.startsWith("http") ? org.logo : `${process.env.REACT_APP_BACKEND_URL || ""}${org.logo}`)
     : null;
 
   useEffect(() => {

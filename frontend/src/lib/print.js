@@ -1,6 +1,6 @@
 import { TOKEN_KEY } from "@/lib/api";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 
 // The organisation name/logo used on printed forms now comes from the backend
 // Organisation profile; only pass `org` to override it explicitly.

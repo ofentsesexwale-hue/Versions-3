@@ -154,6 +154,13 @@ webpackConfig.devServer = (devServerConfig) => {
     ...cfg.headers,
     "Access-Control-Allow-Origin": "*",
   };
+  cfg.proxy = [
+    {
+      context: ["/api"],
+      target: "http://127.0.0.1:8001",
+      changeOrigin: true,
+    },
+  ];
   return cfg;
 };
 
