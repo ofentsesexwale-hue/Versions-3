@@ -73,8 +73,7 @@ export default function Login() {
           </p>
         </div>
         <div className="glass-strong rounded-[1.75rem] p-6 sm:p-7">
-          <h2 className="mb-1 text-lg font-semibold tracking-tight">Office sign-in</h2>
-          <p className="mb-5 text-[13px] text-muted-foreground">Use your staff username. Training classroom logins are separate, below.</p>
+          <h2 className="mb-5 text-lg font-semibold tracking-tight">Office sign-in</h2>
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="username">Username</Label>
