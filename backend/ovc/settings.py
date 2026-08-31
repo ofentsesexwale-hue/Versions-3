@@ -34,7 +34,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
-    'core',
+    'core.apps.CoreConfig',
 ]
 
 MIDDLEWARE = [
@@ -75,6 +75,9 @@ if os.environ.get('USE_SQLITE', 'true').lower() in ('1', 'true', 'yes', 'on'):
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+            'OPTIONS': {
+                'timeout': 30,
+            },
         }
     }
 else:
@@ -114,6 +117,8 @@ MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
 
 # Max upload size for supporting documents (25 MB).
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024
+ALLOWED_UPLOAD_EXTENSIONS = ('.pdf', '.png', '.jpg', '.jpeg')
+ALLOWED_UPLOAD_TYPES = 'PDF or PNG (JPEG scans of IDs are also accepted)'
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
@@ -129,7 +134,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 25,
+    'PAGE_SIZE': 50,
 }
 
 # Local-only CORS (React dev server + local addresses). No public exposure.

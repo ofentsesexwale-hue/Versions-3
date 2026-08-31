@@ -8,7 +8,7 @@ from django.contrib.auth.models import Group, User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Case, Count, F, FloatField, Max, Q, Value, When
+from django.db.models import Case, Count, Exists, F, FloatField, Max, OuterRef, Q, Value, When
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -454,7 +454,7 @@ class HouseholdMemberViewSet(_PersonViewSet):
             'name': f'{m.name} {m.surname}'.strip(),
             'household_id': m.household_id,
             'org_household_number': m.household.org_household_number,
-        } for m in qs]
+        } for m in qs[:100]]
         return Response(data)
 
 
@@ -466,14 +466,14 @@ class SupportingDocumentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         from django.contrib.contenttypes.models import ContentType
         households = scoped_household_qs(self.request.user)
-        allowed_household_ids = list(households.values_list('id', flat=True))
-        cg_ids = list(Caregiver.objects.filter(household_id__in=allowed_household_ids).values_list('id', flat=True))
-        mem_ids = list(HouseholdMember.objects.filter(household_id__in=allowed_household_ids).values_list('id', flat=True))
+        hh_ids = households.values('id')
+        cg_ids = Caregiver.objects.filter(household_id__in=hh_ids).values('id')
+        mem_ids = HouseholdMember.objects.filter(household_id__in=hh_ids).values('id')
         ct_h = ContentType.objects.get_for_model(Household)
         ct_c = ContentType.objects.get_for_model(Caregiver)
         ct_m = ContentType.objects.get_for_model(HouseholdMember)
         qs = SupportingDocument.objects.filter(
-            Q(content_type=ct_h, object_id__in=allowed_household_ids)
+            Q(content_type=ct_h, object_id__in=hh_ids)
             | Q(content_type=ct_c, object_id__in=cg_ids)
             | Q(content_type=ct_m, object_id__in=mem_ids)
         )
@@ -484,12 +484,11 @@ class SupportingDocumentViewSet(viewsets.ModelViewSet):
             if parent_type in ct_map:
                 qs = qs.filter(content_type=ct_map[parent_type], object_id=parent_id)
 
-        # All documents for a single household (household + its caregiver + members).
         household_id = self.request.query_params.get('household')
         if household_id and household_id.isdigit():
             hid = int(household_id)
-            hh_cg_ids = list(Caregiver.objects.filter(household_id=hid).values_list('id', flat=True))
-            hh_mem_ids = list(HouseholdMember.objects.filter(household_id=hid).values_list('id', flat=True))
+            hh_cg_ids = Caregiver.objects.filter(household_id=hid).values('id')
+            hh_mem_ids = HouseholdMember.objects.filter(household_id=hid).values('id')
             qs = qs.filter(
                 Q(content_type=ct_h, object_id=hid)
                 | Q(content_type=ct_c, object_id__in=hh_cg_ids)
@@ -1126,7 +1125,7 @@ def users_list(request):
 def dashboard(request):
     user = request.user
     role = user_role(user)
-    qs = scoped_household_qs(user).prefetch_related('members', 'caregiver')
+    qs = scoped_household_qs(user)
 
     q = request.query_params.get('q')
     search_results = None
@@ -1138,18 +1137,29 @@ def dashboard(request):
             | Q(caregiver__name__icontains=q)
             | Q(members__surname__icontains=q)
             | Q(members__id_number__icontains=q)
-        ).distinct()[:50]
+        ).distinct().prefetch_related('members', 'caregiver', 'assigned_to', 'checklist_items')[:50]
         search_results = HouseholdListSerializer(results, many=True).data
 
-    recent = qs.order_by('-id')[:10]
+    recent = qs.prefetch_related('members', 'caregiver', 'assigned_to', 'checklist_items').order_by('-id')[:10]
     recent_data = HouseholdListSerializer(recent, many=True).data
 
     stats = {'total_households': qs.count()}
-    status_counts = {c[0]: qs.filter(status=c[0]).count() for c in choices.CASE_STATUS_CHOICES}
+    status_counts = {c[0]: 0 for c in choices.CASE_STATUS_CHOICES}
+    for row in qs.values('status').annotate(n=Count('id')):
+        status_counts[row['status']] = row['n']
     stats['by_status'] = status_counts
     stats['open_households'] = status_counts.get('open', 0)
+    stats['total_people'] = (
+        Caregiver.objects.filter(household__in=qs).count()
+        + HouseholdMember.objects.filter(household__in=qs).count()
+    )
+    stats['document_count'] = SupportingDocument.objects.filter(
+        # documents viewset scope is heavier; count files on households in this file set
+        Q(content_type__model='household', object_id__in=qs.values('id'))
+        | Q(content_type__model='caregiver', object_id__in=Caregiver.objects.filter(household__in=qs).values('id'))
+        | Q(content_type__model='householdmember', object_id__in=HouseholdMember.objects.filter(household__in=qs).values('id'))
+    ).count()
 
-    # Case-file completeness bands (supervisors/admin) for the dashboard chart.
     completeness_bands = None
     if role in ('supervisor', 'admin'):
         banded = annotate_completeness(qs)
@@ -1158,21 +1168,26 @@ def dashboard(request):
         needs = banded.filter(_pct__lt=50).count()
         completeness_bands = {'ready': ready, 'in_progress': in_progress, 'needs_attention': needs}
 
-    # Unconfirmed field counts (visible to supervisors/admin).
     unconfirmed = {'id_number': 0, 'surname': 0, 'date_of_birth': 0}
     if role in ('supervisor', 'admin'):
-        for hh in qs:
-            people = ([hh.caregiver] if hasattr(hh, 'caregiver') and hh.caregiver else []) + list(hh.members.all())
-            flags = {'id_number': False, 'surname': False, 'date_of_birth': False}
-            for p in people:
-                for f in ['surname', 'id_number', 'date_of_birth']:
-                    val = getattr(p, f)
-                    has_val = (val.strip() != '') if isinstance(val, str) else (val is not None)
-                    if has_val and not getattr(p, f'{f}_confirmed'):
-                        flags[f] = True
-            for f in flags:
-                if flags[f]:
-                    unconfirmed[f] += 1
+        def _unc(field):
+            if field == 'date_of_birth':
+                cg = Caregiver.objects.filter(
+                    household_id=OuterRef('pk'), date_of_birth__isnull=False, date_of_birth_confirmed=False
+                )
+                mem = HouseholdMember.objects.filter(
+                    household_id=OuterRef('pk'), date_of_birth__isnull=False, date_of_birth_confirmed=False
+                )
+            else:
+                cg = Caregiver.objects.filter(household_id=OuterRef('pk'), **{f'{field}_confirmed': False}).exclude(**{field: ''})
+                mem = HouseholdMember.objects.filter(household_id=OuterRef('pk'), **{f'{field}_confirmed': False}).exclude(**{field: ''})
+            return qs.filter(Exists(cg) | Exists(mem)).count()
+
+        unconfirmed = {
+            'id_number': _unc('id_number'),
+            'surname': _unc('surname'),
+            'date_of_birth': _unc('date_of_birth'),
+        }
 
     return Response({
         'role': role,

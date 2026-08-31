@@ -150,6 +150,10 @@ class HouseholdMember(PersonBase):
 
     class Meta:
         ordering = ['id']
+        indexes = [
+            models.Index(fields=['household', 'surname']),
+            models.Index(fields=['household', 'id_number']),
+        ]
 
     def __str__(self):
         return f"Member: {self.name} {self.surname}".strip()
@@ -164,6 +168,8 @@ class SupportingDocument(models.Model):
     category = models.CharField(max_length=32, choices=choices.CATEGORY_CHOICES)
     file = models.FileField(upload_to=document_upload_path)
     label = models.CharField(max_length=255, blank=True)
+    attached_name = models.CharField(max_length=255, blank=True)
+    parent_kind = models.CharField(max_length=32, blank=True, db_index=True)
     date_of_document = models.DateField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(
@@ -173,7 +179,10 @@ class SupportingDocument(models.Model):
 
     class Meta:
         ordering = ['-uploaded_at']
-        indexes = [models.Index(fields=['content_type', 'object_id'])]
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['-uploaded_at']),
+        ]
 
     def __str__(self):
         return f"{self.get_category_display()}: {self.label}"

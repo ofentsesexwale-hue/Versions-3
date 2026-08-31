@@ -202,12 +202,14 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
     view_url = serializers.SerializerMethodField()
     download_url = serializers.SerializerMethodField()
     is_pdf = serializers.SerializerMethodField()
+    is_image = serializers.SerializerMethodField()
 
     class Meta:
         model = SupportingDocument
         fields = [
             'id', 'parent_type', 'parent_id', 'category', 'category_display', 'file',
-            'file_name', 'view_url', 'download_url', 'is_pdf', 'label',
+            'file_name', 'view_url', 'download_url', 'is_pdf', 'is_image', 'label',
+            'attached_name', 'parent_kind',
             'date_of_document', 'uploaded_at', 'uploaded_by',
         ]
         extra_kwargs = {'file': {'write_only': True}}
@@ -222,24 +224,63 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
         return f'/api/documents/{obj.pk}/download/'
 
     def get_is_pdf(self, obj):
-        return bool(obj.file) and obj.file.name.lower().endswith('.pdf')
+        name = (obj.file.name if obj.file else '') or ''
+        return name.lower().endswith('.pdf')
+
+    def get_is_image(self, obj):
+        name = (obj.file.name if obj.file else '') or ''
+        return name.lower().endswith(('.png', '.jpg', '.jpeg'))
 
     def validate_file(self, value):
         if value.size > settings.MAX_UPLOAD_SIZE:
             raise serializers.ValidationError(
                 f'File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} MB.'
             )
+        name = (getattr(value, 'name', '') or '').lower()
+        allowed_ext = getattr(settings, 'ALLOWED_UPLOAD_EXTENSIONS', ('.pdf', '.png', '.jpg', '.jpeg'))
+        if not name.endswith(allowed_ext):
+            raise serializers.ValidationError(
+                'Upload a PDF or PNG. JPEG scans of IDs and clinic cards are also accepted.'
+            )
+        header = value.read(8) or b''
+        value.seek(0)
+        is_pdf = header.startswith(b'%PDF')
+        is_png = header.startswith(b'\x89PNG')
+        is_jpeg = header.startswith(b'\xff\xd8\xff')
+        if not (is_pdf or is_png or is_jpeg):
+            raise serializers.ValidationError(
+                'That file is not a valid PDF or PNG (or JPEG scan).'
+            )
+        if name.endswith('.pdf') and not is_pdf:
+            raise serializers.ValidationError('The file extension does not match a PDF.')
+        if name.endswith('.png') and not is_png:
+            raise serializers.ValidationError('The file extension does not match a PNG.')
         return value
 
     def create(self, validated_data):
         parent_type = validated_data.pop('parent_type')
         parent_id = validated_data.pop('parent_id')
         model = PARENT_MODEL_MAP[parent_type]
-        if not model.objects.filter(pk=parent_id).exists():
+        parent = model.objects.filter(pk=parent_id).first()
+        if not parent:
             raise serializers.ValidationError({'parent_id': 'Target record not found.'})
+        request = self.context.get('request')
+        if request:
+            from .views import scoped_household_qs
+            if model is Household:
+                hid = parent.pk
+            else:
+                hid = parent.household_id
+            if not scoped_household_qs(request.user).filter(pk=hid).exists():
+                raise serializers.ValidationError({'parent_id': 'You cannot attach a file to this record.'})
         validated_data['content_type'] = ContentType.objects.get_for_model(model)
         validated_data['object_id'] = parent_id
-        validated_data['uploaded_by'] = self.context['request'].user
+        validated_data['parent_kind'] = parent_type
+        if model is Household:
+            validated_data['attached_name'] = f'Household {parent.org_household_number}'
+        else:
+            validated_data['attached_name'] = f'{parent.name} {parent.surname}'.strip() or parent_type
+        validated_data['uploaded_by'] = request.user if request else None
         return super().create(validated_data)
 
 

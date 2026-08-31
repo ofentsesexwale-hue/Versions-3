@@ -243,9 +243,14 @@ export default function HouseholdDetail() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Caregiver (Head of Household)</CardTitle>
             {cg ? (
-              <Button variant="outline" size="sm" className="gap-1" onClick={() => navigate(`/households/${id}/caregiver`)} data-testid="edit-caregiver-button">
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </Button>
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => navigate(`/documents/upload?household=${id}&attach=caregiver:${cg.id}`)} data-testid="upload-caregiver-docs">
+                  <Upload className="h-3.5 w-3.5" /> Files
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => navigate(`/households/${id}/caregiver`)} data-testid="edit-caregiver-button">
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+              </div>
             ) : null}
           </CardHeader>
           <CardContent>
@@ -303,6 +308,9 @@ export default function HouseholdDetail() {
                     )}
                   </div>
                   <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => navigate(`/documents/upload?household=${id}&attach=householdmember:${m.id}`)} title="Upload PNG or PDF" data-testid={`upload-member-${m.id}`}>
+                      <Upload className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/members/${m.id}/edit`)} data-testid={`edit-member-${m.id}`}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -343,7 +351,7 @@ export default function HouseholdDetail() {
         <CardContent>
           {docs.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground" data-testid="empty-state">
-              No documents uploaded yet - upload the first supporting document.
+              No PNG or PDF files on this household yet. Upload ID copies, clinic cards and care-plan scans against each beneficiary.
             </p>
           ) : (
             <Accordion type="multiple" defaultValue={grouped.map((g) => g.cat)} className="w-full">
@@ -360,7 +368,11 @@ export default function HouseholdDetail() {
                             <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-foreground">{doc.label || doc.file_name}</p>
-                              <p className="text-xs text-muted-foreground">{formatDate(doc.date_of_document)} · by {doc.uploaded_by}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {doc.attached_name ? `${doc.attached_name} · ` : ""}
+                                {doc.is_pdf ? "PDF" : doc.is_image ? "PNG/JPEG" : "File"}
+                                {" · "}{formatDate(doc.date_of_document)} · by {doc.uploaded_by}
+                              </p>
                             </div>
                           </div>
                           <div className="flex gap-1">
