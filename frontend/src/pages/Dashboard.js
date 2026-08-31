@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, CalendarClock, Download, HeartPulse, Home, IdCard, PieChart, TrendingUp, UserSquare2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { digitsOnly, lookupHousehold, uniqueHousehold } from "@/lib/lookup";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -176,9 +177,42 @@ export default function Dashboard() {
       .then((r) => setBandList(r.data.results || [])).catch(() => {});
   }, [band]);
 
-  const submitSearch = (e) => {
+  const openUnique = (payload) => {
+    const hh = uniqueHousehold(payload);
+    if (!hh) return false;
+    toast.success(`Opened file for ${payload.matched_label || hh.org_household_number}`);
+    navigate(`/households/${hh.id}`);
+    return true;
+  };
+
+  useEffect(() => {
+    if (!q) return;
+    let cancelled = false;
+    lookupHousehold(api, q)
+      .then((payload) => {
+        if (!cancelled) openUnique(payload);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  const submitSearch = async (e) => {
     e.preventDefault();
-    setParams(localQ ? { q: localQ } : {});
+    const term = localQ.trim();
+    if (!term) {
+      setParams({});
+      return;
+    }
+    try {
+      const payload = await lookupHousehold(api, term);
+      if (openUnique(payload)) return;
+    } catch {
+      /* fall through to list search */
+    }
+    setParams({ q: term });
   };
 
   const unconfirmed = data?.unconfirmed_counts || {};
@@ -199,7 +233,8 @@ export default function Dashboard() {
       </div>
 
       <form onSubmit={submitSearch} className="max-w-2xl">
-        <Input value={localQ} onChange={(e) => setLocalQ(e.target.value)} placeholder="Search by surname, ID number, or household number" className="h-12 text-base" data-testid="dashboard-search-input" />
+        <Input value={localQ} onChange={(e) => setLocalQ(e.target.value)} placeholder="Type an ID number to open the household — or search a surname" className="h-12 text-base" data-testid="dashboard-search-input" />
+        <p className="mt-2 text-xs text-muted-foreground">Spaces and dashes in ID numbers are ignored. A unique match opens the file immediately.</p>
       </form>
 
       {!q && !band && (
@@ -388,7 +423,11 @@ export default function Dashboard() {
               {band ? (
                 <p className="text-muted-foreground">No households in this band.</p>
               ) : q ? (
-                <p className="text-muted-foreground">No households found — try a different surname or ID number.</p>
+                <p className="text-muted-foreground">
+                  {digitsOnly(q).length >= 6
+                    ? "No household file for this ID number. Check the digits, or register a new household."
+                    : "No households found — try a different surname or ID number."}
+                </p>
               ) : user?.is_training ? (
                 <p className="text-muted-foreground">No training households yet. Run seed_data on the server.</p>
               ) : (

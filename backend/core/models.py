@@ -13,6 +13,11 @@ def today():
     return timezone.localdate()
 
 
+def digits_only(value):
+    """Strip spaces and dashes so 800101 5009 087 and 8001015009087 match."""
+    return ''.join(ch for ch in (value or '') if ch.isdigit())
+
+
 def document_upload_path(instance, filename):
     """Store files as {model}_{object_id}_{timestamp}_{original_filename}."""
     ts = timezone.now().strftime('%Y%m%d%H%M%S')
@@ -74,6 +79,8 @@ class PersonBase(models.Model):
     """Shared person fields for Caregiver and HouseholdMember, incl. confirm-trio."""
     id_type = models.CharField(max_length=32, choices=choices.ID_TYPE_CHOICES, default='SA ID Number')
     id_number = models.CharField(max_length=64, blank=True, db_index=True)
+    # Digits-only copy of id_number for Access-style lookup (ignore spaces/dashes).
+    id_number_digits = models.CharField(max_length=64, blank=True, db_index=True)
     name = models.CharField(max_length=255, blank=True)
     surname = models.CharField(max_length=255, blank=True, db_index=True)
     known_as = models.CharField(max_length=255, blank=True)
@@ -115,6 +122,10 @@ class PersonBase(models.Model):
 
     class Meta:
         abstract = True
+
+    def save(self, *args, **kwargs):
+        self.id_number_digits = digits_only(self.id_number)
+        super().save(*args, **kwargs)
 
 
 class Caregiver(PersonBase):

@@ -91,3 +91,7 @@ credentials.json
 .credentials
 agent-tools/
 backend/backups/
+backend/media/
+*.sqlite3-wal
+*.sqlite3-shm
+

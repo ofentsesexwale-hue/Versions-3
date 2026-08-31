@@ -25,6 +25,7 @@ from .models import (
     AuditLogEntry,
     Assessment,
     Caregiver,
+    digits_only,
     CaseFileChecklistItem,
     ConsentRecord,
     Cow1Plan,
@@ -75,6 +76,85 @@ from .serializers import (
 )
 
 CONFIRM_FIELDS = ['surname', 'id_number', 'date_of_birth']
+
+
+def household_text_search(qs, q):
+    """Surname / household number / ID (including spaced or dashed ID numbers)."""
+    digits = digits_only(q)
+    clauses = (
+        Q(org_household_number__icontains=q)
+        | Q(caregiver__surname__icontains=q)
+        | Q(caregiver__id_number__icontains=q)
+        | Q(caregiver__name__icontains=q)
+        | Q(members__surname__icontains=q)
+        | Q(members__id_number__icontains=q)
+    )
+    if digits:
+        clauses |= Q(caregiver__id_number_digits__icontains=digits) | Q(members__id_number_digits__icontains=digits)
+    return qs.filter(clauses).distinct()
+
+
+def lookup_households_for_query(qs, raw):
+    """
+    Access-style open-by-ID: unique ID number (or exact household number) opens the file.
+    Spaces and dashes in ID numbers are ignored.
+    """
+    raw = (raw or '').strip()
+    digits = digits_only(raw)
+    opened_by = None
+    matched_label = ''
+    hit_ids = []
+
+    if digits and len(digits) >= 6:
+        cg_hits = list(
+            Caregiver.objects.filter(household__in=qs, id_number_digits=digits).select_related('household')
+        )
+        mem_hits = list(
+            HouseholdMember.objects.filter(household__in=qs, id_number_digits=digits).select_related('household')
+        )
+        for person in cg_hits + mem_hits:
+            hid = person.household_id
+            if hid not in hit_ids:
+                hit_ids.append(hid)
+        if hit_ids:
+            opened_by = 'id_number'
+            person = (cg_hits + mem_hits)[0]
+            role = 'caregiver' if person in cg_hits else 'member'
+            matched_label = f'{person.name} {person.surname}'.strip() or person.id_number
+            if role == 'member':
+                matched_label = f'{matched_label} (household member)'
+
+    if not hit_ids and raw:
+        exact = list(qs.filter(org_household_number__iexact=raw).values_list('id', flat=True))
+        if not exact and digits:
+            exact = list(qs.filter(org_household_number__iexact=digits).values_list('id', flat=True))
+        if exact:
+            hit_ids = exact
+            opened_by = 'household_number'
+            hh = qs.filter(pk=exact[0]).select_related('caregiver').first()
+            cg = getattr(hh, 'caregiver', None) if hh else None
+            matched_label = (f'{cg.name} {cg.surname}'.strip() if cg else '') or (hh.org_household_number if hh else '')
+
+    if hit_ids:
+        households = qs.filter(pk__in=hit_ids).prefetch_related(
+            'members', 'caregiver', 'assigned_to', 'checklist_items'
+        )
+        n = len(hit_ids)
+        match = 'unique' if n == 1 else 'multiple'
+        return match, opened_by, matched_label, households
+
+    fuzzy = household_text_search(qs, raw).prefetch_related(
+        'members', 'caregiver', 'assigned_to', 'checklist_items'
+    )
+    n = fuzzy.count()
+    if n == 1:
+        hh = fuzzy.first()
+        cg = getattr(hh, 'caregiver', None)
+        label = (f'{cg.name} {cg.surname}'.strip() if cg else '') or hh.org_household_number
+        return 'unique', 'search', label, fuzzy
+    if n > 1:
+        return 'multiple', 'search', '', fuzzy[:50]
+    return 'none', None, '', fuzzy.none()
 
 
 def scoped_household_qs(user):
@@ -205,14 +285,7 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         qs = self.get_queryset()
         q = request.query_params.get('q') or request.query_params.get('search')
         if q:
-            qs = qs.filter(
-                Q(org_household_number__icontains=q)
-                | Q(caregiver__surname__icontains=q)
-                | Q(caregiver__id_number__icontains=q)
-                | Q(caregiver__name__icontains=q)
-                | Q(members__surname__icontains=q)
-                | Q(members__id_number__icontains=q)
-            ).distinct()
+            qs = household_text_search(qs, q)
         unconfirmed = request.query_params.get('unconfirmed')
         if unconfirmed in ('id_number', 'surname', 'date_of_birth'):
             qs = filter_unconfirmed(qs, unconfirmed)
@@ -313,6 +386,25 @@ class HouseholdViewSet(viewsets.ModelViewSet):
         instance.save()
         log_action(request.user, 'confirmed', f'Signed off checklist for Household #{instance.pk}')
         return Response(HouseholdDetailSerializer(instance).data)
+
+    @action(detail=False, methods=['get'])
+    def lookup(self, request):
+        """Type an ID number (or household number) and open the matching case file."""
+        raw = (request.query_params.get('q') or request.query_params.get('id_number') or '').strip()
+        if not raw:
+            return Response({'q': '', 'digits': '', 'match': 'none', 'opened_by': None,
+                             'matched_label': '', 'households': []})
+        qs = scoped_household_qs(request.user)
+        match, opened_by, label, households = lookup_households_for_query(qs, raw)
+        data = HouseholdListSerializer(households, many=True).data
+        return Response({
+            'q': raw,
+            'digits': digits_only(raw),
+            'match': match,
+            'opened_by': opened_by,
+            'matched_label': label,
+            'households': data,
+        })
 
     @action(detail=False, methods=['get'])
     def verification_count(self, request):
@@ -1130,14 +1222,9 @@ def dashboard(request):
     q = request.query_params.get('q')
     search_results = None
     if q:
-        results = qs.filter(
-            Q(org_household_number__icontains=q)
-            | Q(caregiver__surname__icontains=q)
-            | Q(caregiver__id_number__icontains=q)
-            | Q(caregiver__name__icontains=q)
-            | Q(members__surname__icontains=q)
-            | Q(members__id_number__icontains=q)
-        ).distinct().prefetch_related('members', 'caregiver', 'assigned_to', 'checklist_items')[:50]
+        results = household_text_search(qs, q).prefetch_related(
+            'members', 'caregiver', 'assigned_to', 'checklist_items'
+        )[:50]
         search_results = HouseholdListSerializer(results, many=True).data
 
     recent = qs.prefetch_related('members', 'caregiver', 'assigned_to', 'checklist_items').order_by('-id')[:10]

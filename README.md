@@ -50,6 +50,12 @@ Already wired for a local / Cloud Agent run:
 
 `./start-local.sh` or `start-local.bat` creates the venv, migrates, seeds training files if missing, builds the UI, and serves preview on port 43141.
 
+## Open a file by ID number
+
+On the dashboard or in the header search, type a South African ID (or passport digits). Spaces and dashes are ignored. If that number belongs to one household, the file opens immediately — the same idea as looking someone up in Access. Microsoft Access can still be imported later; this office file is the live source of truth.
+
+If several people share a partial number, you get a list. If nobody matches, you stay on search with an empty result.
+
 ## What you can capture
 
 - Households with case status (open, graduated, transferred, lost to follow-up, closed)

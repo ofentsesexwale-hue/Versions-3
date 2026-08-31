@@ -21,7 +21,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { toast } from "sonner";
 import api from "@/lib/api";
+import { lookupHousehold, uniqueHousehold } from "@/lib/lookup";
 import { useAuth } from "@/context/AuthContext";
 import { ROLE_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -168,9 +170,23 @@ export function AppShell() {
     navigate("/login");
   };
 
-  const submitSearch = (e) => {
+  const submitSearch = async (e) => {
     e.preventDefault();
-    navigate(`/?q=${encodeURIComponent(q)}`);
+    const term = q.trim();
+    if (!term) return;
+    try {
+      const payload = await lookupHousehold(api, term);
+      const hh = uniqueHousehold(payload);
+      if (hh) {
+        toast.success(`Opened file for ${payload.matched_label || hh.org_household_number}`);
+        setQ("");
+        navigate(`/households/${hh.id}`);
+        return;
+      }
+    } catch {
+      /* fall through */
+    }
+    navigate(`/?q=${encodeURIComponent(term)}`);
   };
 
   return (
@@ -204,7 +220,7 @@ export function AppShell() {
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search surname, ID number, or household number"
+                placeholder="ID number, surname, or household number"
                 className="h-11 pl-10"
                 data-testid="global-search-input"
               />
