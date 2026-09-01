@@ -1,0 +1,78 @@
+{
+  "scale": 2.0,
+  "source_pdf": "docs/official/NPO_case_management_file.pdf",
+  "pages": {
+    "c01:0": {
+      "file": "c01_p0.png",
+      "pdf_page": 4,
+      "rotate": 0,
+      "width": 1190,
+      "height": 1684,
+      "sha256": "c7636dba67ceac6f72465b3717b311d2006ebfedc8c52bc3e42cf79b8f2f388e",
+      "orientation": "portrait"
+    },
+    "c01:1": {
+      "file": "c01_p1.png",
+      "pdf_page": 5,
+      "rotate": 0,
+      "width": 1190,
+      "height": 1684,
+      "sha256": "8ce8d6414d29c363c752083e24e7c2949d595cc983195d65d8ab43ff0f178dc1",
+      "orientation": "portrait"
+    },
+    "c02:0": {
+      "file": "c02_p0.png",
+      "pdf_page": 6,
+      "rotate": 90,
+      "width": 1684,
+      "height": 1190,
+      "sha256": "86d20d47152905693b0a9faa2b3d3308822ce67503b4c0c373aa5930c2bec9f9",
+      "orientation": "landscape"
+    },
+    "c03:0": {
+      "file": "c03_p0.png",
+      "pdf_page": 7,
+      "rotate": 90,
+      "width": 1684,
+      "height": 1190,
+      "sha256": "c8f72b65c861550fcd52afc33392a4f56e13c7077fbf4d9bcc8cb976a9d57e9b",
+      "orientation": "landscape"
+    },
+    "intake:0": {
+      "file": "intake_p0.png",
+      "pdf_page": 8,
+      "rotate": 0,
+      "width": 1190,
+      "height": 1684,
+      "sha256": "18b149a46ef7c8b096e6482dc42c378114b30caa292562b8c797f21df129760b",
+      "orientation": "portrait"
+    },
+    "intake:1": {
+      "file": "intake_p1.png",
+      "pdf_page": 9,
+      "rotate": 0,
+      "width": 1190,
+      "height": 1684,
+      "sha256": "f73dbece2955603b8c7bb6458dc8b47f3bd51fbd74c419c2b9cf57082bd5ab9c",
+      "orientation": "portrait"
+    },
+    "intake:2": {
+      "file": "intake_p2.png",
+      "pdf_page": 10,
+      "rotate": 0,
+      "width": 1190,
+      "height": 1684,
+      "sha256": "ae46516716af986eb9887f21001a9340dc6fe69c265f832028034b36925e606d",
+      "orientation": "portrait"
+    },
+    "family_care_plan:0": {
+      "file": "family_care_plan_p0.png",
+      "pdf_page": 12,
+      "rotate": 90,
+      "width": 1684,
+      "height": 1190,
+      "sha256": "7be4077ea1f4a2d6b5ae932e55c789e8bd9c1104850f9b8ce46f31b0c5749b70",
+      "orientation": "landscape"
+    }
+  }
+}

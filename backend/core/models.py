@@ -669,6 +669,10 @@ class ScanIntakePage(models.Model):
     ocr_text = models.TextField(blank=True)
     ocr_confidence = models.FloatField(default=0)
     fields = models.JSONField(default=list, blank=True)
+    alignment_failed = models.BooleanField(default=False)
+    geometry_missing = models.BooleanField(default=False)
+    template_version = models.CharField(max_length=64, blank=True)
+    warped_image = models.ImageField(upload_to=scan_page_upload_path, null=True, blank=True)
 
     class Meta:
         ordering = ['index', 'id']

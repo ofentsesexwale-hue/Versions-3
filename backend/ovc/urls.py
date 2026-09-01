@@ -7,6 +7,7 @@ from rest_framework.routers import DefaultRouter
 
 from core import views
 from core import print_views
+from core import form_views
 from core import scan_views
 
 router = DefaultRouter()
@@ -49,6 +50,12 @@ api_patterns = [
     path('backups/<str:name>/download/', views.BackupDownloadView.as_view()),
     path('service-targets/', views.ServiceTargetView.as_view()),
     path('branding/', views.BrandingView.as_view()),
+    path('official-forms/', form_views.OfficialFormListView.as_view()),
+    path('official-forms/<str:code>/', form_views.OfficialFormDetailView.as_view()),
+    path('official-forms/<str:code>/values/', form_views.OfficialFormValuesView.as_view()),
+    path('official-forms/<str:code>/blank/<int:page>/', form_views.official_blank),
+    path('print/official/<str:form>/', form_views.print_official),
+    path('scan-intake/<int:job_id>/pages/<int:page_id>/image/', scan_views.scan_page_image),
     path('print/timeline/', print_views.print_timeline),
     path('print/service-report/', print_views.print_service_report),
     path('print/<str:form>/', print_views.print_form),

@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader2, ScanLine, Save } from "lucide-react";
 import { toast } from "sonner";
-import api, { fetchFileObjectUrl } from "@/lib/api";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmableField } from "@/components/ConfirmableField";
+import OfficialFormCanvas from "@/components/official/OfficialFormCanvas";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -16,29 +17,34 @@ const ACCEPT = ".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg";
 const TRIO = new Set([
   "caregiver.surname", "caregiver.id_number", "caregiver.date_of_birth",
   "member.surname", "member.id_number", "member.date_of_birth",
+  "member.0.surname", "member.0.id_number", "member.0.date_of_birth",
 ]);
 
-function PagePreview({ url }) {
-  const [src, setSrc] = useState("");
-  useEffect(() => {
-    if (!url) return undefined;
-    let objectUrl = "";
-    let alive = true;
-    fetchFileObjectUrl(url).then((u) => {
-      if (!alive) {
-        URL.revokeObjectURL(u);
-        return;
-      }
-      objectUrl = u;
-      setSrc(u);
-    }).catch(() => {});
-    return () => {
-      alive = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [url]);
-  if (!src) return <div className="flex h-48 items-center justify-center rounded-2xl bg-white/40 text-sm text-muted-foreground">No page image</div>;
-  return <img src={src} alt="Scanned page" className="max-h-80 w-full rounded-2xl object-contain bg-white/50" />;
+function fieldsToValues(fields) {
+  const values = {};
+  (fields || []).forEach((f) => {
+    if (!f.target || f.value === undefined || f.value === "") return;
+    if (f.kind === "checkbox" && f.option && f.value && f.value !== "X") {
+      values[f.target] = f.option;
+    } else if (f.kind === "checkbox") {
+      if (f.value === "X" || f.value === true) values[f.target] = f.option || "X";
+    } else {
+      values[f.target] = f.value;
+    }
+  });
+  return values;
+}
+
+function mergeValuesIntoFields(fields, values) {
+  return (fields || []).map((f) => {
+    if (!f.target || !(f.target in values)) return f;
+    const next = values[f.target];
+    if (f.kind === "checkbox") {
+      const on = f.option ? String(next) === String(f.option) : !!next;
+      return { ...f, value: on ? (f.option || "X") : "" };
+    }
+    return { ...f, value: next };
+  });
 }
 
 export default function ScanIntake() {
@@ -49,8 +55,18 @@ export default function ScanIntake() {
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [job, setJob] = useState(null);
+  const [atlases, setAtlases] = useState({});
+  const [pageTab, setPageTab] = useState({});
 
   const err = (e) => e?.response?.data?.detail || "Could not read that scan";
+
+  useEffect(() => {
+    api.get("/official-forms/").then((res) => {
+      const map = {};
+      (res.data.forms || []).forEach((f) => { map[f.code] = f; });
+      setAtlases(map);
+    }).catch(() => {});
+  }, []);
 
   const start = async () => {
     if (!files.length) {
@@ -93,6 +109,13 @@ export default function ScanIntake() {
     }));
   };
 
+  const setPageValues = (pageId, values) => {
+    patchPages(job.pages.map((p) => {
+      if (p.id !== pageId) return p;
+      return { ...p, fields: mergeValuesIntoFields(p.fields, values) };
+    }));
+  };
+
   const confirm = async () => {
     setSaving(true);
     try {
@@ -106,8 +129,10 @@ export default function ScanIntake() {
     }
   };
 
+  const engineMsg = job?.engine && !job.engine.scan_engine ? job.engine.message : "";
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6 pb-24" data-testid="scan-intake-page">
+    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="scan-intake-page">
       <Button variant="ghost" className="gap-2" onClick={() => navigate(-1)}>
         <ArrowLeft className="h-4 w-4" /> Back
       </Button>
@@ -116,8 +141,7 @@ export default function ScanIntake() {
           <ScanLine className="h-6 w-6" /> Scan Intake
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Photograph the paper file on a phone (Notes or Photos, save as PDF), then import it here.
-          The office reads each page against the DSD templates. Nothing is written to a household until you confirm.
+          Photograph the paper file. Pages are aligned to the official DSD/CCG sheet. Nothing is written until you confirm.
         </p>
       </div>
 
@@ -142,19 +166,22 @@ export default function ScanIntake() {
 
       {job && (
         <>
-          <p className="rounded-2xl bg-amber-100/80 px-4 py-3 text-sm text-amber-950">
-            Office OCR is local (Tesseract when installed). Handwriting and tick-boxes are often wrong — amber fields need a careful check.
-            Nothing was sent to a cloud OCR service.
+          <p className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            OCR stays on this PC. Handwriting and ticks need a check. Amber means low confidence.
+            {engineMsg ? ` ${engineMsg}.` : ""}
           </p>
-          {job.pages.map((page) => (
-            <Card key={page.id} data-testid={`scan-page-${page.id}`}>
-              <CardHeader>
-                <CardTitle className="text-base">Page {page.index + 1}</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 lg:grid-cols-2">
-                <PagePreview url={page.image_url} />
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
+          {job.pages.map((page) => {
+            const atlas = atlases[page.form_type];
+            const values = fieldsToValues(page.fields);
+            const tab = pageTab[page.id] || 0;
+            const hasCanvas = atlas && (atlas.blanks || []).length;
+            return (
+              <Card key={page.id} data-testid={`scan-page-${page.id}`}>
+                <CardHeader>
+                  <CardTitle className="text-base">Page {page.index + 1}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5 max-w-md">
                     <Label>DSD template</Label>
                     <Select value={page.form_type || "unknown"} onValueChange={(v) => setFormType(page.id, v)}>
                       <SelectTrigger data-testid={`scan-form-type-${page.id}`}><SelectValue /></SelectTrigger>
@@ -165,48 +192,85 @@ export default function ScanIntake() {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Suggested {page.form_label} ({Math.round((page.form_confidence || 0) * 100)}% match). Change this if the page is the wrong form.
+                      Suggested {page.form_label} ({Math.round((page.form_confidence || 0) * 100)}% match).
+                      {page.alignment_failed ? " Alignment failed — keyword extract is shown." : ""}
+                      {page.geometry_missing ? " No atlas geometry for this form; page will still attach." : ""}
                     </p>
                   </div>
-                  {(page.fields || []).length === 0 && (
-                    <p className="text-sm text-muted-foreground">No fields could be read on this page. Choose the correct template or type the file in as usual.</p>
+                  {hasCanvas ? (
+                    <OfficialFormCanvas
+                      code={page.form_type}
+                      fields={(atlas.fields || []).map((f) => {
+                        const hit = (page.fields || []).find((x) => x.target === f.target && (x.option || "") === (f.option || ""));
+                        return { ...f, low_confidence: hit?.low_confidence };
+                      })}
+                      values={values}
+                      onChange={(v) => setPageValues(page.id, v)}
+                      mode="scan-review"
+                      orientation={atlas.orientation}
+                      pages={atlas.pages || atlas.blanks.length}
+                      page={tab}
+                      onPage={(i) => setPageTab((s) => ({ ...s, [page.id]: i }))}
+                      scanImageUrl={page.warped_url || page.image_url}
+                      alignmentFailed={page.alignment_failed}
+                    />
+                  ) : (
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      {(page.fields || []).length === 0 && (
+                        <p className="text-sm text-muted-foreground">No fields could be read. Choose the template or type the file as usual.</p>
+                      )}
+                      {(page.fields || []).map((field, i) => {
+                        const trio = TRIO.has(field.target);
+                        const inner = (
+                          <Input
+                            value={field.value || ""}
+                            onChange={(e) => setField(page.id, i, { value: e.target.value })}
+                            className={field.low_confidence ? "border-amber-400" : ""}
+                          />
+                        );
+                        if (!trio) {
+                          return (
+                            <div key={`${page.id}-${i}`} className="space-y-1">
+                              <Label>{field.label}</Label>
+                              {inner}
+                            </div>
+                          );
+                        }
+                        return (
+                          <ConfirmableField
+                            key={`${page.id}-${i}`}
+                            fieldKey={field.target}
+                            label={field.label}
+                            hasValue={!!(field.value || "").trim()}
+                            confirmed={!!field.confirmed}
+                            onConfirm={() => setField(page.id, i, { confirmed: true })}
+                          >
+                            {inner}
+                          </ConfirmableField>
+                        );
+                      })}
+                    </div>
                   )}
-                  {(page.fields || []).map((field, i) => {
-                    const trio = TRIO.has(field.target);
-                    const inner = (
-                      <Input
-                        value={field.value || ""}
-                        onChange={(e) => setField(page.id, i, { value: e.target.value })}
-                        className={field.low_confidence ? "border-amber-400" : ""}
-                      />
-                    );
-                    if (!trio) {
-                      return (
-                        <div key={`${page.id}-${i}`} className="space-y-1">
-                          <Label>{field.label}</Label>
-                          {inner}
-                          {field.low_confidence && <p className="text-xs text-amber-800">Low confidence — check against the page.</p>}
-                        </div>
-                      );
-                    }
-                    return (
-                      <ConfirmableField
-                        key={`${page.id}-${i}`}
-                        fieldKey={field.target}
-                        label={field.label}
-                        hasValue={!!(field.value || "").trim()}
-                        confirmed={!!field.confirmed}
-                        onConfirm={() => setField(page.id, i, { confirmed: true })}
-                      >
-                        {inner}
-                      </ConfirmableField>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          <div className="sticky bottom-0 flex justify-end gap-2 border-t border-white/50 bg-[#f3ead8]/95 p-3">
+                  {hasCanvas && (page.fields || []).filter((f) => TRIO.has(f.target)).map((field, i) => (
+                    <ConfirmableField
+                      key={`trio-${page.id}-${field.target}`}
+                      fieldKey={field.target}
+                      label={field.label}
+                      hasValue={!!(field.value || values[field.target] || "").toString().trim()}
+                      confirmed={!!field.confirmed}
+                      onConfirm={() => {
+                        const idx = page.fields.findIndex((x) => x.target === field.target);
+                        if (idx >= 0) setField(page.id, idx, { confirmed: true });
+                      }}
+                    >
+                      <span className="text-sm">{values[field.target] || field.value}</span>
+                    </ConfirmableField>
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })}
+          <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-[#f3ead8]/95 p-3">
             <Button variant="outline" onClick={() => setJob(null)}>Start over</Button>
             <Button onClick={confirm} disabled={saving} className="gap-2" data-testid="scan-intake-confirm-button">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to case file

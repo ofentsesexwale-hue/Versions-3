@@ -6,6 +6,7 @@ Pillow==12.3.0
 pypdf==5.9.0
 pypdfium2==4.30.0
 pytesseract==0.3.13
+opencv-python-headless>=4.8
 uvicorn==0.25.0
 Faker==40.37.0
 pytest==9.1.1

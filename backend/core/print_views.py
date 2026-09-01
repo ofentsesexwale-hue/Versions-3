@@ -69,6 +69,10 @@ def print_form(request, form):
     user = _auth_user(request)
     if not user:
         return HttpResponse('Authentication required.', status=401)
+    from .form_atlas import ATLAS_FORMS, has_geometry
+    if form in ATLAS_FORMS and has_geometry(form):
+        from .form_views import print_official
+        return print_official(request, form)
     if form not in FORMS:
         raise Http404('Unknown form')
     template, title = FORMS[form]

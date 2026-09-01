@@ -206,6 +206,12 @@ export default function HouseholdDetail() {
           <Button variant="outline" className="gap-2" onClick={() => navigate(`/households/${id}/assessment`)} data-testid="open-assessment-button">
             <FileText className="h-4 w-4" /> Assessment
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => navigate(`/households/${id}/forms/c01`)} data-testid="fill-c01-button">
+            <Pencil className="h-4 w-4" /> Fill C01
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => navigate(`/households/${id}/forms/intake`)} data-testid="fill-cw05-button">
+            <FileText className="h-4 w-4" /> Fill CW 05
+          </Button>
           <Button variant="outline" className="gap-2" onClick={() => navigate(`/scan-intake?household=${id}`)} data-testid="scan-intake-button">
             <ScanLine className="h-4 w-4" /> Scan Intake
           </Button>

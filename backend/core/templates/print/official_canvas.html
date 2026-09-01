@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ form_title }}</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:#e9eaed;font-family:Arial,Helvetica,sans-serif;color:#000;}
+  .toolbar{position:sticky;top:0;z-index:5;background:#0f172a;color:#fff;padding:10px 16px;display:flex;gap:12px;align-items:center;}
+  .toolbar button{background:#111;color:#fff;border:0;padding:8px 16px;font-size:13px;cursor:pointer;}
+  .wrap{padding:16px 0 32px;}
+  .sheet{margin:0 auto 18px;position:relative;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.2);}
+  .sheet.portrait{width:210mm;}
+  .sheet.landscape{width:297mm;}
+  .sheet img{width:100%;display:block;}
+  .ink{position:absolute;overflow:hidden;font-size:11px;line-height:1.1;color:#000;font-family:"Courier New",Courier,monospace;pointer-events:none;}
+  .ink.tick{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;font-family:Arial,sans-serif;}
+  .ink.narr{font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;}
+  @page{size:A4{% if landscape %} landscape{% endif %};margin:0;}
+  @media print{
+    body{background:#fff;}
+    .toolbar{display:none !important;}
+    .wrap{padding:0;}
+    .sheet{margin:0;box-shadow:none;width:100%;page-break-after:always;}
+    .sheet:last-child{page-break-after:auto;}
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button type="button" onclick="window.print()">Print / Save as PDF</button>
+  <span>{{ form_title }} — {{ household.org_household_number }}</span>
+</div>
+<div class="wrap" id="sheets"></div>
+{{ payload_json|json_script:"official-payload" }}
+<script>
+(function () {
+  const data = JSON.parse(document.getElementById('official-payload').textContent);
+  const wrap = document.getElementById('sheets');
+  (data.pages || []).forEach(function (page) {
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet ' + (page.orientation || 'portrait');
+    const img = document.createElement('img');
+    img.src = page.blank_url;
+    img.alt = 'Official blank page ' + (page.index + 1);
+    sheet.appendChild(img);
+    (page.fields || []).forEach(function (f) {
+      const box = f.box || [];
+      if (box.length < 4) return;
+      const raw = f.target ? (data.values[f.target] || '') : '';
+      let text = '';
+      if (f.kind === 'checkbox') {
+        const opt = f.option;
+        const on = (opt === undefined || opt === '')
+          ? (raw === true || raw === 'true' || raw === 'Yes' || raw === 'X')
+          : String(raw) === String(opt);
+        text = on ? 'X' : '';
+      } else if (f.kind === 'date' && raw) {
+        const parts = String(raw).split('-');
+        text = parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : raw;
+      } else if (f.kind === 'sa_id') {
+        text = String(raw).replace(/[^0-9]/g, '').slice(0, 13).split('').join(' ');
+      } else {
+        text = raw || '';
+      }
+      if (!text) return;
+      const el = document.createElement('div');
+      el.className = 'ink' + (f.kind === 'checkbox' ? ' tick' : '') + (f.kind === 'narrative' ? ' narr' : '');
+      el.style.left = (box[0] * 100) + '%';
+      el.style.top = (box[1] * 100) + '%';
+      el.style.width = ((box[2] - box[0]) * 100) + '%';
+      el.style.height = ((box[3] - box[1]) * 100) + '%';
+      el.textContent = text;
+      sheet.appendChild(el);
+    });
+    wrap.appendChild(sheet);
+  });
+})();
+{% if auto_print %}window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 600); });{% endif %}
+</script>
+</body>
+</html>

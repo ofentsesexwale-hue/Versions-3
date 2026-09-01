@@ -31,7 +31,9 @@ from .permissions import (
     is_training_user,
     user_role,
 )
-from .scan_ocr import ocr_available, process_upload
+from .form_io import apply_buckets
+from .official_blanks import ATLAS_VERSION
+from .scan_ocr import engine_status, ocr_available, process_upload
 from .scan_templates import CHECKLIST_FOR_FORM, extract_fields, form_choices, form_label
 from .serializers import CaregiverSerializer, HouseholdMemberSerializer, HouseholdSerializer
 from .views import _ensure_checklist, scoped_household_qs
@@ -44,17 +46,15 @@ def _deny_edit(user):
 
 
 def _page_payload(page, request):
-    image_url = ''
-    if page.image:
-        image_url = page.image.url
-        if request:
-            image_url = request.build_absolute_uri(image_url)
-        # Prefer relative so the UI can use the tokened fetch helper.
-        image_url = page.image.url
+    image_url = f'/api/scan-intake/{page.job_id}/pages/{page.id}/image/'
+    warped_url = ''
+    if page.warped_image:
+        warped_url = f'/api/scan-intake/{page.job_id}/pages/{page.id}/image/?which=warped'
     return {
         'id': page.id,
         'index': page.index,
-        'image_url': image_url,
+        'image_url': image_url if page.image else '',
+        'warped_url': warped_url,
         'original_name': page.original_name,
         'form_type': page.form_type,
         'form_label': form_label(page.form_type),
@@ -62,6 +62,9 @@ def _page_payload(page, request):
         'ocr_text': page.ocr_text,
         'ocr_confidence': page.ocr_confidence,
         'fields': page.fields or [],
+        'alignment_failed': page.alignment_failed,
+        'geometry_missing': page.geometry_missing,
+        'template_version': page.template_version,
     }
 
 
@@ -72,6 +75,7 @@ def _job_payload(job, request):
         'household': job.household_id,
         'ocr_engine': job.ocr_engine,
         'ocr_available': ocr_available(),
+        'engine': engine_status(),
         'handwriting_warning': job.handwriting_warning,
         'form_types': form_choices(),
         'pages': [_page_payload(p, request) for p in job.pages.all()],
@@ -133,6 +137,9 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                     ocr_text=rendered['ocr_text'],
                     ocr_confidence=rendered['ocr_confidence'],
                     fields=rendered['fields'],
+                    alignment_failed=bool(rendered.get('alignment_failed')),
+                    geometry_missing=bool(rendered.get('geometry_missing')),
+                    template_version=rendered.get('atlas_version') or ATLAS_VERSION,
                 )
                 page.save()
                 image = rendered.get('image')
@@ -140,6 +147,11 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                     buf = BytesIO()
                     image.convert('RGB').save(buf, format='JPEG', quality=78)
                     page.image.save(f'page-{index}.jpg', ContentFile(buf.getvalue()), save=True)
+                warped = rendered.get('warped')
+                if warped is not None:
+                    buf = BytesIO()
+                    warped.convert('RGB').save(buf, format='JPEG', quality=78)
+                    page.warped_image.save(f'page-{index}-aligned.jpg', ContentFile(buf.getvalue()), save=True)
                 engines.add(rendered.get('ocr_engine') or '')
                 index += 1
         if index == 0:
@@ -240,72 +252,40 @@ class ScanIntakeViewSet(viewsets.ViewSet):
         })
 
     def _write_buckets(self, request, job, buckets):
-        ctx = {'request': request}
         household = job.household
         if household and not scoped_household_qs(request.user).filter(pk=household.pk).exists():
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('That household is not on your caseload.')
-
-        hh_data = {}
-        for key, value in buckets.items():
-            if key.startswith('household.') and key != 'household.org_household_number':
-                hh_data[key.split('.', 1)[1]] = value
-        # Never copy a scanned file number across the live/training split.
-        scanned_number = buckets.get('household.org_household_number') or ''
-        if household:
-            if hh_data:
-                ser = HouseholdSerializer(household, data=hh_data, partial=True, context=ctx)
-                ser.is_valid(raise_exception=True)
-                household = ser.save()
-        else:
-            create_data = dict(hh_data)
-            if scanned_number:
-                prefix_ok = (
-                    scanned_number.upper().startswith('TEST')
-                    if is_training_user(request.user)
-                    else not scanned_number.upper().startswith('TEST')
-                )
-                if prefix_ok:
-                    create_data['org_household_number'] = scanned_number
-            ser = HouseholdSerializer(data=create_data, context=ctx)
-            ser.is_valid(raise_exception=True)
-            household = ser.save()
-            if is_field_worker(request.user):
-                household.assigned_to.add(request.user)
-            _ensure_checklist(household)
-
-        cg_data = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('caregiver.')}
-        for trio in ('surname', 'id_number', 'date_of_birth'):
-            if cg_data.get(trio):
-                cg_data[f'{trio}_confirmed'] = True
-        if cg_data:
-            existing = getattr(household, 'caregiver', None)
-            if existing:
-                ser = CaregiverSerializer(existing, data=cg_data, partial=True, context=ctx)
-            else:
-                cg_data['household'] = household.id
-                ser = CaregiverSerializer(data=cg_data, context=ctx)
-            ser.is_valid(raise_exception=True)
-            ser.save()
-
-        mem_data = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('member.')}
-        for trio in ('surname', 'id_number', 'date_of_birth'):
-            if mem_data.get(trio):
-                mem_data[f'{trio}_confirmed'] = True
-        if mem_data:
-            member = household.members.order_by('id').first()
-            if member:
-                ser = HouseholdMemberSerializer(member, data=mem_data, partial=True, context=ctx)
-            else:
-                mem_data['household'] = household.id
-                if not mem_data.get('surname') and cg_data.get('surname'):
-                    mem_data['surname'] = cg_data['surname']
-                    mem_data['surname_confirmed'] = True
-                ser = HouseholdMemberSerializer(data=mem_data, context=ctx)
-            ser.is_valid(raise_exception=True)
-            ser.save()
+        household = apply_buckets(request, household, buckets)
 
         pn = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('process_note.')}
+        if pn:
+            ProcessNote.objects.create(household=household, created_by=request.user, **{
+                k: v for k, v in pn.items() if k in {
+                    'client_surname', 'client_first_name', 'client_id_number', 'file_no',
+                    'person_engaged_name', 'person_engaged_contact', 'problem_code',
+                    'intervention_code', 'type_of_engagement', 'purpose_and_what_transpired',
+                    'outcome_and_follow_up', 'evaluation_reflection', 'ssp_name',
+                }
+            })
+
+        cp = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('care_plan.')}
+        if cp:
+            FamilyCarePlan.objects.create(
+                household=household, created_by=request.user,
+                overall_goal=cp.get('overall_goal') or '',
+                ssp_name=cp.get('ssp_name') or '',
+            )
+
+        ass = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('assessment.')}
+        if ass:
+            Assessment.objects.create(
+                household=household, created_by=request.user,
+                overview_situation=ass.get('overview_situation') or '',
+                problem_codes=ass.get('problem_codes') or '',
+                overall_goal=ass.get('overall_goal') or '',
+            )
+        return household
         if pn:
             ProcessNote.objects.create(household=household, created_by=request.user, **{
                 k: v for k, v in pn.items() if k in {
@@ -368,3 +348,27 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             item.checked_by = user
             item.checked_at = now
             item.save(update_fields=['has_evidence', 'checked_by', 'checked_at'])
+
+
+def scan_page_image(request, job_id, page_id):
+    """Pending scans are not public media. Only the staff who uploaded them."""
+    from django.http import FileResponse, HttpResponse
+    user = request.user if getattr(request.user, 'is_authenticated', False) else None
+    if not user or not user.is_authenticated:
+        from .print_views import _auth_user
+        user = _auth_user(request)
+    if not user:
+        return HttpResponse('Authentication required.', status=401)
+    _deny_edit(user)
+    job = ScanIntakeJob.objects.filter(pk=job_id, created_by=user).first()
+    if not job:
+        return HttpResponse('Scan not found.', status=404)
+    page = job.pages.filter(pk=page_id).first()
+    if not page:
+        return HttpResponse('Page not found.', status=404)
+    which = request.GET.get('which') or 'image'
+    fh = page.warped_image if which == 'warped' and page.warped_image else page.image
+    if not fh:
+        return HttpResponse('No image.', status=404)
+    return FileResponse(fh.open('rb'), content_type='image/jpeg')
+

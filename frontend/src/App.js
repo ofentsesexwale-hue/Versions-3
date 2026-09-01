@@ -16,7 +16,7 @@ import HouseholdForm from "@/pages/HouseholdForm";
 import CaregiverForm from "@/pages/CaregiverForm";
 import MemberForm from "@/pages/MemberForm";
 import DocumentUpload from "@/pages/DocumentUpload";
-import ScanIntake from "@/pages/ScanIntake";
+import FormFillPage from "@/pages/FormFillPage";
 import Checklist from "@/pages/Checklist";
 import AuditLog from "@/pages/AuditLog";
 import Verification from "@/pages/Verification";
@@ -86,6 +86,8 @@ function App() {
               <Route path="households/:id/checklist" element={<Checklist />} />
               <Route path="documents/upload" element={<DocumentUpload />} />
               <Route path="scan-intake" element={<ScanIntake />} />
+              <Route path="households/:id/forms/:code" element={<FormFillPage />} />
+              <Route path="forms/:code" element={<FormFillPage />} />
               <Route
                 path="audit"
                 element={

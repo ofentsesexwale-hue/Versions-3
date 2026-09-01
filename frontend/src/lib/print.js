@@ -10,6 +10,7 @@ export const ORG_NAME = "Sebueng Itumeleng";
 export const DSD_FORMS = [
   { key: "full", label: "Full Case File", group: "Case file" },
   { key: "checklist", label: "Case File Checklist", group: "Case file" },
+  { key: "c01", label: "C01 Household Details", group: "Intake & assessment" },
   { key: "intake", label: "CW 05 Intake Form", group: "Intake & assessment" },
   { key: "reporter", label: "CW 02 Reporter Form", group: "Intake & assessment" },
   { key: "assessment", label: "CW 09 Assessment, Planning & Contracting", group: "Intake & assessment" },
