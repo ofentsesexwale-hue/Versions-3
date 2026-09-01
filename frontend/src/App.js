@@ -16,6 +16,7 @@ import HouseholdForm from "@/pages/HouseholdForm";
 import CaregiverForm from "@/pages/CaregiverForm";
 import MemberForm from "@/pages/MemberForm";
 import DocumentUpload from "@/pages/DocumentUpload";
+import ScanIntake from "@/pages/ScanIntake";
 import Checklist from "@/pages/Checklist";
 import AuditLog from "@/pages/AuditLog";
 import Verification from "@/pages/Verification";
@@ -84,6 +85,7 @@ function App() {
               <Route path="members/:id/edit" element={<MemberForm />} />
               <Route path="households/:id/checklist" element={<Checklist />} />
               <Route path="documents/upload" element={<DocumentUpload />} />
+              <Route path="scan-intake" element={<ScanIntake />} />
               <Route
                 path="audit"
                 element={

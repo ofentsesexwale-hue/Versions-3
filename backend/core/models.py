@@ -625,3 +625,54 @@ class PlannedVisit(models.Model):
 
     def __str__(self):
         return f"Visit {self.visit_date} Household #{self.household_id}"
+
+
+def scan_page_upload_path(instance, filename):
+    job = instance.job_id or 'new'
+    safe = filename.replace('/', '_').replace('\\', '_')
+    return f'scan_intake/{job}/{safe}'
+
+
+class ScanIntakeJob(models.Model):
+    """A photographed file waiting for staff confirmation. Not a household until confirmed."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending review'),
+        ('confirmed', 'Confirmed'),
+        ('discarded', 'Discarded'),
+    ]
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='scan_intake_jobs',
+    )
+    household = models.ForeignKey(
+        Household, null=True, blank=True, on_delete=models.SET_NULL, related_name='scan_intake_jobs',
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='pending', db_index=True)
+    ocr_engine = models.CharField(max_length=32, blank=True)
+    handwriting_warning = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-id']
+
+    def __str__(self):
+        return f'Scan intake #{self.pk}'
+
+
+class ScanIntakePage(models.Model):
+    job = models.ForeignKey(ScanIntakeJob, on_delete=models.CASCADE, related_name='pages')
+    index = models.PositiveIntegerField(default=0)
+    image = models.ImageField(upload_to=scan_page_upload_path, null=True, blank=True)
+    original_name = models.CharField(max_length=255, blank=True)
+    form_type = models.CharField(max_length=64, blank=True, default='unknown')
+    form_confidence = models.FloatField(default=0)
+    ocr_text = models.TextField(blank=True)
+    ocr_confidence = models.FloatField(default=0)
+    fields = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ['index', 'id']
+
+    def __str__(self):
+        return f'Scan page {self.index} of job #{self.job_id}'
+

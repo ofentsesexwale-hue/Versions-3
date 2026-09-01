@@ -13,6 +13,7 @@ import {
   Menu,
   Plus,
   Printer,
+  ScanLine,
   Search,
   Shield,
   ShieldCheck,
@@ -48,6 +49,7 @@ const NAV = [
   { key: "staff", label: "Staff accounts", to: "/settings/staff", icon: UserCog, adminOnly: true },
   { key: "password", label: "Change password", to: "/settings/password", icon: Shield },
   { key: "upload", label: "Upload Document", to: "/documents/upload", icon: FileText, hideFor: ["caregiver"] },
+  { key: "scan", label: "Scan Intake", to: "/scan-intake", icon: ScanLine, hideFor: ["caregiver"] },
   { key: "audit", label: "Audit Log", to: "/audit", icon: Shield, adminOnly: true },
 ];
 

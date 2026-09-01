@@ -106,6 +106,7 @@ If several people share a partial number, you get a list. If nobody matches, you
 - External referrals (SASSA, clinic, school, SAPS) with status until closed
 - Local partner directory (typed in on this PC — never looked up online)
 - SA ID checksum, date-of-birth/sex from the 13 digits, and a warning if that ID is already on another file
+- Scan Intake: photograph paper DSD forms, read them on this PC, confirm fields, then save like a typed file
 - Family care plan rows that print filled
 - CW 09 assessments, CW 11 process notes, CW 12 evaluations
 - COW 1 community plans, GRW group sessions, Form 22 protection incidents

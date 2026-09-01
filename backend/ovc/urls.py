@@ -7,6 +7,7 @@ from rest_framework.routers import DefaultRouter
 
 from core import views
 from core import print_views
+from core import scan_views
 
 router = DefaultRouter()
 router.register(r'households', views.HouseholdViewSet, basename='household')
@@ -28,6 +29,7 @@ router.register(r'referrals', views.ReferralViewSet, basename='referral')
 router.register(r'visits', views.PlannedVisitViewSet, basename='visit')
 router.register(r'partners', views.PartnerAgencyViewSet, basename='partner')
 router.register(r'staff', views.StaffViewSet, basename='staff')
+router.register(r'scan-intake', scan_views.ScanIntakeViewSet, basename='scan-intake')
 
 api_patterns = [
     path('auth/login/', views.LoginView.as_view()),

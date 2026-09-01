@@ -3,6 +3,9 @@ djangorestframework==3.17.2
 django-cors-headers==4.9.0
 python-dotenv==1.2.3
 Pillow==12.3.0
+pypdf==5.9.0
+pypdfium2==4.30.0
+pytesseract==0.3.13
 uvicorn==0.25.0
 Faker==40.37.0
 pytest==9.1.1

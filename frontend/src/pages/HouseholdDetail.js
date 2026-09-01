@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   Eye,
   FileText,
+  ScanLine,
   History,
   ListChecks,
   Pencil,
@@ -204,6 +205,9 @@ export default function HouseholdDetail() {
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => navigate(`/households/${id}/assessment`)} data-testid="open-assessment-button">
             <FileText className="h-4 w-4" /> Assessment
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={() => navigate(`/scan-intake?household=${id}`)} data-testid="scan-intake-button">
+            <ScanLine className="h-4 w-4" /> Scan Intake
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => navigate(`/documents/upload?household=${id}`)} data-testid="upload-document-button">
             <Upload className="h-4 w-4" /> Upload
