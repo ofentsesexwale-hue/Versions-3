@@ -161,7 +161,6 @@ export default function ScanIntake() {
     }
   };
 
-  const engineMsg = job?.engine && !job.engine.scan_engine ? job.engine.message : "";
   const merged = job ? mergedFromPages(job.pages) : { values: {}, rows: [] };
 
   return (
@@ -261,8 +260,8 @@ export default function ScanIntake() {
       {job && (
         <>
           <p className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Empty name boxes are better than guessed letters. If a name such as Hallie was left blank, type it. The camera is not the problem — computer reading of handwriting still needs a check.
-            {engineMsg ? ` ${engineMsg}.` : ""}
+            Empty name boxes are better than guessed letters. If a name such as Hallie was left blank, type it.
+            {job?.engine?.message ? ` ${job.engine.message}.` : ""}
           </p>
           {(job.forms_found || []).length > 0 && (
             <p className="text-sm" data-testid="scan-forms-found">

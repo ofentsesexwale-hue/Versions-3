@@ -33,29 +33,39 @@ def ocr_available():
 
 def engine_status():
     from .scan_align import opencv_available
+    from .scan_engines import rapidocr_available
     tess = ocr_available()
     cv = opencv_available()
+    rapid = rapidocr_available()
     parts = []
-    if not tess and not cv:
+    if not tess and not cv and not rapid:
         parts.append('Scan engine not installed on this PC')
+    elif rapid:
+        parts.append('Handwritten names use RapidOCR on this PC; Tesseract still reads ID numbers')
+    else:
+        parts.append('Install RapidOCR on this PC so names are not read by Tesseract alone')
     if not _HEIF_OK:
         parts.append('iPhone HEIC photos need pillow-heif on this PC (or set Camera to Most Compatible)')
     return {
         'tesseract': tess,
         'opencv': cv,
         'heic': _HEIF_OK,
-        'scan_engine': tess or cv,
+        'rapidocr': rapid,
+        'scan_engine': tess or cv or rapid,
         'message': '. '.join(parts),
     }
 
 
 def _ocr_image(image, psm=6):
-    image = ImageOps.exif_transpose(image).convert('L')
-    image = ImageOps.autocontrast(image)
+    from .scan_engines import read_image as rapid_read
+    image = ImageOps.exif_transpose(image).convert('RGB')
+    rapid_text, rapid_conf, rapid_name = rapid_read(image)
+    gray = ImageOps.autocontrast(image.convert('L'))
+    tess_text, tess_conf, tess_name = '', 0.0, 'none'
     try:
         import pytesseract
         data = pytesseract.image_to_data(
-            image, output_type=pytesseract.Output.DICT, config=f'--oem 1 --psm {psm}'
+            gray, output_type=pytesseract.Output.DICT, config=f'--oem 1 --psm {psm}'
         )
         words, confs = [], []
         for text, conf in zip(data.get('text') or [], data.get('conf') or []):
@@ -67,11 +77,18 @@ def _ocr_image(image, psm=6):
             if token and c >= 40 and not looks_like_gibberish(token):
                 words.append(token)
                 confs.append(c / 100.0)
-        blob = ' '.join(words)
-        mean = sum(confs) / len(confs) if confs else 0.35
-        return blob, mean, 'tesseract'
+        tess_text = ' '.join(words)
+        tess_conf = sum(confs) / len(confs) if confs else 0.35
+        tess_name = 'tesseract'
     except Exception:
-        return '', 0.0, 'none'
+        pass
+    # RapidOCR for handwriting/photo text; Tesseract still helps printed titles (C01, CW 05).
+    blob = ' '.join(part for part in (rapid_text, tess_text) if part).strip()
+    if rapid_name == 'rapidocr' and tess_name == 'tesseract':
+        return blob, max(rapid_conf, tess_conf), 'rapidocr+tess'
+    if rapid_name == 'rapidocr':
+        return rapid_text, rapid_conf, 'rapidocr'
+    return tess_text, tess_conf, tess_name
 
 
 def _prepare_line_crop(crop, kind):
@@ -93,15 +110,20 @@ def _ocr_crop(crop, kind):
         ratio = ink_fill_ratio(crop)
         ticked = ratio > 0.18
         return ('X' if ticked else ''), (0.8 if ticked or ratio < 0.08 else 0.45)
+    prepared = _prepare_line_crop(crop, kind)
+    rapid_text, rapid_conf = '', 0.0
+    if kind != 'sa_id':
+        from .scan_engines import read_line
+        rapid_text, rapid_conf = read_line(prepared)
+        if kind == 'handwrite' and looks_like_gibberish(rapid_text):
+            rapid_text, rapid_conf = '', 0.0
     psm = 8 if kind == 'sa_id' else 7
     cfg = f'--oem 1 --psm {psm}'
     if kind == 'sa_id':
         cfg += ' -c tessedit_char_whitelist=0123456789'
-    elif kind == 'handwrite':
-        cfg += " -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-' "
+    tess_text, tess_conf = '', 0.0
     try:
         import pytesseract
-        prepared = _prepare_line_crop(crop, kind)
         data = pytesseract.image_to_data(
             ImageOps.autocontrast(prepared.convert('L')),
             output_type=pytesseract.Output.DICT,
@@ -123,19 +145,27 @@ def _ocr_crop(crop, kind):
             if token:
                 words.append(token)
                 confs.append(c / 100.0)
-        text = ' '.join(words)
+        tess_text = ' '.join(words)
+        tess_conf = sum(confs) / len(confs) if confs else 0.0
         if kind == 'sa_id':
-            text = ''.join(ch for ch in text if ch.isdigit())[:13]
-        mean = sum(confs) / len(confs) if confs else 0.0
-        if kind == 'handwrite' and mean < 0.55:
-            return '', mean
-        if kind == 'narrative':
-            mean = min(mean or 0.4, 0.4)
-        if not text:
-            return '', 0.2
-        return text, max(mean, 0.2)
+            tess_text = ''.join(ch for ch in tess_text if ch.isdigit())[:13]
     except Exception:
-        return '', 0.0
+        pass
+    if kind == 'sa_id':
+        text = tess_text or ''.join(ch for ch in rapid_text if ch.isdigit())[:13]
+        return text, (0.7 if text else 0.2)
+    # Prefer RapidOCR on names/handwriting; Tesseract only if RapidOCR is empty.
+    if rapid_text and (kind == 'handwrite' or rapid_conf >= tess_conf or not tess_text):
+        text, mean = rapid_text, rapid_conf
+    else:
+        text, mean = tess_text, tess_conf
+    if kind == 'handwrite' and mean < 0.45:
+        return '', mean
+    if kind == 'narrative':
+        mean = min(mean or 0.4, 0.4)
+    if not text:
+        return '', 0.2
+    return text, max(mean, 0.2)
 
 
 def _pdf_pages_to_images(raw):

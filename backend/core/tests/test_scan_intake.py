@@ -51,6 +51,22 @@ class ScanIntakeTests(TestCase):
         self.assertNotIn('caregiver.surname', fields)
         self.assertEqual(fields.get('caregiver.name', {}).get('value'), 'Hallie')
 
+    def test_rapidocr_reads_printed_name_better_than_smash(self):
+        from core.scan_engines import rapidocr_available, read_line
+        if not rapidocr_available():
+            self.skipTest('RapidOCR is not installed on this PC')
+        from PIL import ImageDraw, ImageFont
+        im = Image.new('RGB', (420, 90), 'white')
+        draw = ImageDraw.Draw(im)
+        try:
+            font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 40)
+        except OSError:
+            font = ImageFont.load_default()
+        draw.text((12, 22), 'Hallie', fill='black', font=font)
+        text, conf = read_line(im)
+        self.assertIn('Hallie', text)
+        self.assertGreater(conf, 0.8)
+
     def test_intake_without_c01_still_classifies(self):
         form, conf = classify_text(INTAKE_TEXT)
         self.assertEqual(form, 'intake')
