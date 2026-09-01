@@ -10,7 +10,7 @@ from pathlib import Path
 
 BLANKS_DIR = Path(__file__).resolve().parent / 'official_blanks'
 META_PATH = BLANKS_DIR / 'blanks.json'
-ATLAS_VERSION = 'npo-pdf-v1'
+ATLAS_VERSION = 'npo-pdf-v1.1'
 
 
 def load_meta():

@@ -10,7 +10,7 @@ Official wording and geometry come from `NPO_case_management_file.pdf` (38-page 
 | `intake` (CW 05) | CW 05 Intake Form, DSD header | 8–10 | `intake_p0.png`–`p2` | **FAITHFUL** — same |
 | `c02` | C02 ADULT Assessment, landscape | 6 | `c02_p0.png` | **FAITHFUL** blank; structured extract = identity only (ticks have no serializer) |
 | `c03` | C03 CHILD Beneficiary Assessment, landscape | 7 | `c03_p0.png` | **FAITHFUL** blank; identity only |
-| `family_care_plan` | Family Care Plan header | 12 | `family_care_plan_p0.png` | **FAITHFUL** blank; header fields only (12-row grid not modelled) |
+| `cow2_note` | COW 02 Community Work Process Note, DSD header | Word original | `cow2_p0.png`, `cow2_p1.png` | **FAITHFUL** — print is the official blank + overlay (household number, town, assigned worker). Narratives stay attach-only. |
 
 ## Older HTML print templates (not the official canvas)
 
@@ -27,7 +27,8 @@ These still exist for batch/full-file printing. They are **INVENTED** relative t
 | `referral` | `print/referral.html` | Approximate CW 4B |
 | `termination` | `print/termination.html` | Approximate CW 13 |
 | `hiv_risk`, `hivstat`, `consent` | matching HTML | Approximate; HIV ticks not stored unless already on the member model |
-| `cow1`, `cow2_note`, `evaluation`, `group_work` | matching HTML | Approximate COW/GRW |
+| `cow1`, `evaluation`, `group_work` | matching HTML | Approximate COW/GRW |
+| `cow2_note` (legacy HTML) | `print/cow2_note.html` | Invented; superseded by official canvas when printing `cow2_note` |
 | `checklist` | `print/checklist.html` | Approximate NPO checklist |
 | `educational`, `site_visit`, `exit`, `success_story`, `form22` | matching HTML | Org-branded / invented — attach-only is enough |
 | `_gov.html` | shared | Adds org logo on CW sheets — **forbidden on statutory official-canvas pages** |

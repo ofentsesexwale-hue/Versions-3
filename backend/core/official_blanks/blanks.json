@@ -73,6 +73,26 @@
       "height": 1190,
       "sha256": "7be4077ea1f4a2d6b5ae932e55c789e8bd9c1104850f9b8ce46f31b0c5749b70",
       "orientation": "landscape"
+    },
+    "cow2_note:0": {
+      "file": "cow2_p0.png",
+      "pdf_page": 1,
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "e780ff4323e3470040714c38b42f1248114ff965f1a77be06534bd887b472c4d",
+      "orientation": "portrait",
+      "source_pdf": "docs/official/COW_2_Process_note_04042019.pdf"
+    },
+    "cow2_note:1": {
+      "file": "cow2_p1.png",
+      "pdf_page": 2,
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "a3b349cb926f90898339901dcac6ffb9a80625947cc6bbddbc8f0f5a4d6a8e03",
+      "orientation": "portrait",
+      "source_pdf": "docs/official/COW_2_Process_note_04042019.pdf"
     }
   }
 }

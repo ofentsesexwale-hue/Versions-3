@@ -46,11 +46,15 @@ class AtlasGeometryTests(TestCase):
     def test_blank_png_matches_pdf_render(self):
         import pypdfium2 as pdfium
         from PIL import Image
-        pdf_path = REPO / 'docs/official/NPO_case_management_file.pdf'
-        self.assertTrue(pdf_path.exists())
         meta = load_meta()
-        pdf = pdfium.PdfDocument(str(pdf_path))
+        docs = {}
         for key, info in meta['pages'].items():
+            pdf_rel = info.get('source_pdf') or meta['source_pdf']
+            pdf_path = REPO / pdf_rel
+            self.assertTrue(pdf_path.exists(), pdf_path)
+            if pdf_rel not in docs:
+                docs[pdf_rel] = pdfium.PdfDocument(str(pdf_path))
+            pdf = docs[pdf_rel]
             img = pdf[info['pdf_page'] - 1].render(scale=meta['scale']).to_pil().convert('RGB')
             if info.get('rotate'):
                 img = img.rotate(info['rotate'], expand=True)
@@ -59,8 +63,20 @@ class AtlasGeometryTests(TestCase):
             self.assertEqual(
                 hashlib.sha256(img.tobytes()).hexdigest(),
                 hashlib.sha256(stored.tobytes()).hexdigest(),
-                f'{key} HTML/scan blank drifted from the NPO PDF',
+                f'{key} HTML/scan blank drifted from {pdf_rel}',
             )
+
+    def test_c01_text_boxes_match_blank_inputs(self):
+        org = next(f for f in fields_for('c01') if f['target'] == 'household.org_household_number')
+        self.assertAlmostEqual(org['box'][0], 0.2790, places=3)
+        self.assertAlmostEqual(org['box'][1], 0.0926, places=3)
+        self.assertAlmostEqual(org['box'][2], 0.4891, places=3)
+        name = next(f for f in fields_for('c01') if f['target'] == 'caregiver.name')
+        self.assertAlmostEqual(name['box'][0], 0.2437, places=3)
+        self.assertTrue(has_geometry('cow2_note'))
+        self.assertEqual(form_meta('cow2_note')['pages'], 2)
+        ref = next(f for f in fields_for('cow2_note') if f['target'] == 'household.org_household_number')
+        self.assertGreater(ref['box'][0], 0.7)
 
     def test_sa_id_paste_fans_out(self):
         parsed = parse_sa_id('8001015009087')
@@ -102,3 +118,17 @@ class OfficialFormApiTests(TestCase):
         blank = self.client.get('/api/official-forms/c01/blank/0/')
         self.assertEqual(blank.status_code, 200)
         self.assertEqual(blank['Content-Type'], 'image/png')
+
+    def test_print_c01_and_cow2_use_official_canvas(self):
+        created = self.client.post('/api/households/', {'town': 'Umlazi'}, format='json')
+        hid = created.data['id']
+        token = Token.objects.get(user=self.user).key
+        c01 = self.client.get(f'/api/print/c01/?household_id={hid}&token={token}')
+        self.assertEqual(c01.status_code, 200)
+        self.assertIn(b'official-payload', c01.content)
+        self.assertIn(b'c01/blank', c01.content)
+        cow = self.client.get(f'/api/print/cow2_note/?household_id={hid}&token={token}')
+        self.assertEqual(cow.status_code, 200)
+        self.assertIn(b'official-payload', cow.content)
+        self.assertIn(b'cow2_note/blank', cow.content)
+        self.assertNotIn(b'Sebueng Itumeleng', cow.content)

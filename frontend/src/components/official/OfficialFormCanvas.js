@@ -35,7 +35,7 @@ function OverlayField({ field, values, setValue, mode, focusKey, setFocusKey, cr
         type="button"
         disabled={readOnly}
         data-testid={`atlas-${field.target}-${field.option || "tick"}`}
-        className={`${cls} flex items-center justify-center bg-transparent p-0 text-[12px] font-bold text-black`}
+        className={`${cls} flex items-center justify-center bg-transparent p-0 text-[12px] font-bold leading-none text-black`}
         style={style}
         onClick={() => {
           setFocusKey(field.target + (field.option || ""));
@@ -63,9 +63,10 @@ function OverlayField({ field, values, setValue, mode, focusKey, setFocusKey, cr
   }
 
   const Tag = field.kind === "narrative" ? "textarea" : "input";
+  const align = field.kind === "narrative" ? "items-start pt-1" : "items-end pb-[1px] pt-0";
   return (
     <Tag
-      className={`${cls} h-full w-full resize-none border-0 bg-transparent p-0.5 text-[11px] leading-tight text-black outline-none`}
+      className={`${cls} flex h-full w-full ${align} resize-none border-0 bg-transparent px-[2px] font-sans text-[10.5px] leading-tight text-black outline-none`}
       style={style}
       value={values[field.target] || ""}
       readOnly={readOnly}

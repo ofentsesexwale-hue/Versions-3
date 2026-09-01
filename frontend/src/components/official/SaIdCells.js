@@ -58,7 +58,7 @@ export default function SaIdCells({ value, onChange, disabled, testId }) {
   };
 
   return (
-    <div className="flex h-full w-full items-stretch gap-px" data-testid={testId} onPaste={onPaste}>
+    <div className="flex h-full w-full items-end gap-0" data-testid={testId} onPaste={onPaste}>
       {cells.map((ch, i) => (
         <input
           key={i}
@@ -69,7 +69,7 @@ export default function SaIdCells({ value, onChange, disabled, testId }) {
           maxLength={1}
           onChange={(e) => onInput(i, e.target.value)}
           onKeyDown={(e) => onKey(i, e)}
-          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-center text-[11px] leading-none text-black outline-none focus:ring-1 focus:ring-black"
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 pb-px text-center font-sans text-[11px] leading-none text-black outline-none focus:ring-1 focus:ring-black"
           aria-label={`ID digit ${i + 1}`}
         />
       ))}
