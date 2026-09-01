@@ -22,9 +22,20 @@ function PagePreview({ url }) {
   const [src, setSrc] = useState("");
   useEffect(() => {
     if (!url) return undefined;
+    let objectUrl = "";
     let alive = true;
-    fetchFileObjectUrl(url).then((u) => { if (alive) setSrc(u); }).catch(() => {});
-    return () => { alive = false; if (src) URL.revokeObjectURL(src); };
+    fetchFileObjectUrl(url).then((u) => {
+      if (!alive) {
+        URL.revokeObjectURL(u);
+        return;
+      }
+      objectUrl = u;
+      setSrc(u);
+    }).catch(() => {});
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [url]);
   if (!src) return <div className="flex h-48 items-center justify-center rounded-2xl bg-white/40 text-sm text-muted-foreground">No page image</div>;
   return <img src={src} alt="Scanned page" className="max-h-80 w-full rounded-2xl object-contain bg-white/50" />;
