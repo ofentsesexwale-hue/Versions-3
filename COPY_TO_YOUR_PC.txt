@@ -2,7 +2,7 @@ Put this file on the office PC (copy it out of Downloads first):
 
   C:\Users\sebue\OVC-CaseFile\OVC-CaseFile.exe
 
-Size should be about 95 MB. A 40 MB copy is incomplete — delete it and copy again.
+Size should be about 140 MB. A much smaller copy is incomplete — delete it and copy again.
 
 Double-click that file. Wait on the loading screen until the sign-in page appears.
 
