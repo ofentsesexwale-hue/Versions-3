@@ -665,6 +665,7 @@ class ScanIntakePage(models.Model):
     image = models.ImageField(upload_to=scan_page_upload_path, null=True, blank=True)
     original_name = models.CharField(max_length=255, blank=True)
     form_type = models.CharField(max_length=64, blank=True, default='unknown')
+    form_page = models.PositiveIntegerField(default=0)
     form_confidence = models.FloatField(default=0)
     ocr_text = models.TextField(blank=True)
     ocr_confidence = models.FloatField(default=0)

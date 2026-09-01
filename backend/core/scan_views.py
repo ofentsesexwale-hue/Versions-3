@@ -57,6 +57,7 @@ def _page_payload(page, request):
         'warped_url': warped_url,
         'original_name': page.original_name,
         'form_type': page.form_type,
+        'form_page': page.form_page,
         'form_label': form_label(page.form_type),
         'form_confidence': page.form_confidence,
         'ocr_text': page.ocr_text,
@@ -69,6 +70,12 @@ def _page_payload(page, request):
 
 
 def _job_payload(job, request):
+    pages = [_page_payload(p, request) for p in job.pages.all()]
+    found = []
+    for page in pages:
+        code = page.get('form_type')
+        if code and code != 'unknown' and code not in found:
+            found.append(code)
     return {
         'id': job.id,
         'status': job.status,
@@ -78,7 +85,8 @@ def _job_payload(job, request):
         'engine': engine_status(),
         'handwriting_warning': job.handwriting_warning,
         'form_types': form_choices(),
-        'pages': [_page_payload(p, request) for p in job.pages.all()],
+        'forms_found': [{'value': code, 'label': form_label(code)} for code in found],
+        'pages': pages,
         'created_at': job.created_at,
     }
 
@@ -133,6 +141,7 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                     index=index,
                     original_name=getattr(uploaded, 'name', '') or '',
                     form_type=rendered['form_type'],
+                    form_page=int(rendered.get('form_page') or 0),
                     form_confidence=rendered['form_confidence'],
                     ocr_text=rendered['ocr_text'],
                     ocr_confidence=rendered['ocr_confidence'],

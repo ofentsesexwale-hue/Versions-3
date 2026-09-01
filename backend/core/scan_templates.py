@@ -5,6 +5,7 @@ official layouts). Do not invent alternate field names.
 """
 from .print_views import FORMS
 from .sa_id import parse_sa_id
+from .scan_text import sanitize_ocr_value
 
 # Print-form key -> checklist (category, sub_item) when a scan is confirmed.
 CHECKLIST_FOR_FORM = {
@@ -84,7 +85,7 @@ def _after_label(text, labels):
         rest = upper[idx + len(label):]
         rest = rest.replace(':', ' ').replace('|', ' ')
         line = rest.split('\n', 1)[0].strip()
-        line = ' '.join(line.split())
+        line = ' '.join(line.split()[:6])
         if line:
             return line[:200]
     return ''
@@ -107,7 +108,7 @@ def extract_fields(form_type, text, confidence=0.6):
     fields = []
 
     def add(label, value, target, conf=None):
-        value = (value or '').strip()
+        value = sanitize_ocr_value(target, value)
         if not value:
             return
         c = conf if conf is not None else confidence
@@ -136,7 +137,7 @@ def extract_fields(form_type, text, confidence=0.6):
         )
         add(
             'Primary Client First name',
-            _after_label(text, ['Primary Client First name', 'Caregiver First name', 'First name', 'Name']),
+            _after_label(text, ['Primary Client First name', 'Caregiver First name', 'First name']),
             'caregiver.name',
         )
         add(

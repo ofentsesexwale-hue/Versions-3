@@ -70,6 +70,61 @@ def maybe_rotate_to_template(scan, blank):
     return scan.rotate(90, expand=True)
 
 
+def order_points(pts):
+    import numpy as np
+    pts = np.array(pts, dtype='float32')
+    s = pts.sum(axis=1)
+    diff = np.diff(pts, axis=1)
+    ordered = np.zeros((4, 2), dtype='float32')
+    ordered[0] = pts[np.argmin(s)]
+    ordered[2] = pts[np.argmax(s)]
+    ordered[1] = pts[np.argmin(diff)]
+    ordered[3] = pts[np.argmax(diff)]
+    return ordered
+
+
+def crop_document(image):
+    """Pull the paper out of an iPhone photo (desk, thumbs, background)."""
+    if not opencv_available() or image is None:
+        return image, False
+    import cv2
+    import numpy as np
+    mat = _to_cv(image)
+    h, w = mat.shape[:2]
+    scale = 1100 / max(h, w)
+    if scale > 1:
+        scale = 1.0
+    small = cv2.resize(mat, (max(1, int(w * scale)), max(1, int(h * scale))))
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(gray, 40, 140)
+    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=1)
+    cnts, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    area = small.shape[0] * small.shape[1]
+    page = None
+    for c in sorted(cnts, key=cv2.contourArea, reverse=True)[:10]:
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        if len(approx) == 4 and cv2.contourArea(approx) > 0.20 * area:
+            page = approx.reshape(4, 2).astype('float32') / scale
+            break
+    if page is None:
+        return image, False
+    pts = order_points(page)
+    width_a = np.linalg.norm(pts[2] - pts[3])
+    width_b = np.linalg.norm(pts[1] - pts[0])
+    height_a = np.linalg.norm(pts[1] - pts[2])
+    height_b = np.linalg.norm(pts[0] - pts[3])
+    width = int(max(width_a, width_b))
+    height = int(max(height_a, height_b))
+    if width < 200 or height < 200:
+        return image, False
+    dest = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype='float32')
+    matrix = cv2.getPerspectiveTransform(pts, dest)
+    warped = cv2.warpPerspective(mat, matrix, (width, height), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
+    return _from_cv(warped), True
+
+
 def match_blank(scan, blank):
     """Return (warped PIL or None, inliers, alignment_failed)."""
     if not opencv_available():
@@ -77,12 +132,22 @@ def match_blank(scan, blank):
     import cv2
     import numpy as np
     scan = maybe_rotate_to_template(scan, blank)
-    src = _to_cv(scan)
+    src_full = _to_cv(scan)
     dst = _to_cv(blank)
     h, w = dst.shape[:2]
-    gray_s = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-    gray_d = cv2.cvtColor(dst, cv2.COLOR_BGR2GRAY)
-    orb = cv2.ORB_create(4000)
+
+    def shrink(mat, target=880):
+        hh, ww = mat.shape[:2]
+        s = target / max(hh, ww)
+        if s >= 1:
+            return mat, 1.0
+        return cv2.resize(mat, (int(ww * s), int(hh * s))), s
+
+    src_s, ss = shrink(src_full)
+    dst_s, ds = shrink(dst)
+    gray_s = cv2.cvtColor(src_s, cv2.COLOR_BGR2GRAY)
+    gray_d = cv2.cvtColor(dst_s, cv2.COLOR_BGR2GRAY)
+    orb = cv2.ORB_create(3500)
     k1, d1 = orb.detectAndCompute(gray_s, None)
     k2, d2 = orb.detectAndCompute(gray_d, None)
     if d1 is None or d2 is None or len(k1) < 12 or len(k2) < 12:
@@ -100,23 +165,51 @@ def match_blank(scan, blank):
         return None, len(good), True
     src_pts = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
     dst_pts = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-    if H is None or mask is None:
+    H_small, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    if H_small is None or mask is None:
         return None, 0, True
     inliers = int(mask.sum())
-    corners = np.float32([[0, 0], [src.shape[1], 0], [src.shape[1], src.shape[0]], [0, src.shape[0]]]).reshape(-1, 1, 2)
+    if inliers < 10:
+        return None, inliers, True
+    s_src = np.array([[ss, 0, 0], [0, ss, 0], [0, 0, 1]], dtype='float64')
+    s_dst_inv = np.array([[1 / ds, 0, 0], [0, 1 / ds, 0], [0, 0, 1]], dtype='float64')
+    H = s_dst_inv @ H_small @ s_src
+    corners = np.float32([[0, 0], [src_full.shape[1], 0], [src_full.shape[1], src_full.shape[0]], [0, src_full.shape[0]]]).reshape(-1, 1, 2)
     projected = cv2.perspectiveTransform(corners, H)
     xs = projected[:, 0, 0]
     ys = projected[:, 0, 1]
-    if inliers < 10:
-        return None, inliers, True
-    if min(xs) < -0.4 * w or max(xs) > 1.4 * w or min(ys) < -0.4 * h or max(ys) > 1.4 * h:
+    if min(xs) < -0.45 * w or max(xs) > 1.45 * w or min(ys) < -0.45 * h or max(ys) > 1.45 * h:
         return None, inliers, True
     det = float(np.linalg.det(H[0:2, 0:2]))
-    if det < 0.15 or det > 8:
+    if det < 0.12 or det > 10:
         return None, inliers, True
-    warped = cv2.warpPerspective(src, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
+    warped = cv2.warpPerspective(src_full, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
     return _from_cv(warped), inliers, False
+
+
+def identify_form_page(image):
+    """Which official blank this photo is (form code + page). Missing sheets are allowed."""
+    from .official_blanks import BLANKS_DIR, load_meta
+    if image is None or not opencv_available():
+        return None, None, None, 0, True
+    meta = load_meta()
+    best = None
+    for key, info in (meta.get('pages') or {}).items():
+        code, idx = key.split(':')
+        path = BLANKS_DIR / info['file']
+        if not path.exists():
+            continue
+        blank = Image.open(path)
+        for degrees in (0, 180):
+            probe = image if degrees == 0 else image.rotate(180, expand=True)
+            warped, inliers, failed = match_blank(probe, blank)
+            if failed:
+                continue
+            if best is None or inliers > best[0]:
+                best = (inliers, code, int(idx), warped)
+    if not best or best[0] < 14:
+        return None, None, None, (best[0] if best else 0), True
+    return best[1], best[2], best[3], best[0], False
 
 
 def crop_box(image, box):

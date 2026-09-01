@@ -42,6 +42,20 @@ class ScanIntakeTests(TestCase):
         self.assertEqual(fields['caregiver.id_number']['value'], '8001015009087')
         self.assertEqual(fields['caregiver.date_of_birth']['value'], '1980-01-01')
 
+    def test_gibberish_name_is_not_saved_as_hallie(self):
+        from core.scan_text import looks_like_gibberish, sanitize_ocr_value
+        self.assertTrue(looks_like_gibberish('hgftrujyfdyt'))
+        self.assertEqual(sanitize_ocr_value('caregiver.name', 'hgftrujyfdyt', 'handwrite'), '')
+        self.assertEqual(sanitize_ocr_value('caregiver.name', 'Hallie', 'handwrite'), 'Hallie')
+        fields = {f['target']: f for f in extract_fields('c01', 'Surname hgftrujyfdyt\nFirst name Hallie', 0.8)}
+        self.assertNotIn('caregiver.surname', fields)
+        self.assertEqual(fields.get('caregiver.name', {}).get('value'), 'Hallie')
+
+    def test_intake_without_c01_still_classifies(self):
+        form, conf = classify_text(INTAKE_TEXT)
+        self.assertEqual(form, 'intake')
+        self.assertNotEqual(form, 'c01')
+
     def test_extract_c01_address_from_ocr_text(self):
         text = """
         C01: Household Details

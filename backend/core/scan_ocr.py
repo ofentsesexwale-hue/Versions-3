@@ -1,12 +1,25 @@
 """Local OCR for Scan Intake. Nothing is sent off this computer."""
 from io import BytesIO
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
-from .form_atlas import ATLAS_FORMS, fields_for, form_meta, has_geometry
+from .form_atlas import fields_for, has_geometry
 from .official_blanks import ATLAS_VERSION, blank_path
 from .sa_id import parse_sa_id
 from .scan_templates import classify_text, extract_fields
+from .scan_text import looks_like_gibberish, sanitize_ocr_value
+
+
+def _register_heif():
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+        return True
+    except Exception:
+        return False
+
+
+_HEIF_OK = _register_heif()
 
 
 def ocr_available():
@@ -22,11 +35,17 @@ def engine_status():
     from .scan_align import opencv_available
     tess = ocr_available()
     cv = opencv_available()
+    parts = []
+    if not tess and not cv:
+        parts.append('Scan engine not installed on this PC')
+    if not _HEIF_OK:
+        parts.append('iPhone HEIC photos need pillow-heif on this PC (or set Camera to Most Compatible)')
     return {
         'tesseract': tess,
         'opencv': cv,
+        'heic': _HEIF_OK,
         'scan_engine': tess or cv,
-        'message': '' if (tess or cv) else 'Scan engine not installed on this PC',
+        'message': '. '.join(parts),
     }
 
 
@@ -36,7 +55,7 @@ def _ocr_image(image, psm=6):
     try:
         import pytesseract
         data = pytesseract.image_to_data(
-            image, output_type=pytesseract.Output.DICT, config=f'--psm {psm}'
+            image, output_type=pytesseract.Output.DICT, config=f'--oem 1 --psm {psm}'
         )
         words, confs = [], []
         for text, conf in zip(data.get('text') or [], data.get('conf') or []):
@@ -45,7 +64,7 @@ def _ocr_image(image, psm=6):
                 c = float(conf)
             except (TypeError, ValueError):
                 c = -1
-            if token and c >= 0:
+            if token and c >= 40 and not looks_like_gibberish(token):
                 words.append(token)
                 confs.append(c / 100.0)
         blob = ' '.join(words)
@@ -55,26 +74,66 @@ def _ocr_image(image, psm=6):
         return '', 0.0, 'none'
 
 
+def _prepare_line_crop(crop, kind):
+    image = ImageOps.exif_transpose(crop.convert('RGB'))
+    image = ImageOps.autocontrast(image)
+    width, height = image.size
+    if height < 48:
+        scale = 48 / max(height, 1)
+        image = image.resize((max(1, int(width * scale)), 48), Image.Resampling.LANCZOS)
+    if kind in ('handwrite', 'printed', 'date') and max(image.size) < 900:
+        image = image.resize((image.size[0] * 3, image.size[1] * 3), Image.Resampling.LANCZOS)
+        image = image.filter(ImageFilter.SHARPEN)
+    return image
+
+
 def _ocr_crop(crop, kind):
     if kind == 'checkbox':
         from .scan_align import ink_fill_ratio
         ratio = ink_fill_ratio(crop)
         ticked = ratio > 0.18
         return ('X' if ticked else ''), (0.8 if ticked or ratio < 0.08 else 0.45)
-    psm = 8 if kind == 'sa_id' else 7 if kind in ('printed', 'date') else 6
-    cfg = '--psm %s' % psm
+    psm = 8 if kind == 'sa_id' else 7
+    cfg = f'--oem 1 --psm {psm}'
     if kind == 'sa_id':
         cfg += ' -c tessedit_char_whitelist=0123456789'
+    elif kind == 'handwrite':
+        cfg += " -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-' "
     try:
         import pytesseract
-        text = pytesseract.image_to_string(ImageOps.autocontrast(crop.convert('L')), config=cfg)
-        text = ' '.join((text or '').split())
+        prepared = _prepare_line_crop(crop, kind)
+        data = pytesseract.image_to_data(
+            ImageOps.autocontrast(prepared.convert('L')),
+            output_type=pytesseract.Output.DICT,
+            config=cfg,
+        )
+        words, confs = [], []
+        for text, conf in zip(data.get('text') or [], data.get('conf') or []):
+            token = (text or '').strip()
+            try:
+                c = float(conf)
+            except (TypeError, ValueError):
+                c = -1
+            if not token or c < 0:
+                continue
+            if kind == 'sa_id':
+                token = ''.join(ch for ch in token if ch.isdigit())
+            if kind == 'handwrite' and looks_like_gibberish(token):
+                continue
+            if token:
+                words.append(token)
+                confs.append(c / 100.0)
+        text = ' '.join(words)
         if kind == 'sa_id':
             text = ''.join(ch for ch in text if ch.isdigit())[:13]
-        conf = 0.55 if text else 0.2
+        mean = sum(confs) / len(confs) if confs else 0.0
+        if kind == 'handwrite' and mean < 0.55:
+            return '', mean
         if kind == 'narrative':
-            conf = min(conf, 0.4)
-        return text, conf
+            mean = min(mean or 0.4, 0.4)
+        if not text:
+            return '', 0.2
+        return text, max(mean, 0.2)
     except Exception:
         return '', 0.0
 
@@ -102,31 +161,36 @@ def _pdf_pages_to_images(raw):
         return [], 'none'
 
 
+def _is_heic(raw, name):
+    if name.endswith(('.heic', '.heif')):
+        return True
+    return len(raw) > 12 and raw[4:8] == b'ftyp' and raw[8:12] in {b'heic', b'heif', b'mif1', b'msf1'}
+
+
 def _open_photo(raw, name):
     """Open a phone photo (JPEG/PNG/WebP/HEIC) or fail."""
+    if _is_heic(raw, name):
+        _register_heif()
     try:
         return Image.open(BytesIO(raw))
     except Exception:
-        pass
-    if name.endswith(('.heic', '.heif')):
-        try:
-            import pillow_heif
-            pillow_heif.register_heif_opener()
-            return Image.open(BytesIO(raw))
-        except Exception:
-            return None
-    return None
+        if _register_heif():
+            try:
+                return Image.open(BytesIO(raw))
+            except Exception:
+                return None
+        return None
 
 
 def _prepare_photo(image):
-    """EXIF-orient and shrink phone photos so OCR stays reliable and fast."""
+    """EXIF-orient and shrink after the paper has been cropped."""
     image = ImageOps.exif_transpose(image)
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
     width, height = image.size
     longest = max(width, height)
-    if longest > 2200:
-        scale = 2200 / longest
+    if longest > 2400:
+        scale = 2400 / longest
         image = image.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
     return image
 
@@ -150,35 +214,19 @@ def render_pages(uploaded):
     if image is None:
         pages.append((None, '', 'none'))
         return pages
-    pages.append((_prepare_photo(image), '', 'image'))
+    from .scan_align import crop_document
+    paper, _cropped = crop_document(image)
+    pages.append((_prepare_photo(paper), '', 'heic' if _is_heic(raw, name) else 'image'))
     return pages
 
 
-def _visual_form_type(image):
-    from .scan_align import match_blank, opencv_available
-    if not opencv_available() or image is None:
-        return None, 0
-    best, score = None, 0
-    for code in ATLAS_FORMS:
-        path = blank_path(code, 0)
-        if not path or not path.exists():
-            continue
-        blank = Image.open(path)
-        _, inliers, failed = match_blank(image.copy(), blank)
-        if not failed and inliers > score:
-            best, score = code, inliers
-    if not best:
-        return None, 0
-    conf = min(0.95, 0.4 + score / 80.0)
-    return best, round(conf, 2)
-
-
-def _atlas_fields(form_type, aligned, ocr_conf):
+def _atlas_fields(form_type, aligned, page_index):
     from .scan_align import crop_box
     out = []
-    for spec in fields_for(form_type):
+    for spec in fields_for(form_type, page_index):
         crop = crop_box(aligned, spec['box'])
         value, conf = _ocr_crop(crop, spec['kind'])
+        value = sanitize_ocr_value(spec.get('target') or '', value, spec['kind'])
         option = spec.get('option')
         if spec['kind'] == 'checkbox' and option and value == 'X':
             value = option
@@ -197,7 +245,7 @@ def _atlas_fields(form_type, aligned, ocr_conf):
             'page': spec['page'],
             'bbox': list(spec['box']),
             'confidence': round(float(conf), 2),
-            'low_confidence': float(conf) < 0.72 or spec['kind'] in ('handwrite', 'narrative'),
+            'low_confidence': float(conf) < 0.72 or spec['kind'] in ('handwrite', 'narrative') or not value,
             'confirmed': False,
         }
         if spec.get('option'):
@@ -237,7 +285,7 @@ def _atlas_fields(form_type, aligned, ocr_conf):
 
 
 def _merge_extracted(atlas_fields, keyword_fields):
-    """Keep atlas boxes; fill empty targets from full-page OCR."""
+    """Keep atlas boxes; fill empty targets from full-page OCR only when the text is plausible."""
     by_target = {}
     extras = []
     for item in atlas_fields or []:
@@ -250,11 +298,15 @@ def _merge_extracted(atlas_fields, keyword_fields):
         target = item.get('target') or ''
         if not target:
             continue
+        incoming = sanitize_ocr_value(target, item.get('value') or '', item.get('kind'))
+        if not incoming:
+            continue
+        item = dict(item)
+        item['value'] = incoming
         prev = by_target.get(target)
-        incoming = (item.get('value') or '').strip()
         if not prev:
             by_target[target] = item
-        elif incoming and not (prev.get('value') or '').strip():
+        elif not (prev.get('value') or '').strip():
             filled = dict(prev)
             filled['value'] = incoming
             filled['low_confidence'] = True
@@ -263,8 +315,17 @@ def _merge_extracted(atlas_fields, keyword_fields):
     return extras + list(by_target.values())
 
 
+def _clean_fields(fields):
+    cleaned = []
+    for item in fields or []:
+        item = dict(item)
+        item['value'] = sanitize_ocr_value(item.get('target') or '', item.get('value') or '', item.get('kind'))
+        cleaned.append(item)
+    return cleaned
+
+
 def _process_one(image, pdf_text, engine, have_tess):
-    from .scan_align import deskew_and_contrast, match_blank, opencv_available
+    from .scan_align import deskew_and_contrast, identify_form_page, match_blank, opencv_available
 
     alignment_failed = False
     geometry_missing = False
@@ -272,6 +333,7 @@ def _process_one(image, pdf_text, engine, have_tess):
     inliers = 0
     text, conf, ocr_engine = pdf_text, 0.55, engine
     working = image
+    form_page = 0
     try:
         if image is not None:
             working, _ = deskew_and_contrast(image)
@@ -280,29 +342,41 @@ def _process_one(image, pdf_text, engine, have_tess):
             else:
                 ocr_engine = 'none'
         form_type, form_conf = classify_text(text)
-        vis_type, vis_conf = _visual_form_type(working)
-        if vis_type and vis_conf >= form_conf:
-            form_type, form_conf = vis_type, vis_conf
+        vis_type, vis_page, vis_warp, vis_inliers, vis_failed = identify_form_page(working)
+        if vis_type and not vis_failed:
+            form_type, form_conf = vis_type, min(0.95, 0.45 + vis_inliers / 80.0)
+            form_page = vis_page if vis_page is not None else 0
+            warped = vis_warp
+            inliers = vis_inliers
+            alignment_failed = False
+        elif vis_type:
+            form_type = vis_type
+            form_page = vis_page or 0
+            alignment_failed = True
         fields = []
-        if working is not None and has_geometry(form_type) and opencv_available():
-            path = blank_path(form_type, 0)
+        if warped is not None and has_geometry(form_type):
+            fields = _atlas_fields(form_type, warped, form_page)
+            ocr_engine = (ocr_engine + '+atlas')[:32]
+        elif working is not None and has_geometry(form_type) and opencv_available() and warped is None:
+            path = blank_path(form_type, form_page)
             if path and path.exists():
                 blank = Image.open(path)
                 warped, inliers, alignment_failed = match_blank(working, blank)
                 if warped is not None and not alignment_failed:
-                    fields = _atlas_fields(form_type, warped, conf)
+                    fields = _atlas_fields(form_type, warped, form_page)
                     ocr_engine = (ocr_engine + '+atlas')[:32]
         keywords = extract_fields(form_type, text, confidence=max(conf, form_conf * 0.7))
         for item in keywords:
             item.setdefault('kind', 'printed')
             item.setdefault('bbox', None)
-            item.setdefault('page', 0)
+            item.setdefault('page', form_page)
         if not fields:
             if working is not None and not has_geometry(form_type):
                 geometry_missing = True
             fields = keywords
         else:
             fields = _merge_extracted(fields, keywords)
+        fields = _clean_fields(fields)
         return {
             'image': working or image,
             'warped': warped,
@@ -310,7 +384,8 @@ def _process_one(image, pdf_text, engine, have_tess):
             'ocr_engine': ocr_engine,
             'ocr_confidence': round(float(conf), 2),
             'form_type': form_type,
-            'form_confidence': form_conf,
+            'form_page': form_page,
+            'form_confidence': round(float(form_conf), 2),
             'fields': fields,
             'alignment_failed': alignment_failed,
             'geometry_missing': geometry_missing,
@@ -327,8 +402,9 @@ def _process_one(image, pdf_text, engine, have_tess):
             'ocr_engine': ocr_engine or 'fallback',
             'ocr_confidence': round(float(conf or 0), 2),
             'form_type': form_type,
+            'form_page': 0,
             'form_confidence': form_conf,
-            'fields': extract_fields(form_type, fallback_text, 0.4),
+            'fields': _clean_fields(extract_fields(form_type, fallback_text, 0.4)),
             'alignment_failed': True,
             'geometry_missing': False,
             'inliers': 0,

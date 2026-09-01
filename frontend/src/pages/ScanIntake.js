@@ -176,7 +176,7 @@ export default function ScanIntake() {
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {isNewHousehold
-            ? "Photograph every page in the beneficiary’s paper file with your phone. Upload those pictures here. The office PC reads the text and fills the digital file. Check names, ID numbers and dates, then save. You do not type the whole file."
+            ? "Photograph each form you have with your iPhone. You do not need a complete file — if C01 is missing, upload CW 05 and the other pages you have. The office PC identifies the sheet in each photo and fills that digital form. Handwriting is checked; junk text is left blank for you to type."
             : "Photograph the paper file. Pages are aligned to the official DSD/CCG sheet. Nothing is written until you confirm."}
         </p>
         {isNewHousehold && (
@@ -196,7 +196,7 @@ export default function ScanIntake() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Use the phone camera, then upload JPEG or PNG pictures (PDF is also accepted). Add as many pages as you photographed — C01, CW 05, process notes, IDs, school letters. The next step reads the text off those pictures.
+              iPhone photos work as HEIC or JPEG. Fill the paper in the frame (avoid the desk). Upload only the pages that exist in that file. Printed names and ID numbers read better than pencil.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
@@ -261,9 +261,17 @@ export default function ScanIntake() {
       {job && (
         <>
           <p className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Text is read on this PC. Phone photos of handwriting are often incomplete — check every field. Amber means low confidence.
+            Empty name boxes are better than guessed letters. If a name such as Hallie was left blank, type it. The camera is not the problem — computer reading of handwriting still needs a check.
             {engineMsg ? ` ${engineMsg}.` : ""}
           </p>
+          {(job.forms_found || []).length > 0 && (
+            <p className="text-sm" data-testid="scan-forms-found">
+              Identified in this batch: {(job.forms_found || []).map((f) => f.label).join(', ')}.
+              {(job.forms_found || []).some((f) => f.value === 'intake') && !(job.forms_found || []).some((f) => f.value === 'c01')
+                ? ' C01 was not in these photos — CW 05 can still be saved. Add C01 later from the household file.'
+                : ''}
+            </p>
+          )}
           <Card data-testid="scan-extracted-summary">
             <CardHeader>
               <CardTitle className="text-base">2. Text read from the photos</CardTitle>
@@ -306,12 +314,16 @@ export default function ScanIntake() {
           {job.pages.map((page) => {
             const atlas = atlases[page.form_type];
             const values = fieldsToValues(page.fields);
-            const tab = pageTab[page.id] || 0;
+            const tab = pageTab[page.id] ?? page.form_page ?? 0;
             const hasCanvas = atlas && (atlas.blanks || []).length;
             return (
               <Card key={page.id} data-testid={`scan-page-${page.id}`}>
                 <CardHeader>
-                  <CardTitle className="text-base">Photo {page.index + 1}{page.original_name ? ` · ${page.original_name}` : ""}</CardTitle>
+                  <CardTitle className="text-base">
+                    Photo {page.index + 1}
+                    {page.original_name ? ` · ${page.original_name}` : ""}
+                    {page.form_type && page.form_type !== 'unknown' ? ` · ${page.form_label} p.${(page.form_page || 0) + 1}` : ' · sheet not identified'}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5 max-w-md">
