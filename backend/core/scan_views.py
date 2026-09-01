@@ -106,7 +106,7 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             one = request.FILES.get('file')
             files = [one] if one else []
         if not files:
-            return Response({'detail': 'Photograph the paper file (PDF or JPEG/PNG) and attach it here.'}, status=400)
+            return Response({'detail': 'Photograph every page in the physical file with your phone and upload the pictures here.'}, status=400)
 
         household = None
         hid = request.data.get('household') or request.data.get('household_id')

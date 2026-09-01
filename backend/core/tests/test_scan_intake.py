@@ -42,6 +42,57 @@ class ScanIntakeTests(TestCase):
         self.assertEqual(fields['caregiver.id_number']['value'], '8001015009087')
         self.assertEqual(fields['caregiver.date_of_birth']['value'], '1980-01-01')
 
+    def test_extract_c01_address_from_ocr_text(self):
+        text = """
+        C01: Household Details
+        HEAD OF HOUSEHOLD
+        1. Org Household Nr. SI-0007
+        2. House Number 12
+        3. Street Main Road
+        4. Town Umlazi
+        Province KwaZulu-Natal
+        Surname Cele
+        """
+        form, conf = classify_text(text)
+        self.assertEqual(form, 'c01')
+        fields = {f['target']: f for f in extract_fields('c01', text, 0.8)}
+        self.assertEqual(fields['household.town']['value'], 'Umlazi')
+        self.assertEqual(fields['household.house_number']['value'], '12')
+        self.assertIn('Cele', fields['caregiver.surname']['value'])
+
+    def test_upload_photo_reads_printed_text(self):
+        from core.scan_ocr import ocr_available
+        if not ocr_available():
+            self.skipTest('Tesseract is not on this PC')
+        from PIL import ImageDraw, ImageFont
+        im = Image.new('RGB', (1400, 500), 'white')
+        draw = ImageDraw.Draw(im)
+        try:
+            font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 36)
+        except OSError:
+            font = ImageFont.load_default()
+        draw.text(
+            (40, 40),
+            'CW 05: INTAKE FORM\nPrimary Client Surname Dlamini\nPrimary Client First name Lindiwe\nTown Umlazi',
+            fill='black',
+            font=font,
+            spacing=16,
+        )
+        buf = BytesIO()
+        im.save(buf, format='PNG')
+        upload = SimpleUploadedFile('file-page.png', buf.getvalue(), content_type='image/png')
+        r = self.client.post('/api/scan-intake/', {'files': upload}, format='multipart')
+        self.assertEqual(r.status_code, 201, r.data)
+        text = ' '.join(p.get('ocr_text') or '' for p in r.data['pages']).upper()
+        self.assertTrue(text.strip(), r.data['pages'])
+        blob = text + ' ' + ' '.join(
+            (f.get('value') or '') for p in r.data['pages'] for f in (p.get('fields') or [])
+        )
+        self.assertTrue(
+            'DLAMINI' in blob.upper() or 'UML' in blob.upper() or 'CW' in text,
+            blob[:500],
+        )
+
     def test_confirm_writes_through_household_path(self):
         job = ScanIntakeJob.objects.create(created_by=self.user, status='pending')
         ScanIntakePage.objects.create(

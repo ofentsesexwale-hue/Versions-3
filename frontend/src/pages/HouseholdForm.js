@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -112,8 +112,17 @@ export default function HouseholdForm() {
       </Button>
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
-          {isEdit ? "Edit household" : "New household"}
+          {isEdit ? "Edit household" : "New household (typed)"}
         </h1>
+        {!isEdit && (
+          <p className="mt-1 text-sm text-muted-foreground">
+            For the 300 paper files, photograph the contents and{" "}
+            <Link to="/households/new" className="underline" data-testid="photo-household-instead-link">
+              upload the photos
+            </Link>
+            {" "}so the office PC can read the text. Use this page only when you need to type an address with no pictures.
+          </p>
+        )}
       </div>
       <Card>
         <CardHeader>

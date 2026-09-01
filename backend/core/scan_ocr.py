@@ -102,6 +102,35 @@ def _pdf_pages_to_images(raw):
         return [], 'none'
 
 
+def _open_photo(raw, name):
+    """Open a phone photo (JPEG/PNG/WebP/HEIC) or fail."""
+    try:
+        return Image.open(BytesIO(raw))
+    except Exception:
+        pass
+    if name.endswith(('.heic', '.heif')):
+        try:
+            import pillow_heif
+            pillow_heif.register_heif_opener()
+            return Image.open(BytesIO(raw))
+        except Exception:
+            return None
+    return None
+
+
+def _prepare_photo(image):
+    """EXIF-orient and shrink phone photos so OCR stays reliable and fast."""
+    image = ImageOps.exif_transpose(image)
+    if image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+    width, height = image.size
+    longest = max(width, height)
+    if longest > 2200:
+        scale = 2200 / longest
+        image = image.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
+    return image
+
+
 def render_pages(uploaded):
     """Yield (PIL image or None, pre-extracted text, engine)."""
     name = (getattr(uploaded, 'name', '') or '').lower()
@@ -117,11 +146,11 @@ def render_pages(uploaded):
             for image in rendered:
                 pages.append((image, '', engine))
         return pages
-    try:
-        image = Image.open(BytesIO(raw))
-        pages.append((image, '', 'image'))
-    except Exception:
+    image = _open_photo(raw, name)
+    if image is None:
         pages.append((None, '', 'none'))
+        return pages
+    pages.append((_prepare_photo(image), '', 'image'))
     return pages
 
 
@@ -207,6 +236,33 @@ def _atlas_fields(form_type, aligned, ocr_conf):
     return out
 
 
+def _merge_extracted(atlas_fields, keyword_fields):
+    """Keep atlas boxes; fill empty targets from full-page OCR."""
+    by_target = {}
+    extras = []
+    for item in atlas_fields or []:
+        target = item.get('target') or ''
+        if target:
+            by_target[target] = item
+        else:
+            extras.append(item)
+    for item in keyword_fields or []:
+        target = item.get('target') or ''
+        if not target:
+            continue
+        prev = by_target.get(target)
+        incoming = (item.get('value') or '').strip()
+        if not prev:
+            by_target[target] = item
+        elif incoming and not (prev.get('value') or '').strip():
+            filled = dict(prev)
+            filled['value'] = incoming
+            filled['low_confidence'] = True
+            filled['confidence'] = min(float(prev.get('confidence') or 0.5), float(item.get('confidence') or 0.5))
+            by_target[target] = filled
+    return extras + list(by_target.values())
+
+
 def _process_one(image, pdf_text, engine, have_tess):
     from .scan_align import deskew_and_contrast, match_blank, opencv_available
 
@@ -236,14 +292,17 @@ def _process_one(image, pdf_text, engine, have_tess):
                 if warped is not None and not alignment_failed:
                     fields = _atlas_fields(form_type, warped, conf)
                     ocr_engine = (ocr_engine + '+atlas')[:32]
+        keywords = extract_fields(form_type, text, confidence=max(conf, form_conf * 0.7))
+        for item in keywords:
+            item.setdefault('kind', 'printed')
+            item.setdefault('bbox', None)
+            item.setdefault('page', 0)
         if not fields:
             if working is not None and not has_geometry(form_type):
                 geometry_missing = True
-            fields = extract_fields(form_type, text, confidence=max(conf, form_conf * 0.7))
-            for item in fields:
-                item.setdefault('kind', 'printed')
-                item.setdefault('bbox', None)
-                item.setdefault('page', 0)
+            fields = keywords
+        else:
+            fields = _merge_extracted(fields, keywords)
         return {
             'image': working or image,
             'warped': warped,

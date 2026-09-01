@@ -115,12 +115,13 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/api/media/'
 MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
 
-# Max upload size for supporting documents (25 MB).
+# Max upload size for supporting documents (25 MB). Photo batches for a new
+# household can be larger in one request; extra bytes spill to a temp file.
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024
 ALLOWED_UPLOAD_EXTENSIONS = ('.pdf', '.png', '.jpg', '.jpeg')
 ALLOWED_UPLOAD_TYPES = 'PDF or PNG (JPEG scans of IDs are also accepted)'
 
-DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
+DATA_UPLOAD_MAX_MEMORY_SIZE = 80 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

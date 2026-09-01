@@ -438,10 +438,10 @@ export default function Dashboard() {
                 <div className="mx-auto max-w-md space-y-3">
                   <p className="text-lg font-semibold tracking-tight">No live households yet</p>
                   <p className="text-sm text-muted-foreground">
-                    Dummy TEST files stay in the training classroom. Register a real household to start the office caseload.
+                    Dummy TEST files stay in the training classroom. Photograph the physical file and upload the pictures to open the first live household.
                   </p>
                   <Button onClick={() => navigate("/households/new")} data-testid="empty-new-household-button">
-                    Register first household
+                    Photograph first household file
                   </Button>
                 </div>
               )}

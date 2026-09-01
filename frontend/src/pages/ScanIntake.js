@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Loader2, ScanLine, Save } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Camera, ImagePlus, Loader2, ScanLine, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-const ACCEPT = ".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg";
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,application/pdf,image/png,image/jpeg,image/webp,image/heic,image/*";
 const TRIO = new Set([
   "caregiver.surname", "caregiver.id_number", "caregiver.date_of_birth",
   "member.surname", "member.id_number", "member.date_of_birth",
@@ -47,18 +47,37 @@ function mergeValuesIntoFields(fields, values) {
   });
 }
 
+function mergedFromPages(pages) {
+  const values = {};
+  const rows = [];
+  const seen = new Set();
+  (pages || []).forEach((p) => {
+    (p.fields || []).forEach((f) => {
+      if (!f.target || !(f.value || "").toString().trim()) return;
+      values[f.target] = f.kind === "checkbox" && f.option ? f.option : f.value;
+      if (seen.has(f.target)) return;
+      seen.add(f.target);
+      rows.push({ target: f.target, label: f.label, value: values[f.target], confirmed: f.confirmed });
+    });
+  });
+  return { values, rows };
+}
+
 export default function ScanIntake() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const preHousehold = params.get("household");
+  const isNewHousehold = location.pathname.startsWith("/households/new") && !preHousehold;
   const [files, setFiles] = useState([]);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [job, setJob] = useState(null);
   const [atlases, setAtlases] = useState({});
   const [pageTab, setPageTab] = useState({});
+  const [openText, setOpenText] = useState({});
 
-  const err = (e) => e?.response?.data?.detail || "Could not read that scan";
+  const err = (e) => e?.response?.data?.detail || "Could not read that photo";
 
   useEffect(() => {
     api.get("/official-forms/").then((res) => {
@@ -68,9 +87,15 @@ export default function ScanIntake() {
     }).catch(() => {});
   }, []);
 
+  const addFiles = (list) => {
+    const next = Array.from(list || []);
+    if (!next.length) return;
+    setFiles((prev) => [...prev, ...next]);
+  };
+
   const start = async () => {
     if (!files.length) {
-      toast.error("Choose a PDF or photo of the paper file");
+      toast.error("Take photos of the physical file, then upload them here");
       return;
     }
     setReading(true);
@@ -78,9 +103,9 @@ export default function ScanIntake() {
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
       if (preHousehold) fd.append("household", preHousehold);
-      const res = await api.post("/scan-intake/", fd);
+      const res = await api.post("/scan-intake/", fd, { timeout: 180000 });
       setJob(res.data);
-      toast.success("Pages read — check every field before saving");
+      toast.success(`Read ${res.data.pages?.length || 0} page(s) — check names, ID and dates before saving`);
     } catch (e) {
       toast.error(err(e));
     } finally {
@@ -116,6 +141,13 @@ export default function ScanIntake() {
     }));
   };
 
+  const confirmTrio = (target) => {
+    patchPages(job.pages.map((p) => ({
+      ...p,
+      fields: (p.fields || []).map((f) => (f.target === target ? { ...f, confirmed: true } : f)),
+    })));
+  };
+
   const confirm = async () => {
     setSaving(true);
     try {
@@ -130,6 +162,7 @@ export default function ScanIntake() {
   };
 
   const engineMsg = job?.engine && !job.engine.scan_engine ? job.engine.message : "";
+  const merged = job ? mergedFromPages(job.pages) : { values: {}, rows: [] };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="scan-intake-page">
@@ -138,27 +171,88 @@ export default function ScanIntake() {
       </Button>
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          <ScanLine className="h-6 w-6" /> Scan Intake
+          <ScanLine className="h-6 w-6" />
+          {isNewHousehold ? "New household from the physical file" : "Scan Intake"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Photograph the paper file. Pages are aligned to the official DSD/CCG sheet. Nothing is written until you confirm.
+          {isNewHousehold
+            ? "Photograph every page in the beneficiary’s paper file with your phone. Upload those pictures here. The office PC reads the text and fills the digital file. Check names, ID numbers and dates, then save. You do not type the whole file."
+            : "Photograph the paper file. Pages are aligned to the official DSD/CCG sheet. Nothing is written until you confirm."}
         </p>
+        {isNewHousehold && (
+          <p className="mt-2 text-sm">
+            <Link to="/households/new/typed" className="underline" data-testid="type-household-instead-link">
+              Type the address instead
+            </Link>
+            {" "}if this file has no photos yet.
+          </p>
+        )}
       </div>
 
       {!job && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Import pages</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">1. Upload photos of the physical file</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>PDF or JPEG/PNG</Label>
-              <Input type="file" accept={ACCEPT} multiple onChange={(e) => setFiles([...e.target.files])} data-testid="scan-intake-file-input" />
+            <p className="text-sm text-muted-foreground">
+              Use the phone camera, then upload JPEG or PNG pictures (PDF is also accepted). Add as many pages as you photographed — C01, CW 05, process notes, IDs, school letters. The next step reads the text off those pictures.
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
+                <Camera className="h-4 w-4" />
+                Take photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  onChange={(e) => {
+                    addFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                  data-testid="scan-intake-camera-input"
+                />
+              </label>
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
+                <ImagePlus className="h-4 w-4" />
+                Choose from album
+                <input
+                  type="file"
+                  accept={ACCEPT}
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    addFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                  data-testid="scan-intake-file-input"
+                />
+              </label>
             </div>
+            {files.length > 0 && (
+              <ul className="space-y-2 text-sm" data-testid="scan-intake-file-list">
+                {files.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 border border-slate-200 bg-white/70 px-3 py-2">
+                    <span className="truncate">{f.name}</span>
+                    <button
+                      type="button"
+                      className="text-slate-500 hover:text-rose-700"
+                      aria-label={`Remove ${f.name}`}
+                      onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {preHousehold && (
               <p className="text-sm text-muted-foreground">This scan will update household #{preHousehold} if you confirm.</p>
             )}
-            <Button onClick={start} disabled={reading} className="gap-2" data-testid="scan-intake-read-button">
+            <Button onClick={start} disabled={reading || !files.length} className="gap-2" data-testid="scan-intake-read-button">
               {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-              Read pages
+              {reading ? "Reading text from photos…" : `Read text from ${files.length || 0} photo(s)`}
             </Button>
           </CardContent>
         </Card>
@@ -167,9 +261,48 @@ export default function ScanIntake() {
       {job && (
         <>
           <p className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            OCR stays on this PC. Handwriting and ticks need a check. Amber means low confidence.
+            Text is read on this PC. Phone photos of handwriting are often incomplete — check every field. Amber means low confidence.
             {engineMsg ? ` ${engineMsg}.` : ""}
           </p>
+          <Card data-testid="scan-extracted-summary">
+            <CardHeader>
+              <CardTitle className="text-base">2. Text read from the photos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {merged.rows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No household fields could be read. Open a page below, type the missing values, or use “Type the address instead”. The photos still attach when you save.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {merged.rows.map((row) => {
+                    const trio = TRIO.has(row.target);
+                    if (!trio) {
+                      return (
+                        <div key={row.target} className="space-y-1">
+                          <Label>{row.label}</Label>
+                          <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">{row.value}</p>
+                        </div>
+                      );
+                    }
+                    const pageField = (job.pages || []).flatMap((p) => p.fields || []).find((f) => f.target === row.target);
+                    return (
+                      <ConfirmableField
+                        key={row.target}
+                        fieldKey={row.target}
+                        label={row.label}
+                        hasValue={!!String(row.value || "").trim()}
+                        confirmed={!!pageField?.confirmed}
+                        onConfirm={() => confirmTrio(row.target)}
+                      >
+                        <span className="text-sm">{row.value}</span>
+                      </ConfirmableField>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
           {job.pages.map((page) => {
             const atlas = atlases[page.form_type];
             const values = fieldsToValues(page.fields);
@@ -178,7 +311,7 @@ export default function ScanIntake() {
             return (
               <Card key={page.id} data-testid={`scan-page-${page.id}`}>
                 <CardHeader>
-                  <CardTitle className="text-base">Page {page.index + 1}</CardTitle>
+                  <CardTitle className="text-base">Photo {page.index + 1}{page.original_name ? ` · ${page.original_name}` : ""}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5 max-w-md">
@@ -193,8 +326,8 @@ export default function ScanIntake() {
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       Suggested {page.form_label} ({Math.round((page.form_confidence || 0) * 100)}% match).
-                      {page.alignment_failed ? " Alignment failed — keyword extract is shown." : ""}
-                      {page.geometry_missing ? " No atlas geometry for this form; page will still attach." : ""}
+                      {page.alignment_failed ? " Could not line the photo up with the official blank — text was still read from the picture." : ""}
+                      {page.geometry_missing ? " No atlas geometry for this form; the photo will still attach." : ""}
                     </p>
                   </div>
                   {hasCanvas ? (
@@ -217,7 +350,7 @@ export default function ScanIntake() {
                   ) : (
                     <div className="grid gap-5 lg:grid-cols-2">
                       {(page.fields || []).length === 0 && (
-                        <p className="text-sm text-muted-foreground">No fields could be read. Choose the template or type the file as usual.</p>
+                        <p className="text-sm text-muted-foreground">No fields on this page. The photo still attaches, and the text below is kept for checking.</p>
                       )}
                       {(page.fields || []).map((field, i) => {
                         const trio = TRIO.has(field.target);
@@ -251,7 +384,7 @@ export default function ScanIntake() {
                       })}
                     </div>
                   )}
-                  {hasCanvas && (page.fields || []).filter((f) => TRIO.has(f.target)).map((field, i) => (
+                  {hasCanvas && (page.fields || []).filter((f) => TRIO.has(f.target)).map((field) => (
                     <ConfirmableField
                       key={`trio-${page.id}-${field.target}`}
                       fieldKey={field.target}
@@ -266,12 +399,25 @@ export default function ScanIntake() {
                       <span className="text-sm">{values[field.target] || field.value}</span>
                     </ConfirmableField>
                   ))}
+                  <button
+                    type="button"
+                    className="text-sm underline"
+                    onClick={() => setOpenText((s) => ({ ...s, [page.id]: !s[page.id] }))}
+                    data-testid={`scan-ocr-toggle-${page.id}`}
+                  >
+                    {openText[page.id] ? "Hide all text from this photo" : "Show all text from this photo"}
+                  </button>
+                  {openText[page.id] && (
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-3 text-xs" data-testid={`scan-ocr-text-${page.id}`}>
+                      {page.ocr_text || "(no text could be read from this photo)"}
+                    </pre>
+                  )}
                 </CardContent>
               </Card>
             );
           })}
           <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-[#f3ead8]/95 p-3">
-            <Button variant="outline" onClick={() => setJob(null)}>Start over</Button>
+            <Button variant="outline" onClick={() => { setJob(null); setFiles([]); }}>Start over</Button>
             <Button onClick={confirm} disabled={saving} className="gap-2" data-testid="scan-intake-confirm-button">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to case file
             </Button>

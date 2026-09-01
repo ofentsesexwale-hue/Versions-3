@@ -78,7 +78,8 @@ function App() {
               <Route path="settings/targets" element={<ServiceTargets />} />
               <Route path="households/:id/assessment" element={<AssessmentForm />} />
               <Route path="verification" element={<Verification />} />
-              <Route path="households/new" element={<HouseholdForm />} />
+              <Route path="households/new" element={<ScanIntake />} />
+              <Route path="households/new/typed" element={<HouseholdForm />} />
               <Route path="households/:id" element={<HouseholdDetail />} />
               <Route path="households/:id/edit" element={<HouseholdForm />} />
               <Route path="households/:id/caregiver" element={<CaregiverForm />} />

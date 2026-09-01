@@ -48,7 +48,7 @@ CLASSIFY_KEYWORDS = {
     'cow1': ['COW 1', 'COW1', 'COMMUNITY WORK PLAN'],
     'evaluation': ['CW 12', 'CW12', 'EVALUATION'],
     'reporter': ['CW 02', 'CW02', 'REPORTER FORM'],
-    'c01': ['C01', 'C 01'],
+    'c01': ['C01', 'C 01', 'HOUSEHOLD DETAILS', 'HEAD OF HOUSEHOLD', 'ORG HOUSEHOLD'],
     'c02': ['C02', 'C 02'],
     'c03': ['C03', 'C 03'],
     'checklist': ['CASE FILE CHECKLIST'],
@@ -136,13 +136,23 @@ def extract_fields(form_type, text, confidence=0.6):
         )
         add(
             'Primary Client First name',
-            _after_label(text, ['Primary Client First name', 'Caregiver First name', 'First name']),
+            _after_label(text, ['Primary Client First name', 'Caregiver First name', 'First name', 'Name']),
             'caregiver.name',
         )
         add(
             'Intake Ref Number',
-            _after_label(text, ['Intake Ref Number']),
+            _after_label(text, ['Intake Ref Number', 'Org Household Nr', 'Org Household Number', 'Org Household Nr.']),
             'household.org_household_number',
+        )
+        add(
+            'House Number',
+            _after_label(text, ['House Number']),
+            'household.house_number',
+        )
+        add(
+            'Street',
+            _after_label(text, ['Street']),
+            'household.street',
         )
         add(
             'Town',
@@ -150,9 +160,39 @@ def extract_fields(form_type, text, confidence=0.6):
             'household.town',
         )
         add(
+            'Province',
+            _after_label(text, ['Province']),
+            'household.province',
+        )
+        add(
+            'District',
+            _after_label(text, ['District']),
+            'household.district',
+        )
+        add(
+            'Municipality',
+            _after_label(text, ['Municipality']),
+            'household.municipality',
+        )
+        add(
+            'Ward',
+            _after_label(text, ['Ward']),
+            'household.ward',
+        )
+        add(
             'Cell number',
-            _after_label(text, ['Cell number', 'Cell Number', 'Contact']),
+            _after_label(text, ['Cell', 'Cell number', 'Cell Number', 'Contact']),
             'caregiver.cell_number',
+        )
+        add(
+            'Known As',
+            _after_label(text, ['Known As']),
+            'caregiver.known_as',
+        )
+        add(
+            'Home Language',
+            _after_label(text, ['Home Language']),
+            'caregiver.home_language',
         )
 
     if form_type == 'process_note':

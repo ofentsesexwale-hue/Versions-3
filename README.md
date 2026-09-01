@@ -106,7 +106,8 @@ If several people share a partial number, you get a list. If nobody matches, you
 - External referrals (SASSA, clinic, school, SAPS) with status until closed
 - Local partner directory (typed in on this PC — never looked up online)
 - SA ID checksum, date-of-birth/sex from the 13 digits, and a warning if that ID is already on another file
-- Scan Intake: photograph paper DSD forms, align them to the official blank, confirm fields, then save like a typed file
+- New household: photograph the physical file on your phone, then upload those pictures. The office PC reads the text (names, ID, address) into the digital file. Check surname / ID / date of birth, then save. Type the address only if you have no photos.
+- Scan Intake on an existing file: same photo → read text → confirm path
 - Official C01 / CW 05 canvas: type on the real sheet, print that same sheet, scan into the same boxes
 - Family care plan rows that print filled
 - CW 09 assessments, CW 11 process notes, CW 12 evaluations
