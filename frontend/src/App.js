@@ -16,6 +16,7 @@ import HouseholdForm from "@/pages/HouseholdForm";
 import CaregiverForm from "@/pages/CaregiverForm";
 import MemberForm from "@/pages/MemberForm";
 import DocumentUpload from "@/pages/DocumentUpload";
+import ScanIntake from "@/pages/ScanIntake";
 import FormFillPage from "@/pages/FormFillPage";
 import Checklist from "@/pages/Checklist";
 import AuditLog from "@/pages/AuditLog";
