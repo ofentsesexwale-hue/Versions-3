@@ -16,13 +16,14 @@ With Wi-Fi, double-click `install-python-and-engine.bat` **once**. That installs
 
 These stay **on this computer**. Photos are not sent to the cloud.
 
-| Install | Why | How |
+| Install | Why | GitHub / download |
 | --- | --- | --- |
-| **Python 3.12** | Runs the office file | `install-python-and-engine.bat` or winget `Python.Python.3.12` |
-| **RapidOCR + onnxruntime** | Reads handwritten names | Same bat / `pip install rapidocr-onnxruntime onnxruntime` |
-| **Tesseract-OCR (UB Mannheim)** | Reads printed 13-digit IDs | winget `UB-Mannheim.TesseractOCR` (tick English) |
-| **VC++ 2015–2022 x64** | Lets RapidOCR start on Windows | winget `Microsoft.VCRedist.2015+.x64` |
-| **iPhone: Most Compatible** | Avoids HEIC if the PC still struggles | Settings → Camera → Formats |
+| **Tesseract 64-bit Windows** | Printed 13-digit IDs | [tesseract-ocr/tesseract releases](https://github.com/tesseract-ocr/tesseract/releases/latest) — file `tesseract-ocr-w64-setup-*.exe`. Wiki: [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki) |
+| **RapidOCR** | Handwritten names | [RapidAI/RapidOCR](https://github.com/RapidAI/RapidOCR) then `pip install rapidocr-onnxruntime onnxruntime` |
+| **ONNX Runtime** | Runs RapidOCR | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) (use pip, not the C++ zip) |
+| **Python 3.12** | Runs the office file | [python/cpython](https://github.com/python/cpython) — Windows `.exe` from [python.org 3.12](https://www.python.org/downloads/release/python-31210/) |
+| **This office file** | The app | [ofentsesexwale-hue/Versions-3](https://github.com/ofentsesexwale-hue/Versions-3) |
+| **iPhone: Most Compatible** | Avoids HEIC | Settings → Camera → Formats (no download) |
 
 Do **not** install extra OCR websites, ChatGPT, Google Lens, or PaddlePaddle GPU packs — they either leave the PC or do not plug into this file.
 
