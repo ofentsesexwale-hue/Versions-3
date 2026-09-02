@@ -2,9 +2,14 @@ Put this file on the office PC (copy it out of Downloads first):
 
   C:\Users\sebue\OVC-CaseFile\OVC-CaseFile.exe
 
-Size should be about 140 MB. A much smaller copy is incomplete — delete it and copy again.
+Size should be about 164 MB after RapidOCR was bundled. A much smaller copy is incomplete.
 
-With Wi-Fi on the office PC, also run `install-python-and-engine.bat` once from `C:\Users\sebue\OVC-CaseFile` so Tesseract and RapidOCR are present.
+If you unzipped GitHub to Versions-3-main and already pip-installed RapidOCR, do not use an old .exe.
+Double-click this instead:
+
+  C:\Users\sebue\OVC-CaseFile\Versions-3-main\start-desktop.bat
+
+That uses the Python you just installed in backend\.venv.
 
 Do not use C:\Users\sebue\ovc-case-manager (that is a different app).
 
