@@ -10,7 +10,7 @@ The office file opens in its **own window** named OVC CaseFile — no Chrome/Edg
 
 **Windows (office PC):** put `OVC-CaseFile.exe` in `C:\Users\sebue\OVC-CaseFile` (not `ovc-case-manager` — that is a different app). Double-click the `.exe`.
 
-With Wi-Fi, double-click `install-python-and-engine.bat` **once**. That installs Python 3.12, RapidOCR, Tesseract-OCR (printed ID numbers), and the Visual C++ runtime ONNX needs. Then restart the app.
+With Wi-Fi, in File Explorer open the unzipped folder (`Versions-3-main`) and **double-click `DOUBLE-CLICK-TO-INSTALL.bat`**. Do not type `cd` or `py`. That script installs Python 3.12 if missing, RapidOCR, Tesseract, and the VC++ runtime, then writes `install-office-engine.log`. Then start the app from that same folder.
 
 ## What to download on the office PC (Wi-Fi is fine)
 
