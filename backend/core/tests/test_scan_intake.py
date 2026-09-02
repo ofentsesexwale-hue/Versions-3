@@ -47,6 +47,8 @@ class ScanIntakeTests(TestCase):
         self.assertTrue(looks_like_gibberish('hgftrujyfdyt'))
         self.assertEqual(sanitize_ocr_value('caregiver.name', 'hgftrujyfdyt', 'handwrite'), '')
         self.assertEqual(sanitize_ocr_value('caregiver.name', 'Hallie', 'handwrite'), 'Hallie')
+        self.assertFalse(looks_like_gibberish('Motswaledi'))
+        self.assertEqual(sanitize_ocr_value('member.1.surname', 'Motswaledi', 'handwrite'), 'Motswaledi')
         fields = {f['target']: f for f in extract_fields('c01', 'Surname hgftrujyfdyt\nFirst name Hallie', 0.8)}
         self.assertNotIn('caregiver.surname', fields)
         self.assertEqual(fields.get('caregiver.name', {}).get('value'), 'Hallie')

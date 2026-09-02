@@ -271,17 +271,17 @@ def _build_fields():
     ]
 
     c02 = [
-        _f('caregiver.name', 'Name', 0, (0.12, 0.20, 0.48, 0.255), 'handwrite'),
-        _f('caregiver.surname', 'Surname', 0, (0.12, 0.255, 0.48, 0.305), 'handwrite'),
-        _f('household.org_household_number', 'Org Household Number', 0, (0.12, 0.305, 0.48, 0.355), 'printed'),
-        _f('caregiver.nationality', 'Nationality', 0, (0.12, 0.355, 0.48, 0.400), 'handwrite'),
-        _id_cells('caregiver.id_number', 'ID number', 0, 0.12, 0.400, 0.48, 0.455),
+        _f('caregiver.name', 'Name', 0, (0.115, 0.238, 0.465, 0.258), 'handwrite'),
+        _f('caregiver.surname', 'Surname', 0, (0.115, 0.255, 0.465, 0.276), 'handwrite'),
+        _f('household.org_household_number', 'Org Household Number', 0, (0.130, 0.276, 0.465, 0.304), 'printed'),
+        _f('caregiver.nationality', 'Nationality', 0, (0.115, 0.304, 0.465, 0.324), 'handwrite'),
+        _id_cells('caregiver.id_number', 'ID number', 0, 0.115, 0.324, 0.465, 0.348),
     ]
     c03 = [
-        _f('caregiver.name', 'Name', 0, (0.18, 0.08, 0.42, 0.12), 'handwrite'),
-        _f('caregiver.surname', 'Surname', 0, (0.18, 0.12, 0.42, 0.16), 'handwrite'),
-        _f('household.org_household_number', 'HH number', 0, (0.18, 0.16, 0.42, 0.20), 'printed'),
-        _f('caregiver.id_number', 'Beneficiary ID', 0, (0.18, 0.04, 0.42, 0.08), 'printed'),
+        _f('caregiver.id_number', 'Beneficiary ID', 0, (0.125, 0.165, 0.500, 0.186), 'sa_id'),
+        _f('caregiver.name', 'Name', 0, (0.120, 0.178, 0.500, 0.210), 'handwrite'),
+        _f('caregiver.surname', 'Surname', 0, (0.100, 0.198, 0.500, 0.226), 'handwrite'),
+        _f('household.org_household_number', 'HH number', 0, (0.115, 0.216, 0.500, 0.240), 'printed'),
     ]
     fcp = [
         _f('caregiver.surname', 'Family Name', 0, (0.08, 0.05, 0.34, 0.12), 'handwrite'),

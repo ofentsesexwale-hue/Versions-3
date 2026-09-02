@@ -66,8 +66,8 @@ def maybe_rotate_to_template(scan, blank):
     blank_land = bw > bh
     scan_land = sw > sh
     if blank_land == scan_land:
-        return scan
-    return scan.rotate(90, expand=True)
+        return [scan]
+    return [scan.rotate(90, expand=True), scan.rotate(270, expand=True)]
 
 
 def order_points(pts):
@@ -129,9 +129,39 @@ def match_blank(scan, blank):
     """Return (warped PIL or None, inliers, alignment_failed)."""
     if not opencv_available():
         return None, 0, True
+    best = None
+    for probe in maybe_rotate_to_template(scan, blank):
+        warped, inliers, failed = _homography_to_blank(probe, blank)
+        if failed or warped is None:
+            continue
+        bonus = _title_upright_bonus(warped)
+        score = inliers + bonus
+        if best is None or score > best[0]:
+            best = (score, warped, inliers)
+    if not best:
+        return None, 0, True
+    return best[1], best[2], False
+
+
+def _title_upright_bonus(warped):
+    """Prefer the 90° that still reads C01/C03 in the header, not sideways grid lines."""
+    try:
+        from .scan_engines import read_image
+        w, h = warped.size
+        top = warped.crop((0, 0, w, max(8, int(h * 0.22))))
+        text = (read_image(top)[0] or '').upper()
+    except Exception:
+        return 0
+    hits = 0
+    for needle in ('C01', 'C02', 'C03', 'HOUSEHOLD', 'BENEFICIARY', 'ASSESSMENT', 'INTAKE', 'CW 05', 'CW05'):
+        if needle in text:
+            hits += 1
+    return hits * 40
+
+
+def _homography_to_blank(scan, blank):
     import cv2
     import numpy as np
-    scan = maybe_rotate_to_template(scan, blank)
     src_full = _to_cv(scan)
     dst = _to_cv(blank)
     h, w = dst.shape[:2]
@@ -187,14 +217,21 @@ def match_blank(scan, blank):
     return _from_cv(warped), inliers, False
 
 
-def identify_form_page(image):
+def identify_form_page(image, hint=None):
     """Which official blank this photo is (form code + page). Missing sheets are allowed."""
     from .official_blanks import BLANKS_DIR, load_meta
     if image is None or not opencv_available():
         return None, None, None, 0, True
     meta = load_meta()
+    pages = meta.get('pages') or {}
+    keys = list(pages.keys())
+    if hint and hint != 'unknown':
+        hinted = [k for k in keys if k.startswith(str(hint) + ':')]
+        if hinted:
+            keys = hinted
     best = None
-    for key, info in (meta.get('pages') or {}).items():
+    for key in keys:
+        info = pages[key]
         code, idx = key.split(':')
         path = BLANKS_DIR / info['file']
         if not path.exists():
@@ -205,11 +242,14 @@ def identify_form_page(image):
             warped, inliers, failed = match_blank(probe, blank)
             if failed:
                 continue
-            if best is None or inliers > best[0]:
-                best = (inliers, code, int(idx), warped)
-    if not best or best[0] < 14:
-        return None, None, None, (best[0] if best else 0), True
-    return best[1], best[2], best[3], best[0], False
+            score = inliers
+            if best is None or score > best[0]:
+                best = (score, code, int(idx), warped, inliers)
+    if not best or best[4] < 14:
+        if hint and hint != 'unknown' and len(keys) < len(pages):
+            return identify_form_page(image, hint=None)
+        return None, None, None, (best[4] if best else 0), True
+    return best[1], best[2], best[3], best[4], False
 
 
 def crop_box(image, box):
@@ -225,11 +265,12 @@ def crop_box(image, box):
 
 
 def ink_fill_ratio(crop):
+    """Share of truly dark ink. Grainy WhatsApp photos must not count as ticks."""
     gray = ImageOps.autocontrast(crop.convert('L'))
     pixels = list(gray.getdata())
     if not pixels:
         return 0.0
-    dark = sum(1 for p in pixels if p < 140)
+    dark = sum(1 for p in pixels if p < 88)
     return dark / len(pixels)
 
 

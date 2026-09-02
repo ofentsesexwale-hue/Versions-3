@@ -108,7 +108,7 @@ export default function ScanIntake() {
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
       if (preHousehold) fd.append("household", preHousehold);
-      const res = await api.post("/scan-intake/", fd, { timeout: 180000 });
+      const res = await api.post("/scan-intake/", fd, { timeout: 300000 });
       setJob(res.data);
       toast.success(`Read ${res.data.pages?.length || 0} page(s) — check names, ID and dates before saving`);
     } catch (e) {

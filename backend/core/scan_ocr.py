@@ -155,7 +155,7 @@ def _ocr_crop(crop, kind):
     if kind == 'checkbox':
         from .scan_align import ink_fill_ratio
         ratio = ink_fill_ratio(crop)
-        ticked = ratio > 0.18
+        ticked = ratio > 0.12
         return ('X' if ticked else ''), (0.8 if ticked or ratio < 0.08 else 0.45)
     prepared = _prepare_line_crop(crop, kind)
     rapid_text, rapid_conf = '', 0.0
@@ -199,14 +199,23 @@ def _ocr_crop(crop, kind):
     except Exception:
         pass
     if kind == 'sa_id':
-        text = tess_text or ''.join(ch for ch in rapid_text if ch.isdigit())[:13]
-        return text, (0.7 if text else 0.2)
+        digits = ''.join(ch for ch in (rapid_text + ' ' + tess_text) if ch.isdigit())
+        # Prefer a 13-digit SA ID from either engine.
+        blob = ''.join(ch for ch in rapid_text if ch.isdigit()) + ''.join(ch for ch in tess_text if ch.isdigit())
+        for candidate in (tess_text, ''.join(ch for ch in rapid_text if ch.isdigit()), digits):
+            only = ''.join(ch for ch in (candidate or '') if ch.isdigit())[:13]
+            if len(only) == 13:
+                return only, 0.75
+        only = ''.join(ch for ch in (tess_text or rapid_text or '') if ch.isdigit())[:13]
+        return only, (0.7 if only else 0.2)
     # Prefer RapidOCR on names/handwriting; Tesseract only if RapidOCR is empty.
     if rapid_text and (kind == 'handwrite' or rapid_conf >= tess_conf or not tess_text):
         text, mean = rapid_text, rapid_conf
     else:
         text, mean = tess_text, tess_conf
-    if kind == 'handwrite' and mean < 0.45:
+    if kind == 'handwrite' and not text:
+        return '', mean
+    if kind == 'handwrite' and mean < 0.22 and len(''.join(ch for ch in text if ch.isalpha())) < 3:
         return '', mean
     if kind == 'narrative':
         mean = min(mean or 0.4, 0.4)
@@ -414,12 +423,9 @@ def _process_one(image, pdf_text, engine, have_tess):
     try:
         if image is not None:
             working, _ = deskew_and_contrast(image)
-            if have_tess:
-                text, conf, ocr_engine = _ocr_image(working)
-            else:
-                ocr_engine = 'none'
+            text, conf, ocr_engine = _ocr_image(working)
         form_type, form_conf = classify_text(text)
-        vis_type, vis_page, vis_warp, vis_inliers, vis_failed = identify_form_page(working)
+        vis_type, vis_page, vis_warp, vis_inliers, vis_failed = identify_form_page(working, hint=form_type)
         if vis_type and not vis_failed:
             form_type, form_conf = vis_type, min(0.95, 0.45 + vis_inliers / 80.0)
             form_page = vis_page if vis_page is not None else 0

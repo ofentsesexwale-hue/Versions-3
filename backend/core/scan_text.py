@@ -31,18 +31,12 @@ def looks_like_gibberish(value):
         return False
     if not any(v in letters for v in _VOWELS):
         return True
-    if re.search(r'[' + ''.join(_CONSONANTS) + r']{5,}', letters):
+    if re.search(r'[' + ''.join(_CONSONANTS) + r']{6,}', letters):
         return True
-    # Almost every character unique and no repeated syllable — typical Tesseract noise.
-    if len(letters) >= 8 and len(set(letters)) / len(letters) >= 0.82:
-        return True
-    # Mixed case random inside a token (HgFtRu).
-    tokens = re.findall(r"[A-Za-z]+", text)
-    for token in tokens:
-        if len(token) >= 6:
-            flips = sum(1 for a, b in zip(token, token[1:]) if a.isupper() != b.isupper())
-            if flips >= 3 and not token.isupper() and not token.istitle():
-                return True
+    # Keyboard smash is long with almost no repeated letters *and* no real vowels clusters.
+    if len(letters) >= 12 and len(set(letters)) / len(letters) >= 0.92:
+        if not re.search(r'[aeiou]{1}[a-z]{1,3}[aeiou]', letters):
+            return True
     return False
 
 
