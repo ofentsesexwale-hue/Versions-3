@@ -152,6 +152,37 @@ class CaseworkGoldStandardTests(TestCase):
         self.assertEqual(aux.status_code, 201, aux.data)
         self.assertEqual(aux.data['role'], 'auxiliary')
 
+        epwp = self.client.post('/api/staff/', {
+            'username': 'nomsa.epwp',
+            'password': 'FieldWork99',
+            'first_name': 'Nomsa',
+            'last_name': 'Dlamini',
+            'role': 'epwp-coordinator',
+        }, format='json')
+        self.assertEqual(epwp.status_code, 201, epwp.data)
+        self.assertEqual(epwp.data['role'], 'epwp-coordinator')
+        self.assertEqual(epwp.data['job_title'], 'epwp-coordinator')
+
+        poverty = self.client.post('/api/staff/', {
+            'username': 'sello.poverty',
+            'password': 'FieldWork99',
+            'first_name': 'Sello',
+            'last_name': 'Mokoena',
+            'role': 'poverty-alleviator-coordinator',
+        }, format='json')
+        self.assertEqual(poverty.status_code, 201, poverty.data)
+        self.assertEqual(poverty.data['role'], 'poverty-alleviator-coordinator')
+
+        cg_epwp = self.client.post('/api/staff/', {
+            'username': 'bongi.epwp.cg',
+            'password': 'FieldWork99',
+            'first_name': 'Bongi',
+            'last_name': 'Khumalo',
+            'role': 'caregiver-epwp',
+        }, format='json')
+        self.assertEqual(cg_epwp.status_code, 201, cg_epwp.data)
+        self.assertEqual(cg_epwp.data['role'], 'caregiver-epwp')
+
         renamed = self.client.patch(
             f'/api/staff/{cycw.data["id"]}/',
             {'username': 'thandi.worker'},

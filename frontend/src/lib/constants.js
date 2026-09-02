@@ -4,14 +4,20 @@ export const ROLE_LABELS = {
   cycw: "CYCW",
   auxiliary: "Auxiliary",
   caregiver: "Caregiver",
+  "caregiver-epwp": "Caregiver(E.P.W.P)",
+  "epwp-coordinator": "E.P.W.P Coordinator",
+  "poverty-alleviator-coordinator": "Poverty Alleviator Coordinator",
   supervisor: "Supervisor (QA)",
   admin: "Administrator",
 };
 
 export const LIVE_OFFICE_TITLES = [
+  "epwp-coordinator",
+  "poverty-alleviator-coordinator",
   "cycw",
   "auxiliary",
   "caregiver",
+  "caregiver-epwp",
   "data-capturer",
   "supervisor",
   "admin",
@@ -20,14 +26,24 @@ export const LIVE_OFFICE_TITLES = [
 export const ROLE_PERMISSIONS = {
   admin: "Full live office: all files, staff logins, organisation, and audit.",
   supervisor: "All files, quality sign-off, and caseload reassignment. Cannot add staff.",
+  "epwp-coordinator": "All files for E.P.W.P coordination. Capture and assign caseload. No staff logins or sign-off.",
+  "poverty-alleviator-coordinator": "All files for poverty-alleviation coordination. Capture and assign caseload. No staff logins or sign-off.",
   cycw: "Own caseload: open files, capture caregivers and children, visits, and services.",
   "case-worker": "Own caseload (training title). Same field permissions as a CYCW.",
   auxiliary: "Own caseload: support visits, services, and file capture. No sign-off or staff.",
+  "caregiver-epwp": "Own caseload as an E.P.W.P caregiver: visits, services, and file capture. No sign-off or staff.",
   "data-capturer": "All files for capturing. No sign-off, reassignment, or staff.",
   caregiver: "View the household file linked to this login. Cannot change office records.",
 };
 
-export const FIELD_WORKER_ROLES = ["case-worker", "cycw", "auxiliary"];
+export const FIELD_WORKER_ROLES = [
+  "case-worker",
+  "cycw",
+  "auxiliary",
+  "caregiver-epwp",
+  "epwp-coordinator",
+  "poverty-alleviator-coordinator",
+];
 
 export function isFieldWorker(role) {
   return FIELD_WORKER_ROLES.includes(role);

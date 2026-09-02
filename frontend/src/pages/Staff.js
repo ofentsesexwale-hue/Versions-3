@@ -139,8 +139,8 @@ export default function Staff() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold"><UserCog className="h-6 w-6" /> Staff accounts</h1>
           <p className="text-sm text-muted-foreground">
-            Orphan Coordinator is the live office Administrator. Add CYCWs, Auxiliaries, caregivers, and other staff
-            with a name, title, and login. Each title has its own permissions.
+            Orphan Coordinator is the live office Administrator. Add E.P.W.P and Poverty Alleviator Coordinators,
+            CYCWs, Auxiliaries, Caregivers, Caregiver(E.P.W.P), and other staff with a name, title, and login.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>

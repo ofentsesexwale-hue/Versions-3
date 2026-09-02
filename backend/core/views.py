@@ -1544,15 +1544,7 @@ def choices_view(request):
         'staff_roles': [
             {
                 'value': r,
-                'label': {
-                    'cycw': 'CYCW',
-                    'auxiliary': 'Auxiliary',
-                    'caregiver': 'Caregiver',
-                    'data-capturer': 'Data capturer',
-                    'case-worker': 'Case worker (SSP)',
-                    'supervisor': 'Supervisor (QA)',
-                    'admin': 'Administrator',
-                }.get(r, r),
+                'label': getattr(settings, 'ROLE_LABELS', {}).get(r, r),
                 'permissions': ROLE_PERMISSION_TEXT.get(r, ''),
                 'live_office': r in getattr(settings, 'LIVE_OFFICE_TITLES', []),
             }

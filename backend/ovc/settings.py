@@ -154,16 +154,33 @@ ROLE_CASE_WORKER = 'case-worker'
 ROLE_CYCW = 'cycw'
 ROLE_AUXILIARY = 'auxiliary'
 ROLE_CAREGIVER = 'caregiver'
+ROLE_CAREGIVER_EPWP = 'caregiver-epwp'
+ROLE_EPWP_COORDINATOR = 'epwp-coordinator'
+ROLE_POVERTY_ALLEVATOR_COORDINATOR = 'poverty-alleviator-coordinator'
 ROLE_SUPERVISOR = 'supervisor'
 ROLE_ADMIN = 'admin'
 ALL_ROLES = [
     ROLE_DATA_CAPTURER, ROLE_CASE_WORKER, ROLE_CYCW, ROLE_AUXILIARY,
-    ROLE_CAREGIVER, ROLE_SUPERVISOR, ROLE_ADMIN,
+    ROLE_CAREGIVER, ROLE_CAREGIVER_EPWP, ROLE_EPWP_COORDINATOR,
+    ROLE_POVERTY_ALLEVATOR_COORDINATOR, ROLE_SUPERVISOR, ROLE_ADMIN,
 ]
+ROLE_LABELS = {
+    ROLE_DATA_CAPTURER: 'Data capturer',
+    ROLE_CASE_WORKER: 'Case worker (SSP)',
+    ROLE_CYCW: 'CYCW',
+    ROLE_AUXILIARY: 'Auxiliary',
+    ROLE_CAREGIVER: 'Caregiver',
+    ROLE_CAREGIVER_EPWP: 'Caregiver(E.P.W.P)',
+    ROLE_EPWP_COORDINATOR: 'E.P.W.P Coordinator',
+    ROLE_POVERTY_ALLEVATOR_COORDINATOR: 'Poverty Alleviator Coordinator',
+    ROLE_SUPERVISOR: 'Supervisor (QA)',
+    ROLE_ADMIN: 'Administrator',
+}
 # Titles the live office administrator assigns when adding staff (not training aliases).
 LIVE_OFFICE_TITLES = [
-    ROLE_CYCW, ROLE_AUXILIARY, ROLE_CAREGIVER, ROLE_DATA_CAPTURER,
-    ROLE_SUPERVISOR, ROLE_ADMIN,
+    ROLE_EPWP_COORDINATOR, ROLE_POVERTY_ALLEVATOR_COORDINATOR,
+    ROLE_CYCW, ROLE_AUXILIARY, ROLE_CAREGIVER, ROLE_CAREGIVER_EPWP,
+    ROLE_DATA_CAPTURER, ROLE_SUPERVISOR, ROLE_ADMIN,
 ]
 
 # Seeded training logins. They only see TEST- households. Live staff never do.

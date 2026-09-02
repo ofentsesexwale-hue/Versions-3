@@ -8,24 +8,32 @@ ROLE_CASE_WORKER = settings.ROLE_CASE_WORKER
 ROLE_CYCW = settings.ROLE_CYCW
 ROLE_AUXILIARY = settings.ROLE_AUXILIARY
 ROLE_CAREGIVER = settings.ROLE_CAREGIVER
+ROLE_CAREGIVER_EPWP = settings.ROLE_CAREGIVER_EPWP
+ROLE_EPWP_COORDINATOR = settings.ROLE_EPWP_COORDINATOR
+ROLE_POVERTY_ALLEVATOR_COORDINATOR = settings.ROLE_POVERTY_ALLEVATOR_COORDINATOR
 ROLE_SUPERVISOR = settings.ROLE_SUPERVISOR
 ROLE_ADMIN = settings.ROLE_ADMIN
 
 FIELD_WORKER_ROLES = frozenset({
-    ROLE_CASE_WORKER, ROLE_CYCW, ROLE_AUXILIARY,
+    ROLE_CASE_WORKER, ROLE_CYCW, ROLE_AUXILIARY, ROLE_CAREGIVER_EPWP,
+    ROLE_EPWP_COORDINATOR, ROLE_POVERTY_ALLEVATOR_COORDINATOR,
 })
 
 ROLE_PRIORITY = (
-    ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_CYCW, ROLE_CASE_WORKER,
-    ROLE_AUXILIARY, ROLE_DATA_CAPTURER, ROLE_CAREGIVER,
+    ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EPWP_COORDINATOR,
+    ROLE_POVERTY_ALLEVATOR_COORDINATOR, ROLE_CYCW, ROLE_CASE_WORKER,
+    ROLE_AUXILIARY, ROLE_CAREGIVER_EPWP, ROLE_DATA_CAPTURER, ROLE_CAREGIVER,
 )
 
 ROLE_PERMISSION_TEXT = {
     ROLE_ADMIN: 'Full live office: all files, staff logins, organisation, and audit.',
     ROLE_SUPERVISOR: 'All files, quality sign-off, and caseload reassignment. Cannot add staff.',
+    ROLE_EPWP_COORDINATOR: 'All files for E.P.W.P coordination. Capture and assign caseload. No staff logins or sign-off.',
+    ROLE_POVERTY_ALLEVATOR_COORDINATOR: 'All files for poverty-alleviation coordination. Capture and assign caseload. No staff logins or sign-off.',
     ROLE_CYCW: 'Own caseload: open files, capture caregivers and children, visits, and services.',
     ROLE_CASE_WORKER: 'Own caseload (training title). Same field permissions as a CYCW.',
     ROLE_AUXILIARY: 'Own caseload: support visits, services, and file capture. No sign-off or staff.',
+    ROLE_CAREGIVER_EPWP: 'Own caseload as an E.P.W.P caregiver: visits, services, and file capture. No sign-off or staff.',
     ROLE_DATA_CAPTURER: 'All files for capturing. No sign-off, reassignment, or staff.',
     ROLE_CAREGIVER: 'View the household file linked to this login. Cannot change office records.',
 }
@@ -69,14 +77,18 @@ def is_field_worker(user):
 
 
 def can_view_all_households(user):
-    return user_role(user) in (ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_DATA_CAPTURER)
+    return user_role(user) in (
+        ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_DATA_CAPTURER,
+        ROLE_EPWP_COORDINATOR, ROLE_POVERTY_ALLEVATOR_COORDINATOR,
+    )
 
 
 def can_edit_records(user):
     """Who may create/edit Household/Caregiver/Member/Documents."""
     return user_role(user) in (
         ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_CASE_WORKER, ROLE_CYCW,
-        ROLE_AUXILIARY, ROLE_DATA_CAPTURER,
+        ROLE_AUXILIARY, ROLE_DATA_CAPTURER, ROLE_CAREGIVER_EPWP,
+        ROLE_EPWP_COORDINATOR, ROLE_POVERTY_ALLEVATOR_COORDINATOR,
     )
 
 

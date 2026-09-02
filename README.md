@@ -72,7 +72,7 @@ Restore is administrator-only on the Organisation page (zip created by this app)
 | --- | --- | --- |
 | OrphanCoordinator | Khaya-File-7nQ2 | Administrator |
 
-This login is the live office **Administrator** (system builder). Staff accounts cannot demote or deactivate it. From **Staff accounts** this person can add users with a name, title, and login — CYCW, Auxiliary, Caregiver, Supervisor, Data capturer — each with its own permissions. Household caregiver logins can also be set on the caregiver form. Change this password after first sign-in. Dummy TEST- files never appear for this login.
+This login is the live office **Administrator** (system builder). Staff accounts cannot demote or deactivate it. From **Staff accounts** this person can add users with a name, title, and login — E.P.W.P Coordinator, Poverty Alleviator Coordinator, CYCW, Auxiliary, Caregiver, Caregiver (E.P.W.P), Supervisor, Data capturer — each with its own permissions. Household caregiver logins can also be set on the caregiver form. Change this password after first sign-in. Dummy TEST- files never appear for this login.
 
 **Training classroom / demo** (fictional TEST- households only — for practice):
 
