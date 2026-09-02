@@ -4,7 +4,7 @@ Put this file on the office PC (copy it out of Downloads first):
 
 Size should be about 140 MB. A much smaller copy is incomplete — delete it and copy again.
 
-Double-click that file. Wait on the loading screen until the sign-in page appears.
+With Wi-Fi on the office PC, also run `install-python-and-engine.bat` once from `C:\Users\sebue\OVC-CaseFile` so Tesseract and RapidOCR are present.
 
 Do not use C:\Users\sebue\ovc-case-manager (that is a different app).
 

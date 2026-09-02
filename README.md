@@ -8,17 +8,25 @@ The UI is iOS-style glass on a warm sand canvas. After Python and Node are insta
 
 The office file opens in its **own window** named OVC CaseFile — no Chrome/Edge/Firefox window, no address bar, no browser icon on the taskbar.
 
-**Windows (office PC):** download the new `OVC-CaseFile.exe` (Python and the CaseFile engine are inside it). Put it in `C:\Users\sebue\ovc-case-manager` and double-click it.
+**Windows (office PC):** put `OVC-CaseFile.exe` in `C:\Users\sebue\OVC-CaseFile` (not `ovc-case-manager` — that is a different app). Double-click the `.exe`.
 
-If an older `.exe` still asks for Python, open **PowerShell** and paste:
+With Wi-Fi, double-click `install-python-and-engine.bat` **once**. That installs Python 3.12, RapidOCR, Tesseract-OCR (printed ID numbers), and the Visual C++ runtime ONNX needs. Then restart the app.
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-cd C:\Users\sebue\ovc-case-manager
-.\install-python-and-engine.ps1
-```
+## What to download on the office PC (Wi-Fi is fine)
 
-Or double-click `install-python-and-engine.bat` once (needs internet that first time).
+These stay **on this computer**. Photos are not sent to the cloud.
+
+| Install | Why | How |
+| --- | --- | --- |
+| **Python 3.12** | Runs the office file | `install-python-and-engine.bat` or winget `Python.Python.3.12` |
+| **RapidOCR + onnxruntime** | Reads handwritten names | Same bat / `pip install rapidocr-onnxruntime onnxruntime` |
+| **Tesseract-OCR (UB Mannheim)** | Reads printed 13-digit IDs | winget `UB-Mannheim.TesseractOCR` (tick English) |
+| **VC++ 2015–2022 x64** | Lets RapidOCR start on Windows | winget `Microsoft.VCRedist.2015+.x64` |
+| **iPhone: Most Compatible** | Avoids HEIC if the PC still struggles | Settings → Camera → Formats |
+
+Do **not** install extra OCR websites, ChatGPT, Google Lens, or PaddlePaddle GPU packs — they either leave the PC or do not plug into this file.
+
+Optional and **not** needed for daily casework: Node/Yarn (only if you rebuild the UI), Afrikaans Tesseract language data (DSD sheets are English).
 
 **Linux / this PC:** double-click `start-desktop.sh`, or the AppImage in `desktop/release/` after packing. Put a shortcut on the desktop with `./desktop/install-desktop-shortcut.sh`.
 
@@ -83,8 +91,9 @@ These logins never see live office files. Live office (`OrphanCoordinator`) neve
 
 Already wired for a local / Cloud Agent run:
 
-- Python 3.12+ with `backend/requirements-runtime.txt` (Django 5.1, DRF, Pillow, python-dotenv, Faker)
-- Node 20+ and Yarn 1 for the React (CRA + craco + Tailwind + shadcn/Radix) UI
+- Python 3.12+ with `backend/requirements-runtime.txt` (Django 5.1, DRF, Pillow, RapidOCR, onnxruntime, pytesseract)
+- Tesseract-OCR **program** (not only the pip wrapper) for printed ID digits
+- Node 20+ and Yarn 1 only when rebuilding the React UI
 - SQLite by default (no PostgreSQL unless several staff share a server)
 
 `./start-local.sh` or `start-local.bat` creates the venv, migrates, seeds training files if missing, builds the UI, and serves preview on port 43141.

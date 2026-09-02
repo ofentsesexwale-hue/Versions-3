@@ -22,13 +22,48 @@ def _register_heif():
 _HEIF_OK = _register_heif()
 
 
-def ocr_available():
+def _find_tesseract():
+    """pytesseract is only a wrapper — Windows needs tesseract.exe on disk."""
+    import os
+    import shutil
+
+    found = shutil.which('tesseract')
+    candidates = [
+        found,
+        os.environ.get('TESSERACT_CMD'),
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        '/usr/bin/tesseract',
+        '/usr/local/bin/tesseract',
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
+def _configure_tesseract():
+    exe = _find_tesseract()
+    if not exe:
+        return False
     try:
         import pytesseract
+        pytesseract.pytesseract.tesseract_cmd = exe
         pytesseract.get_tesseract_version()
         return True
     except Exception:
         return False
+
+
+_TESS_OK = _configure_tesseract()
+
+
+def ocr_available():
+    global _TESS_OK
+    if _TESS_OK:
+        return True
+    _TESS_OK = _configure_tesseract()
+    return _TESS_OK
 
 
 def engine_status():
@@ -42,6 +77,8 @@ def engine_status():
         parts.append('Scan engine not installed on this PC')
     elif rapid:
         parts.append('Handwritten names use RapidOCR on this PC; Tesseract still reads ID numbers')
+        if not tess:
+            parts.append('Install Tesseract-OCR (UB Mannheim) on this PC so printed ID numbers read better')
     else:
         reason = rapidocr_error()
         if reason:
@@ -51,6 +88,8 @@ def engine_status():
                 'RapidOCR is not installed in this Python. '
                 'Run start-local / install-python-and-engine, or pip install rapidocr-onnxruntime onnxruntime'
             )
+        if not tess:
+            parts.append('Install Tesseract-OCR (UB Mannheim) for printed ID numbers')
     if not _HEIF_OK:
         parts.append('iPhone HEIC photos need pillow-heif on this PC (or set Camera to Most Compatible)')
     return {

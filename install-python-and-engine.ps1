@@ -1,12 +1,15 @@
-# One-time office PC setup: Python 3.12 + CaseFile engine
-# Run in PowerShell (right-click Start → Windows PowerShell, or Terminal).
+# One-time office PC setup: Python 3.12 + RapidOCR + Tesseract + VC++ runtime
+# Right-click → Run with PowerShell, from the OVC-CaseFile folder (not ovc-case-manager).
 
 $ErrorActionPreference = "Stop"
-$Office = "C:\Users\sebue\ovc-case-manager"
+$Office = Split-Path -Parent $MyInvocation.MyCommand.Path
+if (-not $Office) { $Office = Get-Location }
 Set-Location $Office
 
-Write-Host "Installing Python 3.12..."
+Write-Host "Installing office scan tools into $Office ..."
 winget install -e --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
+winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements
+winget install -e --id UB-Mannheim.TesseractOCR --accept-package-agreements --accept-source-agreements
 
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
             [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -16,7 +19,7 @@ foreach ($cmd in @("py", "python")) {
   $found = Get-Command $cmd -ErrorAction SilentlyContinue
   if ($found) { $Py = $found.Source; break }
 }
-if (-not $Py) { throw "Python is not on PATH. Close PowerShell, open a new window, and run this script again." }
+if (-not $Py) { throw "Python is not on PATH. Close this window, open a new one, and run the script again." }
 
 Write-Host "Using $Py"
 if ($Py -like "*py.exe") {
@@ -28,9 +31,10 @@ if ($Py -like "*py.exe") {
 $VenvPy = "$Office\backend\.venv\Scripts\python.exe"
 & $VenvPy -m pip install --upgrade pip
 & $VenvPy -m pip install -r "$Office\backend\requirements-engine.txt"
+& $VenvPy "$Office\backend\ensure_engine.py"
 & $VenvPy "$Office\backend\manage.py" migrate --noinput
 & $VenvPy "$Office\backend\manage.py" seed_data
 
 Write-Host ""
-Write-Host "Python and the CaseFile engine are ready."
-Write-Host "Close this window, then double-click OVC-CaseFile.exe"
+Write-Host "Python, RapidOCR, and Tesseract are ready."
+Write-Host "Close this window, then open OVC CaseFile again."
