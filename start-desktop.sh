@@ -6,8 +6,9 @@ cd "$ROOT"
 export USE_SQLITE=true
 if [ ! -x "$ROOT/backend/.venv/bin/python" ]; then
   python3 -m venv "$ROOT/backend/.venv"
-  "$ROOT/backend/.venv/bin/pip" install -r "$ROOT/backend/requirements-runtime.txt"
 fi
+"$ROOT/backend/.venv/bin/pip" install -q -r "$ROOT/backend/requirements-runtime.txt"
+"$ROOT/backend/.venv/bin/python" "$ROOT/backend/ensure_engine.py"
 "$ROOT/backend/.venv/bin/python" "$ROOT/backend/manage.py" migrate --noinput
 "$ROOT/backend/.venv/bin/python" "$ROOT/backend/manage.py" seed_data || true
 if [ ! -f "$ROOT/frontend/build/index.html" ]; then

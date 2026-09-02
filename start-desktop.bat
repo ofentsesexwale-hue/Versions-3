@@ -5,8 +5,9 @@ cd /d "%~dp0"
 set USE_SQLITE=true
 if not exist backend\.venv\Scripts\python.exe (
   py -3 -m venv backend\.venv
-  backend\.venv\Scripts\pip install -r backend\requirements-runtime.txt
 )
+backend\.venv\Scripts\pip install -r backend\requirements-runtime.txt
+backend\.venv\Scripts\python backend\ensure_engine.py
 backend\.venv\Scripts\python backend\manage.py migrate --noinput
 backend\.venv\Scripts\python backend\manage.py seed_data
 if not exist frontend\build\index.html (

@@ -5,8 +5,9 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT/backend"
 if [ ! -d .venv ]; then
   python3 -m venv .venv
-  .venv/bin/pip install -r requirements-runtime.txt
 fi
+.venv/bin/pip install -q -r requirements-runtime.txt
+.venv/bin/python ensure_engine.py
 .venv/bin/python manage.py migrate --noinput
 .venv/bin/python manage.py seed_data || true
 if [ ! -f "$ROOT/frontend/build/index.html" ]; then

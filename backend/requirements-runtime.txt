@@ -12,3 +12,4 @@ opencv-python-headless>=4.8
 uvicorn==0.25.0
 Faker==40.37.0
 pytest==9.1.1
+pytest-xdist==3.8.0

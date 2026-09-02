@@ -33,17 +33,24 @@ def ocr_available():
 
 def engine_status():
     from .scan_align import opencv_available
-    from .scan_engines import rapidocr_available
+    from .scan_engines import rapidocr_error, warmup
     tess = ocr_available()
     cv = opencv_available()
-    rapid = rapidocr_available()
+    rapid = warmup()
     parts = []
     if not tess and not cv and not rapid:
         parts.append('Scan engine not installed on this PC')
     elif rapid:
         parts.append('Handwritten names use RapidOCR on this PC; Tesseract still reads ID numbers')
     else:
-        parts.append('Install RapidOCR on this PC so names are not read by Tesseract alone')
+        reason = rapidocr_error()
+        if reason:
+            parts.append(f'RapidOCR did not start: {reason}')
+        else:
+            parts.append(
+                'RapidOCR is not installed in this Python. '
+                'Run start-local / install-python-and-engine, or pip install rapidocr-onnxruntime onnxruntime'
+            )
     if not _HEIF_OK:
         parts.append('iPhone HEIC photos need pillow-heif on this PC (or set Camera to Most Compatible)')
     return {
@@ -51,6 +58,7 @@ def engine_status():
         'opencv': cv,
         'heic': _HEIF_OK,
         'rapidocr': rapid,
+        'rapidocr_error': rapidocr_error(),
         'scan_engine': tess or cv or rapid,
         'message': '. '.join(parts),
     }

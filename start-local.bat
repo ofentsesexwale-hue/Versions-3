@@ -3,8 +3,9 @@ REM Fully local start on Windows. Install Python 3.12+ and Node LTS once, then t
 cd /d %~dp0backend
 if not exist .venv (
   py -3 -m venv .venv
-  .venv\Scripts\pip install -r requirements-runtime.txt
 )
+.venv\Scripts\pip install -r requirements-runtime.txt
+.venv\Scripts\python ensure_engine.py
 .venv\Scripts\python manage.py migrate --noinput
 if not exist ..\frontend\build\index.html (
   cd /d %~dp0frontend

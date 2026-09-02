@@ -100,6 +100,10 @@ class ScanIntakeViewSet(viewsets.ViewSet):
         jobs = ScanIntakeJob.objects.filter(created_by=request.user, status='pending')[:20]
         return Response([_job_payload(j, request) for j in jobs])
 
+    @action(detail=False, methods=['get'])
+    def engine(self, request):
+        return Response(engine_status())
+
     def retrieve(self, request, pk=None):
         _deny_edit(request.user)
         job = ScanIntakeJob.objects.filter(pk=pk, created_by=request.user).first()

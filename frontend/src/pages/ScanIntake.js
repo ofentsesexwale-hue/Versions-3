@@ -76,8 +76,13 @@ export default function ScanIntake() {
   const [atlases, setAtlases] = useState({});
   const [pageTab, setPageTab] = useState({});
   const [openText, setOpenText] = useState({});
+  const [engine, setEngine] = useState(null);
 
   const err = (e) => e?.response?.data?.detail || "Could not read that photo";
+
+  useEffect(() => {
+    api.get("/scan-intake/engine/").then((res) => setEngine(res.data)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     api.get("/official-forms/").then((res) => {
@@ -197,6 +202,14 @@ export default function ScanIntake() {
             <p className="text-sm text-muted-foreground">
               iPhone photos work as HEIC or JPEG. Fill the paper in the frame (avoid the desk). Upload only the pages that exist in that file. Printed names and ID numbers read better than pencil.
             </p>
+            {engine && (
+              <p
+                className={`text-sm ${engine.rapidocr ? "text-emerald-800" : "border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950"}`}
+                data-testid="scan-engine-status"
+              >
+                {engine.message}
+              </p>
+            )}
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
                 <Camera className="h-4 w-4" />

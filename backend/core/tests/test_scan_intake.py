@@ -53,8 +53,7 @@ class ScanIntakeTests(TestCase):
 
     def test_rapidocr_reads_printed_name_better_than_smash(self):
         from core.scan_engines import rapidocr_available, read_line
-        if not rapidocr_available():
-            self.skipTest('RapidOCR is not installed on this PC')
+        self.assertTrue(rapidocr_available(), 'RapidOCR must be installed in this Python')
         from PIL import ImageDraw, ImageFont
         im = Image.new('RGB', (420, 90), 'white')
         draw = ImageDraw.Draw(im)
@@ -66,6 +65,11 @@ class ScanIntakeTests(TestCase):
         text, conf = read_line(im)
         self.assertIn('Hallie', text)
         self.assertGreater(conf, 0.8)
+
+    def test_engine_status_reports_rapidocr(self):
+        r = self.client.get('/api/scan-intake/engine/')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data.get('rapidocr'), r.data)
 
     def test_intake_without_c01_still_classifies(self):
         form, conf = classify_text(INTAKE_TEXT)
