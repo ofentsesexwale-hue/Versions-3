@@ -227,6 +227,11 @@ export default function ScanIntake() {
   };
 
   const merged = job ? mergedFromPages(job.pages) : { values: {}, rows: [] };
+  // Readings the app could not attribute to a person, e.g. an ID number found
+  // loose in the page text. Shown so nothing is lost, never written.
+  const unplaced = (job?.pages || []).flatMap((p) =>
+    (p.fields || []).filter((f) => !f.target && (f.value || "").trim()),
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="scan-intake-page">
@@ -396,6 +401,26 @@ export default function ScanIntake() {
                       </ConfirmableField>
                     );
                   })}
+                </div>
+              )}
+              {unplaced.length > 0 && (
+                <div
+                  className="rounded-lg border border-amber-300 bg-amber-50/60 p-3"
+                  data-testid="scan-unplaced-readings"
+                >
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-amber-900">
+                    <AlertTriangle className="h-4 w-4" /> Read on the paper, but not placed
+                  </p>
+                  <ul className="mt-2 space-y-2 text-sm text-amber-950">
+                    {unplaced.map((f, i) => (
+                      <li key={`${f.label}-${i}`}>
+                        <span className="font-medium">{f.value}</span> — {f.note || f.label}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-amber-900">
+                    These are not saved. Type them onto the right person below.
+                  </p>
                 </div>
               )}
             </CardContent>

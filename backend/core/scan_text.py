@@ -22,7 +22,22 @@ def _letters(text):
 
 
 def looks_like_gibberish(value):
-    """True for keyboard-smash OCR like hgftrujyfdyt."""
+    """True for keyboard-smash OCR like hgftrujyfdyt, or the form's own labels.
+
+    Full-page OCR cannot tell a printed label from the handwriting beside it,
+    so 'SURNAME' and 'ID NO' arrive looking exactly like answers. The charset
+    rules cannot catch those - they are real words - so the printed wording is
+    checked as well. Both tests apply; neither replaces the other.
+    """
+    from .form_labels import looks_like_form_label
+    text = ' '.join((value or '').split())
+    if not text:
+        return False
+    return looks_like_form_label(text) or _looks_like_smash(text)
+
+
+def _looks_like_smash(value):
+    """The charset and shape rules on their own, with no label lexicon."""
     text = ' '.join((value or '').split())
     if not text:
         return False
@@ -88,10 +103,77 @@ def plausible_place(value):
     return len(letters) >= 2 and any(v in letters for v in _VOWELS)
 
 
+_DATE_SPLIT = re.compile(r'[^0-9]+')
+# Separators are normalised to '-' first, so only these three orders are tried.
+# Year-first is unambiguous; the rest read day-first, as written in South Africa.
+_DATE_FORMATS = ('%Y-%m-%d', '%d-%m-%Y', '%d-%m-%y')
+MAX_AGE_YEARS = 120
+
+
+def _plausible_date(parsed, today):
+    if parsed is None or parsed > today:
+        return False
+    return today.year - parsed.year <= MAX_AGE_YEARS
+
+
+def normalise_date_value(value):
+    """An ISO date, or nothing. A half-read date is not a date.
+
+    Handwritten date boxes come back as '99b1 Ol11/', 'be-no-bloe' and
+    'Z1107o2 12'. None of those are dates, and offering them to staff only
+    buys a pointless confirm click on junk, so a candidate has to parse as a
+    real calendar date within living memory or it counts as unread. Same rule
+    as an SA ID after Phase 3: the whole thing or nothing.
+    """
+    from datetime import date, datetime
+
+    text = ' '.join((value or '').split())
+    if not text:
+        return ''
+    parts = [p for p in _DATE_SPLIT.split(text) if p]
+    today = date.today()
+    if len(parts) == 1 and len(parts[0]) == 8:
+        # A date grid can read back as one run of digits.
+        try:
+            parsed = datetime.strptime(parts[0], '%Y%m%d').date()
+        except ValueError:
+            return ''
+        return parsed.isoformat() if _plausible_date(parsed, today) else ''
+    if len(parts) != 3:
+        return ''
+    joined = '-'.join(parts)
+    for fmt in _DATE_FORMATS:
+        try:
+            parsed = datetime.strptime(joined, fmt).date()
+        except ValueError:
+            continue
+        if fmt == '%d-%m-%y' and parsed > today:
+            # strptime reads '55' as 2055; a birth date means 1955.
+            try:
+                parsed = parsed.replace(year=parsed.year - 100)
+            except ValueError:
+                continue
+        if _plausible_date(parsed, today):
+            return parsed.isoformat()
+    return ''
+
+
 def sanitize_ocr_value(target, value, kind=None):
     text = ' '.join((value or '').split())
     if not text:
         return ''
+    if kind == 'checkbox':
+        # The tick is the evidence here, not the text beside it.
+        return text
+    if kind == 'date' or (target or '').endswith(('date_of_birth', 'date_joined',
+                                                  'date_registered')):
+        return normalise_date_value(text)
+    from .form_labels import option_targets
+    if (target or '') in option_targets():
+        # 'Female' and 'African' are captions printed on the sheet as well as
+        # real answers, including when worked out from an ID number, so only
+        # the charset rules apply to a choice field.
+        return '' if _looks_like_smash(text) else text
     if kind == 'sa_id' or (target or '').endswith('id_number'):
         # Spaces and dashes are normal on a form; a short read is not a short
         # ID. Returning the partial digits is what put '74' and '4' into ID

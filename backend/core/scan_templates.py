@@ -3,6 +3,7 @@
 Labels follow the print templates in core/templates/print/ (field names on the
 official layouts). Do not invent alternate field names.
 """
+from .form_labels import EXTRACTION_LABELS, looks_like_form_label
 from .print_views import FORMS
 from .sa_id import parse_sa_id
 from .scan_text import sanitize_ocr_value
@@ -75,7 +76,14 @@ def classify_text(text):
 
 
 def _after_label(text, labels):
-    """Return text following the first matching label (print-template wording)."""
+    """Text following the first matching label in the flattened page text.
+
+    A weak reading of a dense sheet: what follows a label in the blob is very
+    often the NEXT label rather than an answer, and RapidOCR's reading order is
+    not reliably left-to-right, so on C02 the columns come back reversed. It is
+    a last resort for sheets with no measured atlas, and a candidate that is
+    itself printed wording is refused so one label cannot answer another.
+    """
     upper = text or ''
     lowered = upper.lower()
     for label in labels:
@@ -86,8 +94,11 @@ def _after_label(text, labels):
         rest = rest.replace(':', ' ').replace('|', ' ')
         line = rest.split('\n', 1)[0].strip()
         line = ' '.join(line.split()[:6])
-        if line:
-            return line[:200]
+        if not line:
+            continue
+        if looks_like_form_label(line):
+            continue
+        return line[:200]
     return ''
 
 
@@ -95,7 +106,7 @@ def _first_sa_id(text):
     digits = ''.join(ch if ch.isdigit() else ' ' for ch in (text or ''))
     for token in digits.split():
         parsed = parse_sa_id(token)
-        if parsed['is_sa_length'] and parsed['luhn_ok']:
+        if parsed['valid']:
             return parsed
     for token in digits.split():
         if len(token) == 13:
@@ -104,10 +115,23 @@ def _first_sa_id(text):
 
 
 def extract_fields(form_type, text, confidence=0.6):
-    """Map OCR text onto existing model fields. Labels match print templates."""
+    """Map full-page OCR text onto model fields, where no atlas box covers them.
+
+    This is the fallback for sheets Scan Intake has no measured geometry for.
+    On a sheet that does have an atlas, the per-field crops are the answer -
+    including a blank crop, which means nothing was written in that box - so
+    scraping the flattened page text is switched off rather than allowed to
+    guess over them. The atlas decides that, not the caller.
+    """
+    from .form_atlas import atlas_coverage
+
+    atlas_covered, atlas_targets = atlas_coverage(form_type)
     fields = []
+    labels = EXTRACTION_LABELS
 
     def add(label, value, target, conf=None):
+        if target and target in atlas_targets:
+            return
         value = sanitize_ocr_value(target, value)
         if not value:
             return
@@ -121,126 +145,110 @@ def extract_fields(form_type, text, confidence=0.6):
             'confirmed': False,
         })
 
+    def scrape(label, target, conf=None):
+        if atlas_covered or target in atlas_targets:
+            return
+        add(label, _after_label(text, labels[target]), target, conf)
+
     parsed = _first_sa_id(text)
-    if parsed and parsed.get('digits'):
-        add('SA ID Number', parsed['digits'], 'caregiver.id_number', 0.9 if parsed.get('luhn_ok') else 0.55)
-        if parsed.get('dob'):
-            add('Date of birth (from ID)', parsed['dob'], 'caregiver.date_of_birth', 0.85 if parsed.get('luhn_ok') else 0.5)
-        if parsed.get('sex'):
-            add('Sex (from ID)', parsed['sex'], 'caregiver.sex', 0.8 if parsed.get('luhn_ok') else 0.45)
+    if parsed and parsed['digits']:
+        _add_page_id(add, fields, parsed, atlas_covered)
 
     if form_type in ('intake', 'c01', 'c02', 'c03', 'unknown'):
-        add(
-            'Primary Client Surname',
-            _after_label(text, ['Primary Client Surname', 'Caregiver Surname', 'Surname']),
-            'caregiver.surname',
-        )
-        add(
-            'Primary Client First name',
-            _after_label(text, ['Primary Client First name', 'Caregiver First name', 'First name']),
-            'caregiver.name',
-        )
-        add(
-            'Intake Ref Number',
-            _after_label(text, ['Intake Ref Number', 'Org Household Nr', 'Org Household Number', 'Org Household Nr.']),
-            'household.org_household_number',
-        )
-        add(
-            'House Number',
-            _after_label(text, ['House Number']),
-            'household.house_number',
-        )
-        add(
-            'Street',
-            _after_label(text, ['Street']),
-            'household.street',
-        )
-        add(
-            'Town',
-            _after_label(text, ['Town', 'Town / City']),
-            'household.town',
-        )
-        add(
-            'Province',
-            _after_label(text, ['Province']),
-            'household.province',
-        )
-        add(
-            'District',
-            _after_label(text, ['District']),
-            'household.district',
-        )
-        add(
-            'Municipality',
-            _after_label(text, ['Municipality']),
-            'household.municipality',
-        )
-        add(
-            'Ward',
-            _after_label(text, ['Ward']),
-            'household.ward',
-        )
-        add(
-            'Cell number',
-            _after_label(text, ['Cell', 'Cell number', 'Cell Number', 'Contact']),
-            'caregiver.cell_number',
-        )
-        add(
-            'Known As',
-            _after_label(text, ['Known As']),
-            'caregiver.known_as',
-        )
-        add(
-            'Home Language',
-            _after_label(text, ['Home Language']),
-            'caregiver.home_language',
-        )
+        scrape('Primary Client Surname', 'caregiver.surname')
+        scrape('Primary Client First name', 'caregiver.name')
+        scrape('Intake Ref Number', 'household.org_household_number')
+        scrape('House Number', 'household.house_number')
+        scrape('Street', 'household.street')
+        scrape('Town', 'household.town')
+        scrape('Province', 'household.province')
+        scrape('District', 'household.district')
+        scrape('Municipality', 'household.municipality')
+        scrape('Ward', 'household.ward')
+        scrape('Cell number', 'caregiver.cell_number')
+        scrape('Known As', 'caregiver.known_as')
+        scrape('Home Language', 'caregiver.home_language')
 
     if form_type == 'process_note':
-        add('Client surname', _after_label(text, ['Client surname', 'Surname']), 'process_note.client_surname')
-        add('Client first name', _after_label(text, ['Client first name', 'First name']), 'process_note.client_first_name')
-        add('File no', _after_label(text, ['File no', 'File number']), 'process_note.file_no')
-        add(
-            'Purpose and what transpired',
-            _after_label(text, ['Purpose and what transpired', 'What transpired']),
-            'process_note.purpose_and_what_transpired',
-        )
-        add(
-            'Outcome and follow up',
-            _after_label(text, ['Outcome and follow up', 'Follow up']),
-            'process_note.outcome_and_follow_up',
-        )
-        add('Problem code', _after_label(text, ['Problem code', 'Primary Problem Code']), 'process_note.problem_code')
+        scrape('Client surname', 'process_note.client_surname')
+        scrape('Client first name', 'process_note.client_first_name')
+        scrape('File no', 'process_note.file_no')
+        scrape('Purpose and what transpired', 'process_note.purpose_and_what_transpired')
+        scrape('Outcome and follow up', 'process_note.outcome_and_follow_up')
+        scrape('Problem code', 'process_note.problem_code')
 
     if form_type == 'family_care_plan':
-        add('Overall goal', _after_label(text, ['Overall goal', 'Overall Goal']), 'care_plan.overall_goal')
-        add('SSP name', _after_label(text, ['SSP Name', 'SSP name']), 'care_plan.ssp_name')
+        scrape('Overall goal', 'care_plan.overall_goal')
+        scrape('SSP name', 'care_plan.ssp_name')
 
     if form_type in ('hiv_risk', 'hivstat'):
-        add('HIV status', _after_label(text, ['HIV status', 'HIV Status']), 'member.hiv_status')
-        add('On ART', _after_label(text, ['On ART']), 'member.on_art')
-        add('Last viral load', _after_label(text, ['Viral load', 'Last viral load']), 'member.last_viral_load')
+        scrape('HIV status', 'member.hiv_status')
+        scrape('On ART', 'member.on_art')
+        scrape('Last viral load', 'member.last_viral_load')
 
     if form_type == 'assessment':
-        add(
-            'Overview of the situation',
-            _after_label(text, ['Overview', 'Situation']),
-            'assessment.overview_situation',
-        )
-        add('Primary Problem Code (see CW 06)', _after_label(text, ['Primary Problem Code', 'Problem Code']), 'assessment.problem_codes')
-        add('Overall goal', _after_label(text, ['Overall goal']), 'assessment.overall_goal')
+        scrape('Overview of the situation', 'assessment.overview_situation')
+        scrape('Primary Problem Code (see CW 06)', 'assessment.problem_codes')
+        scrape('Overall goal', 'assessment.overall_goal')
 
     if form_type == 'educational':
-        add('School name', _after_label(text, ['School name', 'School Name']), 'member.school_name')
-        add('Grade', _after_label(text, ['Grade']), 'member.grade')
+        scrape('School name', 'member.school_name')
+        scrape('Grade', 'member.grade')
 
-    # Deduplicate by target keeping the higher confidence.
+    # Deduplicate by target keeping the higher confidence. Unassigned
+    # candidates have no target to collide on and are all kept.
     by_target = {}
+    out = []
     for item in fields:
+        if not item['target']:
+            out.append(item)
+            continue
         prev = by_target.get(item['target'])
         if not prev or item['confidence'] > prev['confidence']:
             by_target[item['target']] = item
-    return list(by_target.values())
+    return out + list(by_target.values())
+
+
+def _add_page_id(add, fields, parsed, atlas_covered):
+    """Place a 13-digit run found loose in the page text, or hand it to staff.
+
+    The scan is page-wide and knows nothing about whose section of the sheet
+    the number sat in. On a C01 members page it picked up a child's ID, wrote
+    it to the caregiver, and derived a date of birth and a sex from it. So on
+    any sheet with an atlas the number is offered as an unassigned reading for
+    staff to place, and names nobody. Sheets with no atlas keep the old
+    behaviour, because scraping is all they have.
+    """
+    digits = parsed['digits']
+    if atlas_covered:
+        fields.append({
+            'label': 'ID number read on this page - not placed',
+            'value': digits,
+            'target': '',
+            'kind': 'sa_id',
+            'confidence': 0.55,
+            'low_confidence': True,
+            'confirmed': False,
+            'unassigned': True,
+            'note': (
+                'A 13-digit ID was read somewhere on this page, but nothing says whose '
+                'it is. Type it onto the right person.'
+            ),
+        })
+        return
+    if not parsed['valid']:
+        add('SA ID Number', digits, 'caregiver.id_number', 0.5)
+        for item in fields:
+            if item['target'] == 'caregiver.id_number':
+                item['low_confidence'] = True
+                item['invalid_id'] = True
+                item['note'] = 'Not a valid SA ID: ' + '; '.join(parsed['problems'])
+        return
+    add('SA ID Number', digits, 'caregiver.id_number', 0.9)
+    if parsed['dob']:
+        add('Date of birth (from ID)', parsed['dob'], 'caregiver.date_of_birth', 0.85)
+    if parsed['sex']:
+        add('Sex (from ID)', parsed['sex'], 'caregiver.sex', 0.8)
 
 
 def form_choices():

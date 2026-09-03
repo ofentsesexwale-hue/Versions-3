@@ -597,6 +597,10 @@ def _merge_extracted(atlas_fields, keyword_fields):
     for item in keyword_fields or []:
         target = item.get('target') or ''
         if not target:
+            # A reading nobody could place, e.g. an ID found loose in the page
+            # text. It belongs to no field, so it is shown, not written.
+            if (item.get('value') or '').strip():
+                extras.append(item)
             continue
         incoming = sanitize_ocr_value(target, item.get('value') or '', item.get('kind'))
         if not incoming:

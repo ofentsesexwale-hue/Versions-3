@@ -3,6 +3,8 @@
 Boxes are normalised 0–1 on the official blank PNG (same file print uses).
 Labels follow the NPO PDF. Do not rename them.
 """
+from functools import lru_cache
+
 from .official_blanks import ATLAS_VERSION, load_meta, page_count
 
 # form code -> metadata. `intake` is CW 05 (existing print/scan key).
@@ -335,3 +337,18 @@ def fields_for(code, page=None):
 
 def has_geometry(code):
     return form_meta(code).get('geometry') == 'pdf' and bool(form_meta(code).get('blanks'))
+
+
+@lru_cache(maxsize=64)
+def atlas_coverage(code):
+    """(measured geometry?, every target this sheet can be read box by box).
+
+    Lets the full-page keyword fallback tell a sheet it can read field by field
+    from one it can only scrape, without every caller working it out. A form
+    with boxes but no official blank to align to reads nothing from them, so it
+    reports no covered targets and the scraper stays in play.
+    """
+    covered = has_geometry(code)
+    if not covered:
+        return False, frozenset()
+    return True, frozenset(f['target'] for f in fields_for(code) if f.get('target'))
