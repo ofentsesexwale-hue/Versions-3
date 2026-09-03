@@ -236,7 +236,9 @@ class Cw05CheckboxesLandOnTicksTests(TestCase):
         """These boxes used to sit on the words Yes/No/Open/Emergency/High/Mild."""
         for spec in self._specs():
             blank = Image.open(blank_path('intake', spec['page']))
-            state, ratio = checkbox_state(crop_box(blank, spec['box']))
+            state, ratio = checkbox_state(
+                crop_box(blank, spec['box']), crop_box(blank, spec['box']),
+            )
             with self.subTest(label=spec['label']):
                 self.assertEqual(state, TICK_EMPTY, f'{spec["label"]} ratio={ratio:.4f}')
 
@@ -258,7 +260,7 @@ class SyntheticRoundTripTests(TestCase):
     TEXT_MARKS = (
         ('c01', 0, 'household.province', 'GAUTENG'),
         ('c01', 0, 'household.town', 'WESTONARIA'),
-        ('c01', 0, 'household.ward', 'WARD32'),
+        ('c01', 0, 'household.ward', 'THIRTYTWO'),
         ('c01', 0, 'household.district', 'RANDWEST'),
         ('c01', 0, 'household.house_number', '2291'),
         ('c02', 0, 'caregiver.name', 'THANDI'),

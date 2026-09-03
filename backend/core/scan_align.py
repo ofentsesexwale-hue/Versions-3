@@ -211,22 +211,28 @@ def _homography_to_blank(scan, blank):
 
     src_s, ss = shrink(src_full)
     dst_s, ds = shrink(dst)
-    # CLAHE flattens C02's photocopied ruling into noise for SIFT. Plain
-    # greyscale is what actually matches C01/C03; C02 still needs the
-    # full-page quad check because SIFT latches onto one cell of the grid.
-    gray_s = cv2.cvtColor(src_s, cv2.COLOR_BGR2GRAY)
-    gray_d = cv2.cvtColor(dst_s, cv2.COLOR_BGR2GRAY)
-    qa = gray_s.shape[1] / max(1, gray_s.shape[0])
-    ba = gray_d.shape[1] / max(1, gray_d.shape[0])
+    gray_plain_s = cv2.cvtColor(src_s, cv2.COLOR_BGR2GRAY)
+    gray_plain_d = cv2.cvtColor(dst_s, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray_clahe_s = clahe.apply(gray_plain_s)
+    gray_clahe_d = clahe.apply(gray_plain_d)
+    qa = gray_plain_s.shape[1] / max(1, gray_plain_s.shape[0])
+    ba = gray_plain_d.shape[1] / max(1, gray_plain_d.shape[0])
     if abs(math.log(qa / ba)) > math.log(1.65):
         return None, 0, True
 
-    detectors = [(cv2.ORB_create(3500), cv2.NORM_HAMMING, 0.75)]
+    attempts = [
+        ('orb', cv2.ORB_create(3500), cv2.NORM_HAMMING, 0.75, gray_clahe_s, gray_clahe_d),
+        ('orb', cv2.ORB_create(3500), cv2.NORM_HAMMING, 0.75, gray_plain_s, gray_plain_d),
+    ]
     if hasattr(cv2, 'SIFT_create'):
-        detectors.append((cv2.SIFT_create(nfeatures=4000), cv2.NORM_L2, 0.8))
+        attempts.append(
+            ('sift', cv2.SIFT_create(nfeatures=4000), cv2.NORM_L2, 0.8, gray_plain_s, gray_plain_d)
+        )
 
-    best = None
-    for detector, norm, ratio in detectors:
+    orb_best = None
+    sift_best = None
+    for kind, detector, norm, ratio, gray_s, gray_d in attempts:
         H_small, inliers = _feature_homography(gray_s, gray_d, detector, norm, ratio=ratio)
         if H_small is None or inliers < 10:
             continue
@@ -238,10 +244,21 @@ def _homography_to_blank(scan, blank):
         warped = cv2.warpPerspective(
             src_full, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255),
         )
-        if best is None or inliers > best[0]:
-            best = (inliers, _from_cv(warped))
-    if best:
-        return best[1], best[0], False
+        candidate = (inliers, _from_cv(warped))
+        if kind == 'orb':
+            if orb_best is None or inliers > orb_best[0]:
+                orb_best = candidate
+        else:
+            if sift_best is None or inliers > sift_best[0]:
+                sift_best = candidate
+    # A solid ORB page match (C01 household) is geometrically tighter than a
+    # higher-inlier SIFT warp that still covers the page but smears ticks.
+    if orb_best and orb_best[0] >= 70:
+        return orb_best[1], orb_best[0], False
+    if sift_best and (orb_best is None or sift_best[0] > orb_best[0]):
+        return sift_best[1], sift_best[0], False
+    if orb_best:
+        return orb_best[1], orb_best[0], False
     return None, 0, True
 
 
