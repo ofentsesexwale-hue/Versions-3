@@ -94,7 +94,8 @@ desktop/node_modules/
 desktop/vendor/
 desktop/release/
 desktop/*.AppImage
-!/OVC-CaseFile.exe
+# GitHub rejects files over 100 MB. Keep the portable EXE out of git.
+/OVC-CaseFile.exe
 backend/media/
 *.sqlite3-wal
 *.sqlite3-shm
