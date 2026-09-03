@@ -1,6 +1,7 @@
 """Align a photographed page onto an official blank. Local OpenCV only."""
 from __future__ import annotations
 
+import math
 from io import BytesIO
 
 from PIL import Image, ImageFilter, ImageOps
@@ -159,6 +160,40 @@ def _title_upright_bonus(warped):
     return hits * 40
 
 
+def _clahe_gray(mat):
+    import cv2
+    gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(gray)
+
+
+def _feature_homography(gray_s, gray_d, detector, norm, ratio=0.75):
+    """Return (H on the shrunk greys, inlier count) or (None, matches_or_zero)."""
+    import cv2
+    import numpy as np
+    k1, d1 = detector.detectAndCompute(gray_s, None)
+    k2, d2 = detector.detectAndCompute(gray_d, None)
+    if d1 is None or d2 is None or len(k1) < 12 or len(k2) < 12:
+        return None, 0
+    matcher = cv2.BFMatcher(norm, crossCheck=False)
+    pairs = matcher.knnMatch(d1, d2, k=2)
+    good = []
+    for pair in pairs:
+        if len(pair) < 2:
+            continue
+        m, n = pair
+        if m.distance < ratio * n.distance:
+            good.append(m)
+    if len(good) < 12:
+        return None, len(good)
+    src_pts = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+    dst_pts = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+    H_small, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+    if H_small is None or mask is None:
+        return None, 0
+    return H_small, int(mask.sum())
+
+
 def _homography_to_blank(scan, blank):
     import cv2
     import numpy as np
@@ -175,46 +210,51 @@ def _homography_to_blank(scan, blank):
 
     src_s, ss = shrink(src_full)
     dst_s, ds = shrink(dst)
-    gray_s = cv2.cvtColor(src_s, cv2.COLOR_BGR2GRAY)
-    gray_d = cv2.cvtColor(dst_s, cv2.COLOR_BGR2GRAY)
-    orb = cv2.ORB_create(3500)
-    k1, d1 = orb.detectAndCompute(gray_s, None)
-    k2, d2 = orb.detectAndCompute(gray_d, None)
-    if d1 is None or d2 is None or len(k1) < 12 or len(k2) < 12:
+    gray_s = _clahe_gray(src_s)
+    gray_d = _clahe_gray(dst_s)
+    qa = gray_s.shape[1] / max(1, gray_s.shape[0])
+    ba = gray_d.shape[1] / max(1, gray_d.shape[0])
+    # Portrait photo vs landscape blank (and the reverse) is a different
+    # rotation, not a weaker match — skip it so SIFT cannot glue C02 onto
+    # the unrotated portrait capture.
+    if abs(math.log(qa / ba)) > math.log(1.65):
         return None, 0, True
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-    pairs = bf.knnMatch(d1, d2, k=2)
-    good = []
-    for pair in pairs:
-        if len(pair) < 2:
+
+    detectors = []
+    if hasattr(cv2, 'SIFT_create'):
+        # C02's printed landscape grid never clears ORB's 12-inlier floor on
+        # the c02_adult.jpg fixture. SIFT does (64 inliers on rot90).
+        detectors.append((cv2.SIFT_create(nfeatures=4000), cv2.NORM_L2))
+    detectors.append((cv2.ORB_create(3500), cv2.NORM_HAMMING))
+
+    best_inliers = 0
+    for detector, norm in detectors:
+        H_small, inliers = _feature_homography(gray_s, gray_d, detector, norm)
+        best_inliers = max(best_inliers, inliers)
+        if H_small is None or inliers < 10:
             continue
-        m, n = pair
-        if m.distance < 0.75 * n.distance:
-            good.append(m)
-    if len(good) < 12:
-        return None, len(good), True
-    src_pts = np.float32([k1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-    dst_pts = np.float32([k2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-    H_small, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-    if H_small is None or mask is None:
-        return None, 0, True
-    inliers = int(mask.sum())
-    if inliers < 10:
-        return None, inliers, True
-    s_src = np.array([[ss, 0, 0], [0, ss, 0], [0, 0, 1]], dtype='float64')
-    s_dst_inv = np.array([[1 / ds, 0, 0], [0, 1 / ds, 0], [0, 0, 1]], dtype='float64')
-    H = s_dst_inv @ H_small @ s_src
-    corners = np.float32([[0, 0], [src_full.shape[1], 0], [src_full.shape[1], src_full.shape[0]], [0, src_full.shape[0]]]).reshape(-1, 1, 2)
-    projected = cv2.perspectiveTransform(corners, H)
-    xs = projected[:, 0, 0]
-    ys = projected[:, 0, 1]
-    if min(xs) < -0.45 * w or max(xs) > 1.45 * w or min(ys) < -0.45 * h or max(ys) > 1.45 * h:
-        return None, inliers, True
-    det = float(np.linalg.det(H[0:2, 0:2]))
-    if det < 0.12 or det > 10:
-        return None, inliers, True
-    warped = cv2.warpPerspective(src_full, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
-    return _from_cv(warped), inliers, False
+        s_src = np.array([[ss, 0, 0], [0, ss, 0], [0, 0, 1]], dtype='float64')
+        s_dst_inv = np.array([[1 / ds, 0, 0], [0, 1 / ds, 0], [0, 0, 1]], dtype='float64')
+        H = s_dst_inv @ H_small @ s_src
+        corners = np.float32([
+            [0, 0],
+            [src_full.shape[1], 0],
+            [src_full.shape[1], src_full.shape[0]],
+            [0, src_full.shape[0]],
+        ]).reshape(-1, 1, 2)
+        projected = cv2.perspectiveTransform(corners, H)
+        xs = projected[:, 0, 0]
+        ys = projected[:, 0, 1]
+        if min(xs) < -0.45 * w or max(xs) > 1.45 * w or min(ys) < -0.45 * h or max(ys) > 1.45 * h:
+            continue
+        det = float(np.linalg.det(H[0:2, 0:2]))
+        if det < 0.12 or det > 10:
+            continue
+        warped = cv2.warpPerspective(
+            src_full, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255),
+        )
+        return _from_cv(warped), inliers, False
+    return None, best_inliers, True
 
 
 def identify_form_page(image, hint=None):

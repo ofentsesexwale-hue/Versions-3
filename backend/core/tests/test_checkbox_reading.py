@@ -130,11 +130,10 @@ class BlankPaperTicksNothingTests(TestCase):
         self.assertEqual(offenders, [], 'blank paper must not read as ticked')
 
     def test_blank_page_measured_against_itself_has_no_added_ink(self):
-        """Discounting the blank leaves nothing, even where a box sits on print.
+        """Discounting the blank leaves nothing, even on a printed outline.
 
-        The seven CW 05 boxes whose atlas geometry lands on printed text still
-        carry ink of their own; only the reference makes them read empty. Their
-        geometry is a separate defect.
+        The CW 05 tick boxes used to sit on printed words; they now sit on the
+        empty squares. Either way the reference crop must read empty.
         """
         for code, page, spec, image in blank_checkbox_specs(targeted_only=False):
             crop = crop_box(image, spec['box'])

@@ -82,6 +82,34 @@ def _box(x0, y0, x1, y1):
     return (round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4))
 
 
+def _inset(box, x=0.04, y=0.18):
+    """Shrink a cell so OCR and ink-fill see paper, not the printed ruling.
+
+    Inset beats expand: a slightly small crop of the right cell is readable,
+    a crop that includes the grid line is not.
+    """
+    x0, y0, x1, y1 = box
+    dx = (x1 - x0) * x
+    dy = (y1 - y0) * y
+    nx0, ny0, nx1, ny1 = x0 + dx, y0 + dy, x1 - dx, y1 - dy
+    if nx1 - nx0 < 0.012:
+        nx0, nx1 = x0, x1
+    if ny1 - ny0 < 0.005:
+        ny0, ny1 = y0, y1
+    return _box(nx0, ny0, nx1, ny1)
+
+
+def _id_strip(box):
+    """13-cell SA ID row: cover every cell and pad past the last ruling.
+
+    RapidOCR drops the 13th digit when the crop ends on that cell's right
+    edge. A small pad past the last grid line keeps the digit inside the
+    picture without taking the passport grid that sits to the right.
+    """
+    x0, y0, x1, y1 = box
+    return _inset((x0, y0, min(0.999, x1 + 0.014), y1), 0.018, 0.12)
+
+
 def _f(target, label, page, box, kind, **extra):
     item = {
         'target': target,
@@ -106,12 +134,12 @@ def _c01_member(page, slot, id_ticks, id_box, name, surname, known, nationality,
         _f(p + 'id_type', 'Type of ID', page, id_ticks[0], 'checkbox', option='SA ID Number', group=p + 'id_type'),
         _f(p + 'id_type', 'Type of ID', page, id_ticks[1], 'checkbox', option='Passport Number', group=p + 'id_type'),
         _f(p + 'id_type', 'Type of ID', page, id_ticks[2], 'checkbox', option='Permit', group=p + 'id_type'),
-        _id_cells(p + 'id_number', 'ID Number', page, *id_box),
-        _f(p + 'name', 'Name', page, name, 'handwrite'),
-        _f(p + 'surname', 'Surname', page, surname, 'handwrite'),
-        _f(p + 'known_as', 'Known As', page, known, 'handwrite'),
-        _f(p + 'nationality', 'Nationality', page, nationality, 'handwrite'),
-        _f(p + 'date_of_birth', 'Date of Birth', page, dob, 'date'),
+        _id_cells(p + 'id_number', 'ID Number', page, *_id_strip(id_box)),
+        _f(p + 'name', 'Name', page, _inset(name, 0.03, 0.18), 'handwrite'),
+        _f(p + 'surname', 'Surname', page, _inset(surname, 0.03, 0.18), 'handwrite'),
+        _f(p + 'known_as', 'Known As', page, _inset(known, 0.03, 0.18), 'handwrite'),
+        _f(p + 'nationality', 'Nationality', page, _inset(nationality, 0.03, 0.18), 'handwrite'),
+        _f(p + 'date_of_birth', 'Date of Birth', page, _inset(dob, 0.03, 0.16), 'date'),
         _f(p + 'sex', 'Sex', page, sex_m, 'checkbox', option='Male', group=p + 'sex'),
         _f(p + 'sex', 'Sex', page, sex_f, 'checkbox', option='Female', group=p + 'sex'),
         _f(p + 'race', 'Race', page, race_a, 'checkbox', option='African', group=p + 'race'),
@@ -120,27 +148,36 @@ def _c01_member(page, slot, id_ticks, id_box, name, surname, known, nationality,
         _f(p + 'race', 'Race', page, race_i, 'checkbox', option='Indian', group=p + 'race'),
         _f(p + 'disability', 'Disability', page, dis_no, 'checkbox', option='false', group=p + 'disability'),
         _f(p + 'disability', 'Disability', page, dis_yes, 'checkbox', option='true', group=p + 'disability'),
-        _f(p + 'disability_description', 'Describe', page, describe, 'handwrite'),
-        _f(p + 'date_joined', 'Date Joined', page, joined, 'date'),
-        _f(p + 'relationship_to_head', 'Relationship to Head of Household', page, rel, 'handwrite'),
+        _f(p + 'disability_description', 'Describe', page, _inset(describe, 0.04, 0.22), 'handwrite'),
+        _f(p + 'date_joined', 'Date Joined', page, _inset(joined, 0.03, 0.16), 'date'),
+        _f(p + 'relationship_to_head', 'Relationship to Head of Household', page, _inset(rel, 0.05, 0.22), 'handwrite'),
     ]
 
 
 def _build_fields():
     c01 = [
-        _f('household.org_household_number', 'Org Household Nr', 0, (0.2790, 0.0926, 0.4891, 0.1105), 'printed'),
-        _f('household.province', 'Province', 0, (0.6277, 0.0914, 0.8336, 0.1081), 'printed'),
-        _f('household.house_number', 'House Number', 0, (0.2782, 0.1099, 0.4891, 0.1259), 'printed'),
-        _f('household.district', 'District', 0, (0.6277, 0.1087, 0.8336, 0.1235), 'printed'),
-        _f('household.street', 'Street', 0, (0.2782, 0.1253, 0.4882, 0.1413), 'printed'),
-        _f('household.municipality', 'Municipality', 0, (0.6277, 0.1235, 0.8336, 0.1390), 'printed'),
-        _f('household.town', 'Town', 0, (0.2773, 0.1407, 0.4882, 0.1568), 'printed'),
-        _f('household.ward', 'Ward', 0, (0.6269, 0.1390, 0.8336, 0.1544), 'printed'),
-        _f('__display.personnel', 'Personnel', 0, (0.2765, 0.1544, 0.8336, 0.1728), 'printed'),
+        _f('household.org_household_number', 'Org Household Nr', 0,
+           _inset((0.2798, 0.0933, 0.4882, 0.1100), 0.04, 0.12), 'printed'),
+        _f('household.province', 'Province', 0,
+           _inset((0.6286, 0.0922, 0.8328, 0.1076), 0.06, 0.12), 'printed'),
+        _f('household.house_number', 'House Number', 0,
+           _inset((0.2790, 0.1106, 0.4882, 0.1255), 0.04, 0.12), 'printed'),
+        _f('household.district', 'District', 0,
+           _inset((0.6286, 0.1094, 0.8328, 0.1231), 0.06, 0.12), 'printed'),
+        _f('household.street', 'Street', 0,
+           _inset((0.2790, 0.1261, 0.4874, 0.1410), 0.04, 0.12), 'printed'),
+        _f('household.municipality', 'Municipality', 0,
+           _inset((0.6286, 0.1243, 0.8328, 0.1386), 0.06, 0.12), 'printed'),
+        _f('household.town', 'Town', 0,
+           _inset((0.2782, 0.1416, 0.4874, 0.1565), 0.04, 0.12), 'printed'),
+        _f('household.ward', 'Ward', 0,
+           _inset((0.6277, 0.1398, 0.8328, 0.1541), 0.06, 0.12), 'printed'),
+        _f('__display.personnel', 'Personnel', 0,
+           _inset((0.2773, 0.1553, 0.8328, 0.1726), 0.03, 0.12), 'printed'),
         _f('caregiver.id_type', 'Type of ID', 0, (0.3681, 0.1871, 0.3899, 0.2025), 'checkbox', option='SA ID Number', group='caregiver.id_type'),
         _f('caregiver.id_type', 'Type of ID', 0, (0.6034, 0.1859, 0.6261, 0.2013), 'checkbox', option='Passport Number', group='caregiver.id_type'),
         _f('caregiver.id_type', 'Type of ID', 0, (0.7655, 0.1853, 0.7874, 0.2001), 'checkbox', option='Permit', group='caregiver.id_type'),
-        _id_cells('caregiver.id_number', 'ID Number', 0, 0.2462, 0.2084, 0.6252, 0.2280),
+        _id_cells('caregiver.id_number', 'ID Number', 0, *_id_strip((0.2454, 0.2084, 0.5555, 0.2280))),
         _f('caregiver.headship_type', 'Headship', 0, (0.4176, 0.2464, 0.4395, 0.2637), 'checkbox', option='Parent Headed', group='caregiver.headship_type'),
         _f('caregiver.headship_type', 'Headship', 0, (0.7647, 0.2435, 0.7866, 0.2613), 'checkbox', option='Grand Parent Headed', group='caregiver.headship_type'),
         _f('caregiver.headship_type', 'Headship', 0, (0.4168, 0.2643, 0.4395, 0.2821), 'checkbox', option='Youth Headed', group='caregiver.headship_type'),
@@ -172,15 +209,19 @@ def _build_fields():
         _f('caregiver.cell_number', 'Cell', 0, (0.2664, 0.5267, 0.7832, 0.5457), 'printed'),
         _f('caregiver.home_language', 'Home Language', 0, (0.2655, 0.5445, 0.7832, 0.5635), 'handwrite'),
         _f('caregiver.date_joined', 'Date Joined', 0, (0.2647, 0.5624, 0.7832, 0.5808), 'date'),
-        _f('member.0.relationship_to_head', 'Relationship to Member 1', 0, (0.3798, 0.5849, 0.5739, 0.6057), 'handwrite'),
-        _f('member.1.relationship_to_head', 'Relationship to Member 2', 0, (0.7126, 0.5855, 0.8311, 0.6033), 'handwrite'),
-        _f('member.2.relationship_to_head', 'Relationship to Member 3', 0, (0.3790, 0.6087, 0.5739, 0.6271), 'handwrite'),
-        _f('member.3.relationship_to_head', 'Relationship to Member 4', 0, (0.7126, 0.6093, 0.8311, 0.6247), 'handwrite'),
+        _f('member.0.relationship_to_head', 'Relationship to Member 1', 0,
+           _inset((0.3798, 0.5849, 0.5739, 0.6057), 0.05, 0.22), 'handwrite'),
+        _f('member.1.relationship_to_head', 'Relationship to Member 2', 0,
+           _inset((0.7126, 0.5855, 0.8311, 0.6033), 0.05, 0.22), 'handwrite'),
+        _f('member.2.relationship_to_head', 'Relationship to Member 3', 0,
+           _inset((0.3790, 0.6087, 0.5739, 0.6271), 0.05, 0.22), 'handwrite'),
+        _f('member.3.relationship_to_head', 'Relationship to Member 4', 0,
+           _inset((0.7126, 0.6093, 0.8311, 0.6247), 0.05, 0.22), 'handwrite'),
     ]
     c01 += _c01_member(
         0, 0,
         ((0.3563, 0.6496, 0.3790, 0.6675), (0.5958, 0.6485, 0.6185, 0.6657), (0.7597, 0.6479, 0.7832, 0.6651)),
-        (0.2319, 0.6728, 0.5479, 0.6912),
+        (0.2311, 0.6728, 0.5471, 0.6912),
         (0.2311, 0.6894, 0.7824, 0.7078),
         (0.2311, 0.7067, 0.7824, 0.7245),
         (0.2303, 0.7227, 0.7824, 0.7405),
@@ -197,7 +238,7 @@ def _build_fields():
     c01 += _c01_member(
         1, 1,
         ((0.3891, 0.0683, 0.4109, 0.0867), (0.6235, 0.0695, 0.6454, 0.0873), (0.7824, 0.0713, 0.8042, 0.0891)),
-        (0.2672, 0.0938, 0.6454, 0.1122),
+        (0.2664, 0.0938, 0.5765, 0.1122),
         (0.2664, 0.1116, 0.8050, 0.1289),
         (0.2664, 0.1277, 0.8050, 0.1437),
         (0.2664, 0.1431, 0.8050, 0.1591),
@@ -214,7 +255,7 @@ def _build_fields():
     c01 += _c01_member(
         1, 2,
         ((0.3857, 0.3147, 0.4084, 0.3302), (0.6210, 0.3153, 0.6437, 0.3302), (0.7824, 0.3141, 0.8050, 0.3296)),
-        (0.2630, 0.3361, 0.6429, 0.3545),
+        (0.2622, 0.3361, 0.5731, 0.3545),
         (0.2630, 0.3539, 0.8042, 0.3700),
         (0.2630, 0.3694, 0.8042, 0.3854),
         (0.2630, 0.3848, 0.8042, 0.4014),
@@ -231,7 +272,7 @@ def _build_fields():
     c01 += _c01_member(
         1, 3,
         ((0.3832, 0.5570, 0.4059, 0.5724), (0.6193, 0.5564, 0.6420, 0.5713), (0.7815, 0.5558, 0.8042, 0.5707)),
-        (0.2588, 0.5819, 0.6420, 0.6004),
+        (0.2580, 0.5819, 0.5723, 0.6004),
         (0.2580, 0.5980, 0.8042, 0.6164),
         (0.2580, 0.6134, 0.8042, 0.6324),
         (0.2580, 0.6295, 0.8042, 0.6485),
@@ -257,13 +298,13 @@ def _build_fields():
         _f('', 'Presenting problem(s) and expectations of the client', 0, (0.0866, 0.4513, 0.9227, 0.8486), 'narrative'),
         _f('', 'Primary Problem Code (see CW 06)', 1, (0.0866, 0.4608, 0.3311, 0.4970), 'printed'),
         _f('', 'Other Problem Codes', 1, (0.3311, 0.4620, 0.9227, 0.5000), 'printed'),
-        _f('', 'Risk Level Emergency', 1, (0.6496, 0.5606, 0.6756, 0.5707), 'checkbox', option='Emergency'),
-        _f('', 'Risk Level High', 1, (0.7723, 0.5612, 0.7958, 0.5695), 'checkbox', option='High'),
-        _f('', 'Risk Level Mild', 1, (0.8899, 0.5618, 0.9109, 0.5719), 'checkbox', option='Mild'),
-        _f('', 'Intake Action Emergency Action', 1, (0.3580, 0.6556, 0.3782, 0.6645), 'checkbox'),
-        _f('', 'Do you consent to the recommended Intake Action above Yes', 2, (0.3580, 0.0938, 0.3790, 0.1021), 'checkbox', option='Yes'),
-        _f('', 'Do you consent to the recommended Intake Action above No', 2, (0.2160, 0.0962, 0.2378, 0.1045), 'checkbox', option='No'),
-        _f('', 'Open file', 2, (0.3882, 0.8207, 0.4218, 0.8302), 'checkbox', option='Open file'),
+        _f('', 'Risk Level Emergency', 1, (0.3403, 0.4679, 0.3521, 0.4757), 'checkbox', option='Emergency'),
+        _f('', 'Risk Level High', 1, (0.5370, 0.4691, 0.5487, 0.4768), 'checkbox', option='High'),
+        _f('', 'Risk Level Mild', 1, (0.7345, 0.4697, 0.7454, 0.4780), 'checkbox', option='Mild'),
+        _f('', 'Intake Action Emergency Action', 1, (0.3403, 0.5178, 0.3529, 0.5267), 'checkbox'),
+        _f('', 'Do you consent to the recommended Intake Action above Yes', 2, (0.3412, 0.0926, 0.3538, 0.1015), 'checkbox', option='Yes'),
+        _f('', 'Do you consent to the recommended Intake Action above No', 2, (0.3412, 0.1063, 0.3538, 0.1152), 'checkbox', option='No'),
+        _f('', 'Open file', 2, (0.3714, 0.8195, 0.3832, 0.8284), 'checkbox', option='Open file'),
     ]
 
     cow2 = [
@@ -273,17 +314,30 @@ def _build_fields():
     ]
 
     c02 = [
-        _f('caregiver.name', 'Name', 0, (0.115, 0.238, 0.465, 0.258), 'handwrite'),
-        _f('caregiver.surname', 'Surname', 0, (0.115, 0.255, 0.465, 0.276), 'handwrite'),
-        _f('household.org_household_number', 'Org Household Number', 0, (0.130, 0.276, 0.465, 0.304), 'printed'),
-        _f('caregiver.nationality', 'Nationality', 0, (0.115, 0.304, 0.465, 0.324), 'handwrite'),
-        _id_cells('caregiver.id_number', 'ID number', 0, 0.115, 0.324, 0.465, 0.348),
+        _f('__display.organisation', 'Organisation', 0,
+           _inset((0.1574, 0.2090, 0.3290, 0.2261), 0.04, 0.16), 'printed'),
+        _f('caregiver.name', 'Name', 0,
+           _inset((0.1574, 0.2429, 0.3290, 0.2597), 0.04, 0.16), 'handwrite'),
+        _f('caregiver.surname', 'Surname', 0,
+           _inset((0.1556, 0.2589, 0.3290, 0.2765), 0.04, 0.16), 'handwrite'),
+        _f('household.org_household_number', 'Org Household Number', 0,
+           _inset((0.1544, 0.2757, 0.3284, 0.3102), 0.04, 0.12), 'printed'),
+        _f('caregiver.nationality', 'Nationality', 0,
+           _inset((0.1544, 0.3093, 0.3278, 0.3262), 0.04, 0.16), 'handwrite'),
+        _id_cells('caregiver.id_number', 'ID number', 0,
+                  *_inset((0.1538, 0.3253, 0.3278, 0.3464), 0.03, 0.12)),
     ]
     c03 = [
-        _f('caregiver.id_number', 'Beneficiary ID', 0, (0.125, 0.165, 0.500, 0.186), 'sa_id'),
-        _f('caregiver.name', 'Name', 0, (0.120, 0.178, 0.500, 0.210), 'handwrite'),
-        _f('caregiver.surname', 'Surname', 0, (0.100, 0.198, 0.500, 0.226), 'handwrite'),
-        _f('household.org_household_number', 'HH number', 0, (0.115, 0.216, 0.500, 0.240), 'printed'),
+        _f('__display.cycw_name', 'CYCW/CCG Name', 0,
+           _inset((0.1835, 0.1551, 0.4994, 0.1694), 0.04, 0.16), 'handwrite'),
+        _f('caregiver.id_number', 'Beneficiary ID', 0,
+           _inset((0.1829, 0.1710, 0.4994, 0.1853), 0.04, 0.16), 'sa_id'),
+        _f('caregiver.name', 'Name', 0,
+           _inset((0.1823, 0.1870, 0.4988, 0.2021), 0.04, 0.16), 'handwrite'),
+        _f('caregiver.surname', 'Surname', 0,
+           _inset((0.1817, 0.2029, 0.4988, 0.2189), 0.04, 0.16), 'handwrite'),
+        _f('household.org_household_number', 'HH number', 0,
+           _inset((0.1811, 0.2189, 0.4988, 0.2348), 0.04, 0.16), 'printed'),
     ]
     fcp = [
         _f('caregiver.surname', 'Family Name', 0, (0.08, 0.05, 0.34, 0.12), 'handwrite'),
