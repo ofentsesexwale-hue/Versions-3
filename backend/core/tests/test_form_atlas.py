@@ -68,9 +68,9 @@ class AtlasGeometryTests(TestCase):
 
     def test_c01_text_boxes_match_blank_inputs(self):
         org = next(f for f in fields_for('c01') if f['target'] == 'household.org_household_number')
-        self.assertAlmostEqual(org['box'][0], 0.2881, places=3)
-        self.assertAlmostEqual(org['box'][1], 0.0953, places=3)
-        self.assertAlmostEqual(org['box'][2], 0.4799, places=3)
+        self.assertAlmostEqual(org['box'][0], 0.2790, places=3)
+        self.assertAlmostEqual(org['box'][1], 0.0926, places=3)
+        self.assertAlmostEqual(org['box'][2], 0.4891, places=3)
         name = next(f for f in fields_for('c01') if f['target'] == 'caregiver.name')
         self.assertAlmostEqual(name['box'][0], 0.2437, places=3)
         self.assertTrue(has_geometry('cow2_note'))

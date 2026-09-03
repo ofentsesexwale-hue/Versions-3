@@ -225,10 +225,9 @@ def _homography_to_blank(scan, blank):
     if hasattr(cv2, 'SIFT_create'):
         detectors.append((cv2.SIFT_create(nfeatures=4000), cv2.NORM_L2, 0.8))
 
-    best_inliers = 0
+    best = None
     for detector, norm, ratio in detectors:
         H_small, inliers = _feature_homography(gray_s, gray_d, detector, norm, ratio=ratio)
-        best_inliers = max(best_inliers, inliers)
         if H_small is None or inliers < 10:
             continue
         s_src = np.array([[ss, 0, 0], [0, ss, 0], [0, 0, 1]], dtype='float64')
@@ -239,8 +238,11 @@ def _homography_to_blank(scan, blank):
         warped = cv2.warpPerspective(
             src_full, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255),
         )
-        return _from_cv(warped), inliers, False
-    return None, best_inliers, True
+        if best is None or inliers > best[0]:
+            best = (inliers, _from_cv(warped))
+    if best:
+        return best[1], best[0], False
+    return None, 0, True
 
 
 def _homography_covers_page(H, src_shape, dst_hw):
