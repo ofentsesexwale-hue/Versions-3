@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 
 def opencv_available():
@@ -264,14 +264,83 @@ def crop_box(image, box):
     return image.crop((left, top, right, bottom))
 
 
-def ink_fill_ratio(crop):
-    """Share of truly dark ink. Grainy WhatsApp photos must not count as ticks."""
-    gray = ImageOps.autocontrast(crop.convert('L'))
-    pixels = list(gray.getdata())
+# A checkbox crop is framed on the printed box, so the outline sits in the
+# outer band of the crop. Ink is only counted in the middle, which on a ~28px
+# box leaves an 8px margin - wider than the alignment residual we measure.
+CHECKBOX_INSET = 0.28
+# Measured off the pristine blanks (no ink at all: every box scores 0.0000)
+# and off the ticked/unticked crops in core/tests/fixtures/handwrite.
+CHECKBOX_EMPTY_MAX = 0.06
+CHECKBOX_TICKED_MIN = 0.12
+
+TICK_EMPTY = 'empty'
+TICK_MARKED = 'ticked'
+TICK_UNREADABLE = 'unreadable'
+
+
+def _paper_cutoff(gray):
+    """Darkness below which a pixel is ink, judged against this box's own paper.
+
+    Autocontrast cannot be used here: on a blank box it stretches the printed
+    outline down to pure black and manufactures a tick out of nothing.
+    """
+    values = sorted(gray.getdata())
+    if not values:
+        return 0
+    paper = values[min(len(values) - 1, int(len(values) * 0.85))]
+    return max(40, int(paper * 0.6))
+
+
+def _inset_region(gray, inset):
+    width, height = gray.size
+    mx, my = int(width * inset), int(height * inset)
+    return gray.crop((mx, my, max(mx + 1, width - mx), max(my + 1, height - my)))
+
+
+def ink_fill_ratio(crop, reference=None, inset=CHECKBOX_INSET):
+    """Share of the box interior covered by ink the printed form does not have.
+
+    Two things keep the form itself out of the measurement. The printed
+    outline is excluded by only looking at an inset region, and when the
+    matching page of the official blank is supplied, ink already present on
+    the blank at that spot is discounted - so a box the atlas has landed on
+    printed text cannot read as a tick either.
+    """
+    gray = crop.convert('L')
+    cutoff = _paper_cutoff(gray)
+    inner = _inset_region(gray, inset)
+    pixels = list(inner.getdata())
     if not pixels:
         return 0.0
-    dark = sum(1 for p in pixels if p < 88)
-    return dark / len(pixels)
+    if reference is None:
+        return sum(1 for p in pixels if p < cutoff) / len(pixels)
+    ref = reference.convert('L')
+    if ref.size != gray.size:
+        ref = ref.resize(gray.size, Image.Resampling.LANCZOS)
+    # Grow the blank's ink by a pixel so a small alignment residual does not
+    # leave a sliver of printed outline looking like a pen stroke.
+    ref_inner = _inset_region(ref, inset).filter(ImageFilter.MinFilter(3))
+    ref_cutoff = _paper_cutoff(ref)
+    ref_pixels = list(ref_inner.getdata())
+    added = sum(
+        1 for p, r in zip(pixels, ref_pixels)
+        if p < cutoff and r >= ref_cutoff
+    )
+    return added / len(pixels)
+
+
+def checkbox_state(crop, reference=None):
+    """Read one checkbox as ticked, empty, or too close to call.
+
+    A blank box is safe and a wrong tick is not, so anything between the two
+    thresholds is reported as unreadable rather than guessed.
+    """
+    ratio = ink_fill_ratio(crop, reference)
+    if ratio >= CHECKBOX_TICKED_MIN:
+        return TICK_MARKED, ratio
+    if ratio <= CHECKBOX_EMPTY_MAX:
+        return TICK_EMPTY, ratio
+    return TICK_UNREADABLE, ratio
 
 
 def crop_to_jpeg(crop, quality=70):

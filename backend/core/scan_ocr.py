@@ -1,4 +1,5 @@
 """Local OCR for Scan Intake. Nothing is sent off this computer."""
+from functools import lru_cache
 from io import BytesIO
 
 from PIL import Image, ImageFilter, ImageOps
@@ -6,8 +7,14 @@ from PIL import Image, ImageFilter, ImageOps
 from .form_atlas import fields_for, has_geometry
 from .official_blanks import ATLAS_VERSION, blank_path
 from .sa_id import parse_sa_id
+from .scan_align import TICK_MARKED, TICK_UNREADABLE
 from .scan_templates import classify_text, extract_fields
 from .scan_text import looks_like_gibberish, sanitize_ocr_value
+
+# Per-box tick evidence, carried from the detector to the group resolver and
+# stripped there so it never reaches the stored page or the browser.
+TICK_KEY = '_tick'
+INK_KEY = '_ink'
 
 
 def _register_heif():
@@ -151,12 +158,13 @@ def _prepare_line_crop(crop, kind):
     return image
 
 
-def _ocr_crop(crop, kind):
+def _ocr_crop(crop, kind, reference=None):
     if kind == 'checkbox':
-        from .scan_align import ink_fill_ratio
-        ratio = ink_fill_ratio(crop)
-        ticked = ratio > 0.12
-        return ('X' if ticked else ''), (0.8 if ticked or ratio < 0.08 else 0.45)
+        from .scan_align import checkbox_state
+        state, _ratio = checkbox_state(crop, reference)
+        if state == TICK_UNREADABLE:
+            return '', 0.45
+        return ('X' if state == TICK_MARKED else ''), 0.8
     prepared = _prepare_line_crop(crop, kind)
     rapid_text, rapid_conf = '', 0.0
     if kind != 'sa_id':
@@ -306,18 +314,39 @@ def render_pages(uploaded):
     return pages
 
 
+@lru_cache(maxsize=24)
+def _blank_reference(form_type, page_index):
+    """The official blank for this page, used to discount printed ink.
+
+    _atlas_fields only ever runs on an image warped onto this blank, so the
+    same atlas box covers the same printed content in both.
+    """
+    path = blank_path(form_type, page_index)
+    if not path or not path.exists():
+        return None
+    return Image.open(path).convert('L')
+
+
 def _atlas_fields(form_type, aligned, page_index):
-    from .scan_align import crop_box
+    from .scan_align import checkbox_state, crop_box
+    blank = _blank_reference(form_type, page_index)
     out = []
     for spec in fields_for(form_type, page_index):
         crop = crop_box(aligned, spec['box'])
-        value, conf = _ocr_crop(crop, spec['kind'])
+        tick, ratio = None, 0.0
+        if spec['kind'] == 'checkbox':
+            reference = crop_box(blank, spec['box']) if blank is not None else None
+            tick, ratio = checkbox_state(crop, reference)
+            value = ''
+            conf = 0.45 if tick == TICK_UNREADABLE else 0.8
+        else:
+            value, conf = _ocr_crop(crop, spec['kind'])
         value = sanitize_ocr_value(spec.get('target') or '', value, spec['kind'])
         option = spec.get('option')
-        if spec['kind'] == 'checkbox' and option and value == 'X':
-            value = option
-        elif spec['kind'] == 'checkbox' and value != 'X':
-            value = ''
+        if spec['kind'] == 'checkbox':
+            # The group resolver decides which option wins; on its own a box
+            # only knows whether it carries a mark.
+            value = option if (option and tick == TICK_MARKED) else ''
         if spec['kind'] == 'sa_id' and value:
             parsed = parse_sa_id(value)
             if parsed.get('digits'):
@@ -338,7 +367,10 @@ def _atlas_fields(form_type, aligned, page_index):
             item['option'] = spec['option']
         if spec.get('group'):
             item['group'] = spec['group']
-        if item['target'] or item['value']:
+        if tick is not None:
+            item[TICK_KEY] = tick
+            item[INK_KEY] = round(float(ratio), 4)
+        if item['target'] or item['value'] or tick is not None:
             out.append(item)
         if spec['kind'] == 'sa_id' and spec.get('target', '').endswith('id_number') and value:
             parsed = parse_sa_id(value)
@@ -370,16 +402,91 @@ def _atlas_fields(form_type, aligned, page_index):
     return out
 
 
+def _resolve_option_groups(fields):
+    """Collapse each mutually-exclusive tick group to the option actually marked.
+
+    Every option in a group (race, sex, marital status, disability,
+    nationality, headship, type of ID, type of engagement) shares one target,
+    so keeping whichever was declared last in the atlas turns the whole group
+    into a constant. Exactly one marked box gives the answer. None marked,
+    several marked, or a reading too close to call leaves the field blank and
+    flagged for a person, because a blank box is safe and a wrong tick is not.
+    """
+    groups = {}
+    order = []
+    passthrough = []
+    for item in fields or []:
+        key = item.get('group') or ''
+        if item.get('kind') != 'checkbox' or not key:
+            passthrough.append(_without_tick_keys(item))
+            continue
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(item)
+
+    resolved = []
+    for key in order:
+        options = groups[key]
+        marked = [o for o in options if o.get(TICK_KEY) == TICK_MARKED]
+        unreadable = [o for o in options if o.get(TICK_KEY) == TICK_UNREADABLE]
+        if len(marked) == 1 and not unreadable:
+            chosen, note, confidence = marked[0], '', 0.8
+        elif len(marked) == 1:
+            chosen, note, confidence = marked[0], 'one box is too faint to be sure', 0.5
+        elif len(marked) > 1:
+            chosen = None
+            note = f"{len(marked)} boxes are marked"
+            confidence = 0.35
+        else:
+            chosen = None
+            note = 'no box could be read as marked' if unreadable else 'no box is marked'
+            confidence = 0.4 if unreadable else 0.6
+        base = _without_tick_keys(chosen or options[0])
+        base['value'] = chosen.get('value') if chosen else ''
+        base['confidence'] = confidence
+        base['low_confidence'] = not chosen or bool(unreadable)
+        base['options'] = [o.get('option') for o in options if o.get('option')]
+        if not chosen:
+            base.pop('option', None)
+        if note:
+            base['note'] = note
+        resolved.append(base)
+    return passthrough + resolved
+
+
+def _without_tick_keys(item):
+    out = dict(item)
+    out.pop(TICK_KEY, None)
+    out.pop(INK_KEY, None)
+    return out
+
+
+def _atlas_priority(item):
+    """Rank two atlas boxes that claim the same target, so order cannot decide.
+
+    C01 puts a free-text "Describe" box on caregiver.nationality, the target
+    its tick group already owns. The group is the structural answer for that
+    field, and where the group could not be read a blank beats stray text.
+    """
+    return (
+        0 if item.get('kind') == 'checkbox' else 1,
+        0 if (item.get('value') or '').strip() else 1,
+    )
+
+
 def _merge_extracted(atlas_fields, keyword_fields):
     """Keep atlas boxes; fill empty targets from full-page OCR only when the text is plausible."""
     by_target = {}
     extras = []
-    for item in atlas_fields or []:
+    for item in _resolve_option_groups(atlas_fields):
         target = item.get('target') or ''
-        if target:
-            by_target[target] = item
-        else:
+        if not target:
             extras.append(item)
+            continue
+        prev = by_target.get(target)
+        if prev is None or _atlas_priority(item) < _atlas_priority(prev):
+            by_target[target] = item
     for item in keyword_fields or []:
         target = item.get('target') or ''
         if not target:

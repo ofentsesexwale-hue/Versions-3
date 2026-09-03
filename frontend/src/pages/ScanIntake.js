@@ -28,11 +28,17 @@ function needsConfirm(target) {
   return false;
 }
 
+// One field now stands for a whole tick group and carries the group's options,
+// so its value is the chosen option rather than an "X" on a single box.
+const isGroup = (f) => f.kind === "checkbox" && Array.isArray(f.options) && f.options.length > 0;
+
 function fieldsToValues(fields) {
   const values = {};
   (fields || []).forEach((f) => {
     if (!f.target || f.value === undefined || f.value === "") return;
-    if (f.kind === "checkbox" && f.option && f.value && f.value !== "X") {
+    if (isGroup(f)) {
+      values[f.target] = f.value;
+    } else if (f.kind === "checkbox" && f.option && f.value && f.value !== "X") {
       values[f.target] = f.option;
     } else if (f.kind === "checkbox") {
       if (f.value === "X" || f.value === true) values[f.target] = f.option || "X";
@@ -47,6 +53,10 @@ function mergeValuesIntoFields(fields, values) {
   return (fields || []).map((f) => {
     if (!f.target || !(f.target in values)) return f;
     const next = values[f.target];
+    if (isGroup(f)) {
+      const picked = f.options.find((o) => String(o) === String(next));
+      return { ...f, value: picked || "", option: picked || undefined };
+    }
     if (f.kind === "checkbox") {
       const on = f.option ? String(next) === String(f.option) : !!next;
       return { ...f, value: on ? (f.option || "X") : "" };
@@ -381,7 +391,11 @@ export default function ScanIntake() {
                     <OfficialFormCanvas
                       code={page.form_type}
                       fields={(atlas.fields || []).map((f) => {
-                        const hit = (page.fields || []).find((x) => x.target === f.target && (x.option || "") === (f.option || ""));
+                        const pageFields = page.fields || [];
+                        const hit = pageFields.find((x) => x.target === f.target && (x.option || "") === (f.option || ""))
+                          // A tick group the app could not read has no chosen
+                          // option, so flag every box in the group for a look.
+                          || pageFields.find((x) => x.target === f.target && isGroup(x));
                         return { ...f, low_confidence: hit?.low_confidence };
                       })}
                       values={values}
