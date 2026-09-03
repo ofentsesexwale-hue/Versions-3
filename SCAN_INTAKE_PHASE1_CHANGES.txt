@@ -1,0 +1,230 @@
+================================================================================
+SCAN INTAKE - PHASE 1 FIXES
+Confirmation bypass and cross-page overwrite in the scan write path
+Commit: 7143061
+Date: 3 September 2026
+================================================================================
+
+Scope kept to the four listed findings. Checkbox handling, OCR engine binding,
+the gibberish filter and atlas geometry were NOT touched - those stay Phase 2+.
+
+Backend tests: 48 of 48 pass.
+Frontend: yarn build succeeds (only the pre-existing MemberForm warning).
+
+
+--------------------------------------------------------------------------------
+DIFF SUMMARY
+--------------------------------------------------------------------------------
+
+ backend/core/form_io.py                |  57 ++++++--
+ backend/core/form_views.py             |   5 +-
+ backend/core/scan_views.py             | 210 ++++++++++++++++++++++-------
+ backend/core/tests/test_scan_intake.py | 235 ++++++++++++++++++++++++++++++++-
+ frontend/src/pages/ScanIntake.js       |  41 ++++--
+ 5 files changed, 481 insertions(+), 67 deletions(-)
+
+
+--------------------------------------------------------------------------------
+FIX 1 - THE CONFIRM GATE NOW MATCHES REAL TARGET NAMES
+--------------------------------------------------------------------------------
+
+Was: scan_views.py:238-243 compared the target against the literal strings
+     'member.surname', 'member.id_number', 'member.date_of_birth'. The atlas
+     emits member.0.* through member.3.*, so those literals never matched and
+     no member identity field was gated at all.
+
+Now: a new predicate in backend/core/form_io.py matches on the SHAPE of the
+     target rather than a fixed list:
+
+         def needs_staff_confirmation(target):
+             parts = (target or '').split('.')
+             if len(parts) == 2 and parts[0] == 'caregiver':
+                 return parts[1] in TRIO_FIELDS
+             if len(parts) == 3 and parts[0] == 'member' and parts[1].isdigit():
+                 return parts[2] in TRIO_FIELDS
+             return False
+
+     Every member slot the atlas emits today, and any slot added later, is
+     gated exactly like the caregiver. The gate in `confirm` now runs over the
+     values that will actually be written, so held-back values from another
+     person's sheet do not demand a pointless confirm.
+
+ALSO REQUIRED (otherwise the new gate is unsatisfiable):
+     frontend/src/pages/ScanIntake.js had the same never-matching literal in
+     its TRIO set and only listed member.0. Staff had no Confirm control for
+     slots 1-3, so with the backend fixed alone every save would have failed
+     forever. The Set was replaced with a needsConfirm() predicate mirroring
+     the backend, used in all three places that previously called TRIO.has().
+
+
+--------------------------------------------------------------------------------
+FIX 2 - EXTRACTED VALUES NO LONGER CONFIRM THEMSELVES
+--------------------------------------------------------------------------------
+
+Was: form_io.py:136-138 (caregiver) and :171-173 (every member slot) did
+
+         for trio in ('surname', 'id_number', 'date_of_birth'):
+             if cg_data.get(trio):
+                 cg_data[f'{trio}_confirmed'] = True
+
+     i.e. presence of a value was treated as human verification.
+
+Now: apply_buckets() takes a `confirmed_targets` argument and a new helper
+     _mark_confirmed() sets a flag only when
+
+       * a staff member explicitly signed off that target, or
+       * the value was DERIVED from an ID number that was itself signed off
+         (the date of birth read straight out of the 13 digits).
+
+     Scan Intake passes only the targets whose field carried confirmed=True
+     from the UI. Nothing else can set a flag.
+
+IMPORTANT THING FOUND WHILE FIXING THIS
+     serializers.py:117-154 (ConfirmMixin.validate) already refuses to save a
+     surname, ID or date of birth whose *_confirmed flag is False. The old
+     auto-confirm was silently defeating that rule.
+
+     With the auto-confirm removed, the guarantee is stronger than asked for:
+     unchecked OCR output can no longer be written AT ALL, not merely written
+     as unconfirmed. The scan confirm gate blocks it first with a clear 400,
+     and if any caller ever slips past the gate the serializer rejects it.
+
+     Test test_unchecked_ocr_values_cannot_be_written_at_all pins this for
+     both the caregiver and a member.
+
+ONE CALLER DELIBERATELY KEEPS ITS OLD BEHAVIOUR
+     form_views.py OfficialFormValuesView (the type-on-the-official-sheet
+     canvas) passes confirmed_targets=set(buckets), because a staff member
+     typing a value onto the sheet and pressing Save IS the explicit action.
+     Scan Intake does not get that shortcut.
+
+
+--------------------------------------------------------------------------------
+FIX 3 - BUCKETS ARE SCOPED PER PERSON, NOT FLATTENED PER JOB
+--------------------------------------------------------------------------------
+
+Was: scan_views.py:243 did `buckets[target] = value` across every page in the
+     job, so a C03 child sheet and a C02 adult sheet both wrote
+     caregiver.name / caregiver.surname / caregiver.id_number and whichever
+     page came last silently won.
+
+Now: a new module-level, directly testable function resolve_buckets(pages) in
+     scan_views.py groups values by the person each sheet is about.
+
+     Subject map:
+         c01, intake (CW 05), c02, family_care_plan  ->  'adult'
+         c03                                          ->  'child'
+         anything else                                ->  'sheet-<pk>' (stands alone)
+
+     Rules:
+       * Household-level values (household.*, process_note.*, care_plan.*,
+         assessment.*) still merge across every sheet - one household.
+       * Identity values (caregiver.*, member.N.*) merge ONLY inside one
+         subject. Two C01 pages, or C01 + CW 05, or C01 + C02 for the same
+         adult, still merge as before.
+       * Same subject, same target, two different readings -> the save is
+         BLOCKED with HTTP 400 and a `conflicts` list naming both readings and
+         the photo each came from. Nothing is written.
+       * A different subject's identity values are never written. They come
+         back in the response as `held_back` with the form label and photo
+         number, plus a `detail` message telling staff to type them onto the
+         right person. The audit log records the count.
+
+     The winner is chosen by SUBJECT_PRIORITY ('adult', 'child'), not by page
+     order, so shuffling the upload order cannot change the result. When only
+     one subject exists (for example a lone C03) it still writes as before, so
+     single-sheet uploads are unchanged.
+
+     Returned as a NamedTuple ResolvedScan(values, confirmed, labels,
+     conflicts, held_back).
+
+FRONTEND
+     The confirm error handler now reads `conflicts` and `unconfirmed` out of
+     the 400 body and names the disagreeing values and photo numbers in the
+     toast. On success, a held_back response raises a 12-second warning toast
+     so the held values are not lost silently.
+
+
+--------------------------------------------------------------------------------
+FIX 4 - DEAD CODE REMOVED
+--------------------------------------------------------------------------------
+
+Deleted the 28 unreachable lines after `return household` in _write_buckets
+(the duplicated ProcessNote / FamilyCarePlan / Assessment blocks that were at
+scan_views.py:301-328).
+
+
+--------------------------------------------------------------------------------
+TESTS ADDED - backend/core/tests/test_scan_intake.py
+--------------------------------------------------------------------------------
+
+class ScanConfirmationGateTests
+
+  test_every_member_slot_is_gated_like_the_caregiver
+      needs_staff_confirmation() is true for all 12 combinations of slots 0-3
+      x surname/id_number/date_of_birth, false for member.N.name, and false
+      for the old 'member.surname' literal that never occurs.
+
+  test_unconfirmed_member_slot_blocks_save_for_all_four_slots
+      subTest over slots 0-3: an unconfirmed trio blocks with 400, lists all
+      three fields, and creates no household. Slots 1-3 previously saved
+      straight through.
+
+  test_confirmed_member_slot_saves_from_any_of_the_four_slots
+      subTest over slots 0-3: with an explicit confirm the member saves and
+      all three flags are set.
+
+  test_date_of_birth_read_off_the_paper_needs_its_own_confirm
+      Confirming surname and ID does not carry a scanned date of birth. Save
+      is blocked and names 'Date of Birth'.
+
+  test_date_of_birth_worked_out_from_a_confirmed_id_is_accepted
+      A date of birth derived from a confirmed ID is accepted (arithmetic on a
+      value a person already verified, not an unchecked reading).
+
+  test_unchecked_ocr_values_cannot_be_written_at_all
+      apply_buckets() with no confirmed_targets raises ValidationError for
+      both caregiver and member.0, and writes nothing.
+
+class ScanCrossPageOverwriteTests
+
+  test_c03_child_page_cannot_overwrite_the_c02_adult
+      One job, C02 (Dlamini / 8001015009087 / Thabo) plus C03 (Khanyi /
+      1904261049081 / Mpilo), same household. Saves the adult; the child's
+      three identity values come back in held_back.
+
+  test_page_order_does_not_decide_the_winner
+      Same two sheets uploaded in the opposite order give the same adult.
+
+  test_two_c01_pages_for_one_household_still_merge
+      C01 caregiver page plus C01 member page merge normally, with no
+      held_back - the legitimate page-set case is not broken.
+
+  test_two_readings_of_the_same_person_are_surfaced_not_guessed
+      C01 says Dlamini, CW 05 says Zulu for the same adult: 400 with both
+      readings in `conflicts`, and no caregiver row created.
+
+
+--------------------------------------------------------------------------------
+NOTES / THINGS WORTH KNOWING
+--------------------------------------------------------------------------------
+
+1. The member slot number is positional on creation, not an index. Writing
+   only member.2.* creates ONE member, at position 0. That is pre-existing
+   behaviour in apply_buckets (form_io.py "if slot < len(members)"), it was
+   not changed here, and the tests were written to match reality rather than
+   to assume slot/index alignment. Flag it if you want it revisited.
+
+2. Because ConfirmMixin already blocked unconfirmed identity writes, the
+   supervisor Verification queue can only contain rows created before this
+   rule existed (or by the seed command). Worth a look at live data.
+
+3. git push cannot authenticate from this machine, so the commit is local
+   only. This predates Phase 0 - the branch was already 62 commits ahead of
+   origin/main before any of this work started.
+
+STOPPED HERE as instructed - no other bugs were touched.
+
+================================================================================
+END OF PHASE 1 REPORT
+================================================================================
