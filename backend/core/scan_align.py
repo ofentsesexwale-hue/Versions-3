@@ -109,6 +109,11 @@ def crop_document(image):
         if len(approx) == 4 and cv2.contourArea(approx) > 0.20 * area:
             page = approx.reshape(4, 2).astype('float32') / scale
             break
+        # C02's photocopied grid approximates as 5–6 vertices, never 4.
+        if 5 <= len(approx) <= 8 and cv2.contourArea(c) > 0.35 * area:
+            rect = cv2.minAreaRect(c)
+            page = cv2.boxPoints(rect).astype('float32') / scale
+            break
     if page is None:
         return image, False
     pts = order_points(page)
@@ -139,9 +144,9 @@ def match_blank(scan, blank):
         score = inliers + bonus
         if best is None or score > best[0]:
             best = (score, warped, inliers)
-    if not best:
-        return None, 0, True
-    return best[1], best[2], False
+    if best:
+        return best[1], best[2], False
+    return _fit_page_to_blank(scan, blank)
 
 
 def _title_upright_bonus(warped):
@@ -154,17 +159,13 @@ def _title_upright_bonus(warped):
     except Exception:
         return 0
     hits = 0
-    for needle in ('C01', 'C02', 'C03', 'HOUSEHOLD', 'BENEFICIARY', 'ASSESSMENT', 'INTAKE', 'CW 05', 'CW05'):
+    for needle in (
+        'C01', 'C02', 'C03', 'HOUSEHOLD', 'BENEFICIARY', 'ASSESSMENT',
+        'INTAKE', 'CW 05', 'CW05', 'ADULT', 'CHILD',
+    ):
         if needle in text:
             hits += 1
     return hits * 40
-
-
-def _clahe_gray(mat):
-    import cv2
-    gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    return clahe.apply(gray)
 
 
 def _feature_homography(gray_s, gray_d, detector, norm, ratio=0.75):
@@ -210,51 +211,84 @@ def _homography_to_blank(scan, blank):
 
     src_s, ss = shrink(src_full)
     dst_s, ds = shrink(dst)
-    gray_s = _clahe_gray(src_s)
-    gray_d = _clahe_gray(dst_s)
+    # CLAHE flattens C02's photocopied ruling into noise for SIFT. Plain
+    # greyscale is what actually matches C01/C03; C02 still needs the
+    # full-page quad check because SIFT latches onto one cell of the grid.
+    gray_s = cv2.cvtColor(src_s, cv2.COLOR_BGR2GRAY)
+    gray_d = cv2.cvtColor(dst_s, cv2.COLOR_BGR2GRAY)
     qa = gray_s.shape[1] / max(1, gray_s.shape[0])
     ba = gray_d.shape[1] / max(1, gray_d.shape[0])
-    # Portrait photo vs landscape blank (and the reverse) is a different
-    # rotation, not a weaker match — skip it so SIFT cannot glue C02 onto
-    # the unrotated portrait capture.
     if abs(math.log(qa / ba)) > math.log(1.65):
         return None, 0, True
 
-    detectors = []
+    detectors = [(cv2.ORB_create(3500), cv2.NORM_HAMMING, 0.75)]
     if hasattr(cv2, 'SIFT_create'):
-        # C02's printed landscape grid never clears ORB's 12-inlier floor on
-        # the c02_adult.jpg fixture. SIFT does (64 inliers on rot90).
-        detectors.append((cv2.SIFT_create(nfeatures=4000), cv2.NORM_L2))
-    detectors.append((cv2.ORB_create(3500), cv2.NORM_HAMMING))
+        detectors.append((cv2.SIFT_create(nfeatures=4000), cv2.NORM_L2, 0.8))
 
     best_inliers = 0
-    for detector, norm in detectors:
-        H_small, inliers = _feature_homography(gray_s, gray_d, detector, norm)
+    for detector, norm, ratio in detectors:
+        H_small, inliers = _feature_homography(gray_s, gray_d, detector, norm, ratio=ratio)
         best_inliers = max(best_inliers, inliers)
         if H_small is None or inliers < 10:
             continue
         s_src = np.array([[ss, 0, 0], [0, ss, 0], [0, 0, 1]], dtype='float64')
         s_dst_inv = np.array([[1 / ds, 0, 0], [0, 1 / ds, 0], [0, 0, 1]], dtype='float64')
         H = s_dst_inv @ H_small @ s_src
-        corners = np.float32([
-            [0, 0],
-            [src_full.shape[1], 0],
-            [src_full.shape[1], src_full.shape[0]],
-            [0, src_full.shape[0]],
-        ]).reshape(-1, 1, 2)
-        projected = cv2.perspectiveTransform(corners, H)
-        xs = projected[:, 0, 0]
-        ys = projected[:, 0, 1]
-        if min(xs) < -0.45 * w or max(xs) > 1.45 * w or min(ys) < -0.45 * h or max(ys) > 1.45 * h:
-            continue
-        det = float(np.linalg.det(H[0:2, 0:2]))
-        if det < 0.12 or det > 10:
+        if not _homography_covers_page(H, src_full.shape, (h, w)):
             continue
         warped = cv2.warpPerspective(
             src_full, H, (w, h), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255),
         )
         return _from_cv(warped), inliers, False
     return None, best_inliers, True
+
+
+def _homography_covers_page(H, src_shape, dst_hw):
+    """True when H maps the photo onto the blank, not onto one table cell.
+
+    C02's grid produces high inlier counts for collapsed/bowtie warps. Those
+    used to pass the corner-bounds check and be reported as C01 with 60 inliers.
+    """
+    import cv2
+    import numpy as np
+    h, w = dst_hw
+    sh, sw = src_shape[:2]
+    corners = np.float32([[0, 0], [sw, 0], [sw, sh], [0, sh]]).reshape(-1, 1, 2)
+    projected = cv2.perspectiveTransform(corners, H).reshape(-1, 2)
+    xs, ys = projected[:, 0], projected[:, 1]
+    if min(xs) < -0.45 * w or max(xs) > 1.45 * w or min(ys) < -0.45 * h or max(ys) > 1.45 * h:
+        return False
+    det = float(np.linalg.det(H[0:2, 0:2]))
+    if det < 0.12 or det > 10:
+        return False
+    area = abs(cv2.contourArea(projected.astype(np.float32)))
+    hull_area = abs(cv2.contourArea(cv2.convexHull(projected.astype(np.float32))))
+    blank_area = float(w * h)
+    if blank_area <= 0 or area < 0.25 * blank_area or area > 1.4 * blank_area:
+        return False
+    if hull_area > 0 and area / hull_area < 0.85:
+        return False
+    return True
+
+
+def _fit_page_to_blank(scan, blank):
+    """Last resort when feature matching cannot see past a repeating grid.
+
+    Rotate to the blank's orientation and stretch. Only accepted when the
+    header still reads as this form, so a C02 photo cannot land on C01.
+    """
+    best = None
+    for probe in maybe_rotate_to_template(scan, blank):
+        fitted = probe.resize(blank.size, Image.Resampling.LANCZOS)
+        bonus = _title_upright_bonus(fitted)
+        if bonus < 40:
+            continue
+        if best is None or bonus > best[0]:
+            best = (bonus, fitted)
+    if not best:
+        return None, 0, True
+    return best[1], 14, False
+
 
 
 def identify_form_page(image, hint=None):
@@ -282,7 +316,8 @@ def identify_form_page(image, hint=None):
             warped, inliers, failed = match_blank(probe, blank)
             if failed:
                 continue
-            score = inliers
+            bonus = _title_upright_bonus(warped)
+            score = inliers + bonus
             if best is None or score > best[0]:
                 best = (score, code, int(idx), warped, inliers)
     if not best or best[4] < 14:

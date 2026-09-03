@@ -61,3 +61,4 @@ class HandwrittenPhotoTests(TestCase):
     def test_c02_is_identified(self):
         pages, _ = process_upload(_blob('c02_adult.jpg'))
         self.assertEqual(pages[0]['form_type'], 'c02')
+        self.assertFalse(pages[0]['alignment_failed'])
