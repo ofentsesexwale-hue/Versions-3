@@ -1,0 +1,383 @@
+================================================================================
+OVC-CaseFile - Scan Intake PHASE 5
+Atlas geometry recalibration (last planned phase of the original symptom set)
+================================================================================
+
+Atlas version: npo-pdf-v1.2 -> npo-pdf-v1.3
+
+Print and scan still share form_atlas.py. official_canvas.html was not touched.
+A corrected box is therefore correct for both by construction.
+
+
+================================================================================
+1. WHAT WAS WRONG, AND WHAT WAS CHANGED
+================================================================================
+
+FINDING 1 - C01 printed cells (province / town / ward / district)
+----------------------------------------------------------------
+House Number and Street on the same rows already read '2291' and
+'Nkululuthweni'. The right-hand cells (and Town) were sitting on the ruling
+and clipping the written word. Re-measured the outer cell on c01_p0.png
+(1190 x 1684) and inset off the line (inset, not expand).
+
+Left-column Org Household Nr / House Number / Street were left on the Phase 4
+boxes because those already read the right text. Insetting them made House
+Number regress to 'foc'.
+
+FINDING 2 - C02 alignment AND under-specified atlas
+---------------------------------------------------
+Both. Confirmed on c02_adult.jpg (754 x 1280 portrait vs landscape blank
+1684 x 1190):
+
+  * crop_document used to fail (6-vertex page contour, not a quad).
+  * ORB never produced a full-page homography. SIFT found hundreds of inliers
+    on one cell of the repeating grid; those warps collapsed to a bowtie and
+    were then accepted as C01 with 60 inliers.
+  * The NPO blank identity block is 5 value cells. The photographed sheet is
+    Version 1/2016 (Known As instead of Org Household Number) and this
+    fixture's name/surname/ID block is blank.
+
+Fixes in scan_align.py:
+
+  * SIFT on plain greyscale after ORB, with a projected-quad check (area
+    >= 25% of the blank, convex, det in range) so a collapsed match cannot
+    win.
+  * Prefer a solid ORB page match (>= 70 inliers) when it exists, so C01
+    ticks stay on the right boxes.
+  * Fallback: rotate to the blank orientation and stretch, but only if the
+    header still reads as that form (C02 / ADULT / ASSESSMENT).
+  * 5-8 vertex contours may use minAreaRect as the page quad.
+
+Atlas: identity cells re-measured to the NPO blank value cells (four
+decimals, inset). Added __display.organisation. Did not invent model fields
+for the assessment Yes/No ticks.
+
+FINDING 3 - C03 one row per field
+---------------------------------
+The old 3-decimal boxes were 1.5-2x too tall and sat on the wrong rows
+(CYCW name / Beneficiary ID), which is why OCR returned 'nAPio' / 'Khany'
+for Mpilo Khanyi. Re-measured left-column value cells on c03_p0.png to four
+decimals, one row each. Added __display.cycw_name. Targets remain
+caregiver.* / household.org_household_number.
+
+FINDING 4 - member.N handwrite ruling lines
+-------------------------------------------
+_c01_member now insets name, surname, known_as, nationality, describe, rel,
+and dates. Page-0 "Relationship to Member 1-4" boxes are inset the same way.
+The exact Phase 4 fragments ('WE Poe ge', 'eR', 'eae', '_ > Fee Oe eee |')
+do not come back.
+
+FINDING 5 - CW 05 checkboxes on printed words
+---------------------------------------------
+The seven boxes that sat on "No", "Yes", "Open file", "Emergency", "High",
+"Mild" were re-measured onto the empty squares on intake_p1.png / intake_p2.png.
+Production reading still subtracts the blank, so a square's own outline is
+not a tick. Drawn ticks on those squares read as ticked.
+
+FINDING 6 - 12-digit SA ID crops
+-------------------------------
+member.0's 13th grid line was the crop's right edge. All four member ID
+strips and the caregiver strip are now the 13-cell outer bounds plus a
+right pad, inset off the ruling, and they no longer run into the passport
+grid on the right.
+
+
+================================================================================
+2. BEFORE / AFTER - ALL SIX FIXTURES
+================================================================================
+
+BEFORE is Phase 4's atlas output on the same photographs. AFTER is
+process_upload on npo-pdf-v1.3 with the new alignment.
+
+Values shown are the non-empty field values staff would see. Checkboxes that
+did not change are summarised, not repeated in full.
+
+--------------------------------------------------------------------------------
+c01_household.jpg  (c01 p0, alignment_failed=False both before and after)
+--------------------------------------------------------------------------------
+
+  field                              BEFORE (Phase 4)          AFTER
+  ---------------------------------  ------------------------  -------------------------
+  household.org_household_number     '412'                     '412' / '472' (OCR)
+  household.house_number             '2291'                    '2291'
+  household.street                   'Nkululuthweni'           'Nkululuthweni' /
+                                                               'ENkulaluthwenl'
+  household.province                 'gAaIGNg'                 cell is GAUTENG on the
+                                                               aligned crop; RapidOCR
+                                                               still mangles it
+  household.district                 'ranao'                   cell is West Rand on the
+                                                               aligned crop; OCR 'rando'
+  household.town                     'pI esgorarig'            cell is Westonaria on the
+                                                               aligned crop; OCR
+                                                               'Neslonarig' / similar
+  household.ward                     'ern ee'                  no longer that string
+  caregiver.sex                      Female                    Female
+  caregiver.race                     African                   African
+  caregiver.marital_status           Single                    Single
+  caregiver.nationality              South African             South African
+  caregiver.headship_type            Grand Parent Headed       Grand Parent Headed
+  caregiver.id_type                  SA ID Number              SA ID Number
+  caregiver.disability               false                     false
+  member.0.race                      African                   African
+  member.0.relationship_to_head      'WE Poe ge' / 'eR' /      not those fragments
+                                     'eae'
+  member.0.disability_description    '_ > Fee Oe eee |'        not that ruling string
+
+House Number and Street still read. The four problem cells now crop the
+written word (verified by saving the aligned crops). RapidOCR of that
+handwriting is still weak; the geometry is what this phase fixes.
+
+--------------------------------------------------------------------------------
+c01_members_a.jpg
+--------------------------------------------------------------------------------
+
+  BEFORE: c01 p1, members 1-3 names as fragments, relationship garbage.
+  AFTER:  c01 p1 (SIFT used when ORB is under 70 inliers so this page is not
+          mistaken for p0). Member handwrite no longer includes
+          '_ > Fee Oe eee |'. Checkboxes still vary by slot (Phase 2).
+
+--------------------------------------------------------------------------------
+c01_members_b.jpg
+--------------------------------------------------------------------------------
+
+  BEFORE: c01 p1, member.2.id_number '2212280261081' placed on the member,
+          unassigned copy of the same number from page-wide scan.
+  AFTER:  still c01 p1. ID strips widened; 13-digit reads that fail Luhn stay
+          labelled invalid (Phase 3), they are not 12-digit crops.
+
+--------------------------------------------------------------------------------
+c02_adult.jpg
+--------------------------------------------------------------------------------
+
+  BEFORE: align_failed=True, form sometimes guessed, zero atlas fields.
+  AFTER:  form_type=c02, alignment_failed=False, inliers reported as 14 from
+          the header-confirmed page-fit fallback.
+
+  The photographed sheet is Version 1/2016 and the identity block on this
+  photo is blank, so name/surname/ID correctly read empty. Organisation may
+  show residual ruling OCR (' . OE'). Assessment ticks still have no
+  caregiver/household targets (identity_only, as before).
+
+--------------------------------------------------------------------------------
+c03_mpilo.jpg
+--------------------------------------------------------------------------------
+
+  field                              BEFORE                    AFTER
+  ---------------------------------  ------------------------  -------------------------
+  caregiver.name                     'nAPio'                   one-row crop of Mpilo
+                                                               (OCR still mangles:
+                                                               'Ieuto')
+  caregiver.surname                  'Khany'                   one-row crop of Khanyi
+                                                               (OCR 'wanvi')
+  household.org_household_number     '622'                     HH row, not the name
+  __display.cycw_name                (no target)               CYCW row added
+
+  Box heights are now ~0.012 of the blank (one row), not ~0.032.
+
+--------------------------------------------------------------------------------
+c03_ticks.jpg
+--------------------------------------------------------------------------------
+
+  BEFORE: c03 p0, same four too-tall boxes, no ticks in the atlas.
+  AFTER:  c03 p0, one-row identity boxes. Still no assessment-tick targets
+          (those ticks do not map to Caregiver/Household fields).
+
+
+================================================================================
+3. DIFF SUMMARY
+================================================================================
+
+  C01 address row     province/district/municipality/town/ward/personnel
+                      re-measured + inset. Org/house/street unchanged.
+  C01 SA ID           13-cell strip + right pad on caregiver and member.0-3
+  C01 member text     inset inside _c01_member + page-0 relationship boxes
+  C02                 5 identity boxes moved onto the value cells; organisation
+                      added; alignment no longer fails on c02_adult.jpg
+  C03                 4 boxes moved to the correct rows at four decimals;
+                      CYCW name added
+  CW 05               7 checkbox boxes moved from printed words onto squares
+  Alignment           quad-coverage check, ORB-then-SIFT, C02 page-fit fallback
+  Tests               core/tests/test_atlas_geometry.py
+  Version             npo-pdf-v1.3
+
+
+================================================================================
+4. ATLAS COORDINATE AUDIT (form, field, old box, new box)
+================================================================================
+
+Boxes are four-decimal fractions of the official blank PNG.
+
+C01 printed / ID / relationship-to-member
+-----------------------------------------
+  household.province
+    old (0.6277, 0.0914, 0.8336, 0.1081)
+    new (0.6347, 0.0937, 0.8267, 0.1061)
+  household.district
+    old (0.6277, 0.1087, 0.8336, 0.1235)
+    new (0.6347, 0.1108, 0.8267, 0.1217)
+  household.municipality
+    old (0.6277, 0.1235, 0.8336, 0.1390)
+    new (0.6347, 0.1257, 0.8267, 0.1372)
+  household.town
+    old (0.2773, 0.1407, 0.4882, 0.1568)
+    new (0.2866, 0.1431, 0.4790, 0.1550)
+  household.ward
+    old (0.6269, 0.1390, 0.8336, 0.1544)
+    new (0.6339, 0.1431, 0.8266, 0.1550)
+  __display.personnel
+    old (0.2765, 0.1544, 0.8336, 0.1728)
+    new (0.2940, 0.1574, 0.8161, 0.1705)
+  caregiver.id_number
+    old (0.2462, 0.2084, 0.6252, 0.2280)
+    new (0.2512, 0.2108, 0.5637, 0.2256)
+  member.0.relationship_to_head  (page-0 "to Member 1")
+    old (0.3798, 0.5849, 0.5739, 0.6057)
+    new (0.3895, 0.5895, 0.5642, 0.6011)
+  member.1.relationship_to_head  (page-0 "to Member 2")
+    old (0.7126, 0.5855, 0.8311, 0.6033)
+    new (0.7185, 0.5894, 0.8252, 0.5994)
+  member.2.relationship_to_head  (page-0 "to Member 3")
+    old (0.3790, 0.6087, 0.5739, 0.6271)
+    new (0.3887, 0.6127, 0.5642, 0.6231)
+  member.3.relationship_to_head  (page-0 "to Member 4")
+    old (0.7126, 0.6093, 0.8311, 0.6247)
+    new (0.7185, 0.6127, 0.8252, 0.6213)
+
+C01 member ID strips (13 cells + right pad, then inset)
+-------------------------------------------------------
+  member.0.id_number
+    old (0.2319, 0.6728, 0.5479, 0.6912)
+    new (0.2370, 0.6750, 0.5552, 0.6890)
+  member.1.id_number
+    old (0.2672, 0.0938, 0.6454, 0.1122)
+    new (0.2722, 0.0960, 0.5847, 0.1100)
+  member.2.id_number
+    old (0.2630, 0.3361, 0.6429, 0.3545)
+    new (0.2680, 0.3383, 0.5813, 0.3523)
+  member.3.id_number
+    old (0.2588, 0.5819, 0.6420, 0.6004)
+    new (0.2639, 0.5841, 0.5804, 0.5982)
+
+C01 member.N name/surname/known_as/nationality/disability_description
+and the block "relationship to head" boxes are the previous rectangles
+passed through _inset (x=0.03-0.05, y=0.18-0.22). Unchanged: Org Household
+Nr, House Number, Street.
+
+C02
+---
+  __display.organisation          NEW  (0.1643, 0.2117, 0.3221, 0.2234)
+  caregiver.name
+    old (0.115, 0.238, 0.465, 0.258)
+    new (0.1643, 0.2456, 0.3221, 0.2570)
+  caregiver.surname
+    old (0.115, 0.255, 0.465, 0.276)
+    new (0.1625, 0.2617, 0.3221, 0.2737)
+  household.org_household_number
+    old (0.130, 0.276, 0.465, 0.304)
+    new (0.1614, 0.2798, 0.3214, 0.3061)
+  caregiver.nationality
+    old (0.115, 0.304, 0.465, 0.324)
+    new (0.1613, 0.3120, 0.3209, 0.3235)
+  caregiver.id_number
+    old (0.115, 0.324, 0.465, 0.348)
+    new (0.1590, 0.3278, 0.3226, 0.3439)
+
+C03
+---
+  __display.cycw_name             NEW  (0.1930, 0.1555, 0.4899, 0.1675)
+  caregiver.id_number
+    old (0.125, 0.165, 0.500, 0.186)
+    new (0.1924, 0.1715, 0.4899, 0.1835)
+  caregiver.name
+    old (0.120, 0.178, 0.500, 0.210)
+    new (0.1918, 0.1875, 0.4893, 0.2000)
+  caregiver.surname
+    old (0.100, 0.198, 0.500, 0.226)
+    new (0.1912, 0.2034, 0.4893, 0.2164)
+  household.org_household_number
+    old (0.115, 0.216, 0.500, 0.240)
+    new (0.1906, 0.2196, 0.4893, 0.2324)
+
+CW 05 (intake)
+--------------
+  Risk Level Emergency
+    old (0.6496, 0.5606, 0.6756, 0.5707)   # printed word
+    new (0.3403, 0.4679, 0.3521, 0.4757)   # square
+  Risk Level High
+    old (0.7723, 0.5612, 0.7958, 0.5695)
+    new (0.5370, 0.4691, 0.5487, 0.4768)
+  Risk Level Mild
+    old (0.8899, 0.5618, 0.9109, 0.5719)
+    new (0.7345, 0.4697, 0.7454, 0.4780)
+  Intake Action Emergency Action
+    old (0.3580, 0.6556, 0.3782, 0.6645)   # "Referral..." text
+    new (0.3403, 0.5178, 0.3529, 0.5267)   # first of seven squares
+  Consent Yes
+    old (0.3580, 0.0938, 0.3790, 0.1021)   # word "Yes"
+    new (0.3412, 0.0926, 0.3538, 0.1015)
+  Consent No
+    old (0.2160, 0.0962, 0.2378, 0.1045)   # word in the sentence
+    new (0.3412, 0.1063, 0.3538, 0.1152)
+  Open file
+    old (0.3882, 0.8207, 0.4218, 0.8302)   # word "Open"
+    new (0.3714, 0.8195, 0.3832, 0.8284)
+
+
+================================================================================
+5. TESTS
+================================================================================
+
+backend/core/tests/test_atlas_geometry.py
+
+  C01PrintedCellsReadTheCellTests
+      c01_household: House Number 2291, Street Nkululuthweni, town is not
+      the old neighbouring-row crop, province/district/ward are not the
+      Phase 4 garbage strings.
+
+  C02AlignsAndReadsIdentityTests
+      c02_adult.jpg: form_type c02, alignment_failed False, inliers >= 14.
+
+  C03OneRowPerFieldTests
+      name/surname boxes are one row high and stacked; fixture no longer
+      returns the two-row 'nAPio' smash.
+
+  MemberHandwriteExcludesRulingLinesTests
+      member.* handwrite on the three C01 photos must not include
+      '_ >', 'eee |', or the Phase 4 fragments.
+
+  Cw05CheckboxesLandOnTicksTests
+      the seven squares read empty on the blank (with reference) and ticked
+      when an X is drawn in the box.
+
+  SyntheticRoundTripTests
+      draw GAUTENG / WESTONARIA / THIRTYTWO / RANDWEST / 2291 / THANDI /
+      DLAMINI / MPILO / KHANYI and ticks on Emergency / Open file / Yes,
+      warp rot0 / rot90 / rot180 / small perspective, identify_form_page +
+      _atlas_fields, every marked field reads back.
+
+Also: test_form_atlas org-box assertion, test_handwrite C02 alignment_failed
+False, checkbox blank-paper tests still 69 targeted boxes.
+
+
+================================================================================
+6. WHAT THIS PHASE DOES NOT FIX
+================================================================================
+
+  * RapidOCR of messy handwriting on the correct cell (GAUTENG, Westonaria,
+    Mpilo, Khanyi still come back as near-misses). Geometry was the brief.
+  * C02 Version 1/2016 vs the NPO blank (Known As vs Org Household Number).
+    The atlas follows the repo blank.
+  * C02/C03 assessment ticks still have no household model targets.
+  * Charset heuristics that accept short junk, left as Phase 4 instructed.
+
+
+================================================================================
+Commits
+================================================================================
+
+  Scan Intake: recalibrate atlas boxes and C02 SIFT alignment
+  Scan Intake: reject collapsed C02 matches and fit the page to the blank
+  Scan Intake: keep working C01 cells and pick the stronger ORB/SIFT warp
+  Scan Intake: prefer a solid ORB page match over a smeared SIFT warp
+  Scan Intake: assert C01 address cells without requiring smeared-SIFT OCR
+  Add Phase 5 atlas geometry recalibration change report

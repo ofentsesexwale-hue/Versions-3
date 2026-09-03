@@ -129,7 +129,6 @@ class C01PrintedCellsReadTheCellTests(TestCase):
         self.assertEqual(pages[0]['form_type'], 'c01')
         self.assertFalse(pages[0]['alignment_failed'])
         by_target = _fields_by_target(pages)
-        blob = ' '.join(_first_value(by_target, t) for t in C01_HEADER_GARBAGE).lower()
         town = _first_value(by_target, 'household.town').lower()
         street = _first_value(by_target, 'household.street').lower()
         house = _first_value(by_target, 'household.house_number')
