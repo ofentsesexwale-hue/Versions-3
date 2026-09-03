@@ -1,6 +1,6 @@
-# DSD CW / COW source pack
+# DSD CW / COW source pack and CCG originals
 
-Unedited Department of Social Development originals, dated 4 April 2019 (COW) and 28 August 2019 (CW). Filenames keep the DSD date stamp. Cursor upload hashes were stripped.
+Unedited Department of Social Development originals. CW forms dated 28 August 2019, COW forms dated 4 April 2019. CCG C01 and the HIV Risk Assessment pack are undated DSD .docx templates. Filenames keep the DSD date stamp where present. Cursor upload hashes were stripped.
 
 Held as reference. Do not redraw these sheets for print or Scan Intake until an atlas page is added.
 
