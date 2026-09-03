@@ -69,7 +69,10 @@ class OfficialFormValuesView(APIView):
             if not household:
                 return Response({'detail': 'That household is not on your caseload.'}, status=404)
         buckets = buckets_from_values(request.data.get('values') or {})
-        household = apply_buckets(request, household, buckets)
+        # Typing a value onto the official sheet and saving it *is* the staff
+        # sign-off, so these targets count as confirmed. Scan Intake does not
+        # get that shortcut — it must carry a per-field confirm from the user.
+        household = apply_buckets(request, household, buckets, confirmed_targets=set(buckets))
         log_action(request.user, 'edited', f'Filled official {code} for Household #{household.pk}')
         return Response({
             'household': household.pk,

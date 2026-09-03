@@ -1,5 +1,6 @@
 """Scan Intake: OCR a photographed DSD file, then confirm before any household write."""
 from io import BytesIO
+from typing import NamedTuple
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -31,7 +32,7 @@ from .permissions import (
     is_training_user,
     user_role,
 )
-from .form_io import apply_buckets
+from .form_io import apply_buckets, needs_staff_confirmation
 from .official_blanks import ATLAS_VERSION
 from .scan_ocr import engine_status, ocr_available, process_upload
 from .scan_templates import CHECKLIST_FOR_FORM, extract_fields, form_choices, form_label
@@ -43,6 +44,132 @@ def _deny_edit(user):
     from rest_framework.exceptions import PermissionDenied
     if user_role(user) == ROLE_CAREGIVER or not can_edit_records(user):
         raise PermissionDenied('Your login cannot add or change household files from a scan.')
+
+
+# Which person each kind of sheet describes. Sheets sharing a subject are the
+# same person's page-set and may be merged (C01 page 1 + page 2, C01 + CW 05,
+# C01 + C02 for the same adult). A C03 child sheet is a different person, so
+# its identity values must never land on the adult's record.
+PERSON_SUBJECT_BY_FORM = {
+    'c01': 'adult',
+    'intake': 'adult',
+    'c02': 'adult',
+    'family_care_plan': 'adult',
+    'c03': 'child',
+}
+# The subject whose identity fields own the caregiver record, best first.
+SUBJECT_PRIORITY = ('adult', 'child')
+
+
+class ResolvedScan(NamedTuple):
+    """What one scan job wants to write, after grouping pages by person."""
+
+    values: dict          # target -> value, ready for apply_buckets
+    confirmed: set        # targets a staff member explicitly signed off
+    labels: dict          # target -> human label, for messages
+    conflicts: list       # same person, same field, two different readings
+    held_back: list       # another person's identity values, not written
+
+
+def _person_subject(page):
+    """Which person this sheet is about. Unidentified sheets stand alone."""
+    return PERSON_SUBJECT_BY_FORM.get(page.form_type) or f'sheet-{page.pk}'
+
+
+def _is_person_target(target):
+    return target.startswith('caregiver.') or target.startswith('member.')
+
+
+def resolve_buckets(pages):
+    """Group the values read off each photo by the person that photo is about.
+
+    Household-level values (address, reference numbers, notes) merge across
+    every sheet. Identity values merge only inside one subject, so two sheets
+    about different people can never overwrite each other through a shared
+    target name. Disagreements inside one subject are reported instead of
+    being silently resolved by page order.
+    """
+    shared = {}
+    subjects = {}
+    order = []
+    conflicts = []
+
+    def record(store, target, field, page):
+        value = (field.get('value') or '').strip()
+        label = field.get('label') or target
+        entry = store.get(target)
+        if entry is None:
+            store[target] = {
+                'value': value,
+                'label': label,
+                'confirmed': bool(field.get('confirmed')),
+                'page_id': page.pk,
+                'page_index': page.index,
+                'form_label': form_label(page.form_type),
+            }
+            return
+        if entry['value'] == value or entry['page_id'] == page.pk:
+            # Same reading, or the same sheet listing the field twice.
+            entry['confirmed'] = entry['confirmed'] or bool(field.get('confirmed'))
+            return
+        conflicts.append({
+            'target': target,
+            'label': entry['label'],
+            'values': [
+                {
+                    'value': entry['value'],
+                    'page_index': entry['page_index'],
+                    'form_label': entry['form_label'],
+                },
+                {
+                    'value': value,
+                    'page_index': page.index,
+                    'form_label': form_label(page.form_type),
+                },
+            ],
+        })
+
+    for page in pages:
+        subject = _person_subject(page)
+        for field in page.fields or []:
+            target = (field.get('target') or '').strip()
+            if not target or not (field.get('value') or '').strip():
+                continue
+            if _is_person_target(target):
+                if subject not in subjects:
+                    subjects[subject] = {}
+                    order.append(subject)
+                record(subjects[subject], target, field, page)
+            else:
+                record(shared, target, field, page)
+
+    primary = next((s for s in SUBJECT_PRIORITY if s in subjects), None)
+    if primary is None and order:
+        primary = order[0]
+
+    values = {t: e['value'] for t, e in shared.items()}
+    labels = {t: e['label'] for t, e in shared.items()}
+    confirmed = {t for t, e in shared.items() if e['confirmed']}
+    for target, entry in (subjects.get(primary) or {}).items():
+        values[target] = entry['value']
+        labels[target] = entry['label']
+        if entry['confirmed']:
+            confirmed.add(target)
+
+    held_back = []
+    for subject in order:
+        if subject == primary:
+            continue
+        for target, entry in sorted(subjects[subject].items()):
+            held_back.append({
+                'target': target,
+                'label': entry['label'],
+                'value': entry['value'],
+                'form_label': entry['form_label'],
+                'page_index': entry['page_index'],
+            })
+
+    return ResolvedScan(values, confirmed, labels, conflicts, held_back)
 
 
 def _page_payload(page, request):
@@ -227,20 +354,20 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                     page.fields = item['fields']
                 page.save()
 
-        buckets = {}
-        unconfirmed = []
-        for page in job.pages.all():
-            for field in page.fields or []:
-                value = (field.get('value') or '').strip()
-                target = field.get('target') or ''
-                if not value or not target:
-                    continue
-                if target in (
-                    'caregiver.surname', 'caregiver.id_number', 'caregiver.date_of_birth',
-                    'member.surname', 'member.id_number', 'member.date_of_birth',
-                ) and not field.get('confirmed'):
-                    unconfirmed.append(field.get('label') or target)
-                buckets[target] = value
+        resolved = resolve_buckets(job.pages.all())
+
+        if resolved.conflicts:
+            return Response({
+                'detail': 'Two photos read different values for the same field. '
+                          'Fix one of them, then save.',
+                'conflicts': resolved.conflicts,
+            }, status=400)
+
+        unconfirmed = [
+            resolved.labels.get(target, target)
+            for target in sorted(resolved.values)
+            if needs_staff_confirmation(target) and target not in resolved.confirmed
+        ]
         if unconfirmed:
             return Response({
                 'detail': 'Confirm the highlighted surname, ID and date of birth before saving.',
@@ -248,7 +375,7 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             }, status=400)
 
         with transaction.atomic():
-            household = self._write_buckets(request, job, buckets)
+            household = self._write_buckets(request, job, resolved)
             job.household = household
             job.status = 'confirmed'
             job.confirmed_at = timezone.now()
@@ -256,49 +383,36 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             self._attach_pages(request.user, job, household)
             self._tick_checklist(request.user, job, household)
 
-        log_action(request.user, 'confirmed', f'Scan intake #{job.pk} into Household #{household.pk}')
-        return Response({
+        note = f'Scan intake #{job.pk} into Household #{household.pk}'
+        if resolved.held_back:
+            note += f' ({len(resolved.held_back)} value(s) from another person left for typing)'
+        log_action(request.user, 'confirmed', note)
+        payload = {
             'id': job.id,
             'status': job.status,
             'household': household.id,
             'org_household_number': household.org_household_number,
-        })
+        }
+        if resolved.held_back:
+            payload['held_back'] = resolved.held_back
+            payload['detail'] = (
+                f'Saved. {len(resolved.held_back)} value(s) came off a sheet about a different '
+                'person and were not written to this file — open the household and type them '
+                'onto the right person.'
+            )
+        return Response(payload)
 
-    def _write_buckets(self, request, job, buckets):
+    def _write_buckets(self, request, job, resolved):
+        buckets = resolved.values
         household = job.household
         if household and not scoped_household_qs(request.user).filter(pk=household.pk).exists():
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('That household is not on your caseload.')
-        household = apply_buckets(request, household, buckets)
+        household = apply_buckets(
+            request, household, buckets, confirmed_targets=resolved.confirmed,
+        )
 
         pn = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('process_note.')}
-        if pn:
-            ProcessNote.objects.create(household=household, created_by=request.user, **{
-                k: v for k, v in pn.items() if k in {
-                    'client_surname', 'client_first_name', 'client_id_number', 'file_no',
-                    'person_engaged_name', 'person_engaged_contact', 'problem_code',
-                    'intervention_code', 'type_of_engagement', 'purpose_and_what_transpired',
-                    'outcome_and_follow_up', 'evaluation_reflection', 'ssp_name',
-                }
-            })
-
-        cp = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('care_plan.')}
-        if cp:
-            FamilyCarePlan.objects.create(
-                household=household, created_by=request.user,
-                overall_goal=cp.get('overall_goal') or '',
-                ssp_name=cp.get('ssp_name') or '',
-            )
-
-        ass = {k.split('.', 1)[1]: v for k, v in buckets.items() if k.startswith('assessment.')}
-        if ass:
-            Assessment.objects.create(
-                household=household, created_by=request.user,
-                overview_situation=ass.get('overview_situation') or '',
-                problem_codes=ass.get('problem_codes') or '',
-                overall_goal=ass.get('overall_goal') or '',
-            )
-        return household
         if pn:
             ProcessNote.objects.create(household=household, created_by=request.user, **{
                 k: v for k, v in pn.items() if k in {

@@ -6,6 +6,23 @@ from .models import Caregiver, HouseholdMember
 from .sa_id import parse_sa_id
 from .serializers import CaregiverSerializer, HouseholdMemberSerializer, HouseholdSerializer
 
+# Identity fields a person must sign off before the file can be trusted.
+TRIO_FIELDS = ('surname', 'id_number', 'date_of_birth')
+
+
+def needs_staff_confirmation(target):
+    """True for the surname / ID / date of birth of anyone on the file.
+
+    Matched on the shape of the target rather than a fixed list, so every
+    member slot the atlas emits is gated exactly like the caregiver.
+    """
+    parts = (target or '').split('.')
+    if len(parts) == 2 and parts[0] == 'caregiver':
+        return parts[1] in TRIO_FIELDS
+    if len(parts) == 3 and parts[0] == 'member' and parts[1].isdigit():
+        return parts[2] in TRIO_FIELDS
+    return False
+
 
 def _get_nested(household, target):
     if not target or not household:
@@ -79,8 +96,32 @@ def buckets_from_values(values):
     return buckets
 
 
-def apply_buckets(request, household, buckets, create=False):
-    """Write atlas buckets via existing serializers. Returns household."""
+def _mark_confirmed(person_data, prefix, confirmed, derived):
+    """Set the *_confirmed flags this person's values have actually earned.
+
+    A value only counts as confirmed when a staff member signed off that
+    target, or when it was worked out from an ID number they signed off
+    (a date of birth read straight off the ID digits). An unchecked reading
+    of the paper never confirms itself.
+    """
+    id_signed = f'{prefix}.id_number' in confirmed
+    for trio in TRIO_FIELDS:
+        if not person_data.get(trio):
+            continue
+        if f'{prefix}.{trio}' in confirmed or (trio in derived and id_signed):
+            person_data[f'{trio}_confirmed'] = True
+
+
+def apply_buckets(request, household, buckets, create=False, confirmed_targets=None):
+    """Write atlas buckets via existing serializers. Returns household.
+
+    `confirmed_targets` is the set of targets a staff member explicitly signed
+    off. Only those set the model's *_confirmed flags — an extracted value on
+    its own is never treated as verified. Because ConfirmMixin refuses to save
+    an unconfirmed surname, ID or date of birth, callers must gate those
+    targets before they get here (Scan Intake does this in `confirm`).
+    """
+    confirmed = set(confirmed_targets or ())
     ctx = {'request': request}
     hh_data = {}
     for key, value in buckets.items():
@@ -126,15 +167,15 @@ def apply_buckets(request, household, buckets, create=False):
         if field == 'disability':
             value = _boolish(value)
         cg_data[field] = value
+    derived = set()
     if cg_data.get('id_number'):
         parsed = parse_sa_id(cg_data['id_number'])
         if parsed.get('dob') and not cg_data.get('date_of_birth'):
             cg_data['date_of_birth'] = parsed['dob']
+            derived.add('date_of_birth')
         if parsed.get('sex') and not cg_data.get('sex'):
             cg_data['sex'] = parsed['sex']
-    for trio in ('surname', 'id_number', 'date_of_birth'):
-        if cg_data.get(trio):
-            cg_data[f'{trio}_confirmed'] = True
+    _mark_confirmed(cg_data, 'caregiver', confirmed, derived)
     if cg_data:
         existing = Caregiver.objects.filter(household=household).first()
         if existing:
@@ -162,15 +203,15 @@ def apply_buckets(request, household, buckets, create=False):
     for slot, mem_data in sorted(by_slot.items()):
         if not any(str(v).strip() for v in mem_data.values() if v not in (None, False)):
             continue
+        derived = set()
         if mem_data.get('id_number'):
             parsed = parse_sa_id(mem_data['id_number'])
             if parsed.get('dob') and not mem_data.get('date_of_birth'):
                 mem_data['date_of_birth'] = parsed['dob']
+                derived.add('date_of_birth')
             if parsed.get('sex') and not mem_data.get('sex'):
                 mem_data['sex'] = parsed['sex']
-        for trio in ('surname', 'id_number', 'date_of_birth'):
-            if mem_data.get(trio):
-                mem_data[f'{trio}_confirmed'] = True
+        _mark_confirmed(mem_data, f'member.{slot}', confirmed, derived)
         if slot < len(members):
             ser = HouseholdMemberSerializer(members[slot], data=mem_data, partial=True, context=ctx)
         else:

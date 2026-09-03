@@ -14,11 +14,19 @@ import {
 } from "@/components/ui/select";
 
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,application/pdf,image/png,image/jpeg,image/webp,image/heic,image/*";
-const TRIO = new Set([
-  "caregiver.surname", "caregiver.id_number", "caregiver.date_of_birth",
-  "member.surname", "member.id_number", "member.date_of_birth",
-  "member.0.surname", "member.0.id_number", "member.0.date_of_birth",
-]);
+const TRIO_FIELDS = new Set(["surname", "id_number", "date_of_birth"]);
+
+// Surname, ID and date of birth need a person to sign them off, for every
+// member slot on the sheet and not just the first. Mirrors
+// needs_staff_confirmation() in backend/core/form_io.py.
+function needsConfirm(target) {
+  const parts = String(target || "").split(".");
+  if (parts.length === 2 && parts[0] === "caregiver") return TRIO_FIELDS.has(parts[1]);
+  if (parts.length === 3 && parts[0] === "member" && /^\d+$/.test(parts[1])) {
+    return TRIO_FIELDS.has(parts[2]);
+  }
+  return false;
+}
 
 function fieldsToValues(fields) {
   const values = {};
@@ -78,7 +86,19 @@ export default function ScanIntake() {
   const [openText, setOpenText] = useState({});
   const [engine, setEngine] = useState(null);
 
-  const err = (e) => e?.response?.data?.detail || "Could not read that photo";
+  const err = (e) => {
+    const data = e?.response?.data || {};
+    const detail = data.detail || "Could not read that photo";
+    if (data.conflicts?.length) {
+      const first = data.conflicts[0];
+      const readings = (first.values || [])
+        .map((v) => `“${v.value}” on photo ${(v.page_index ?? 0) + 1}`)
+        .join(" and ");
+      return `${detail} ${first.label}: ${readings}.`;
+    }
+    if (data.unconfirmed?.length) return `${detail} (${data.unconfirmed.join(", ")})`;
+    return detail;
+  };
 
   useEffect(() => {
     api.get("/scan-intake/engine/").then((res) => setEngine(res.data)).catch(() => {});
@@ -158,6 +178,9 @@ export default function ScanIntake() {
     try {
       const res = await api.post(`/scan-intake/${job.id}/confirm/`, { pages: job.pages });
       toast.success(`Saved to file ${res.data.org_household_number}`);
+      if (res.data.held_back?.length) {
+        toast.warning(res.data.detail, { duration: 12000 });
+      }
       navigate(`/households/${res.data.household}`);
     } catch (e) {
       toast.error(err(e));
@@ -296,7 +319,7 @@ export default function ScanIntake() {
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {merged.rows.map((row) => {
-                    const trio = TRIO.has(row.target);
+                    const trio = needsConfirm(row.target);
                     if (!trio) {
                       return (
                         <div key={row.target} className="space-y-1">
@@ -377,7 +400,7 @@ export default function ScanIntake() {
                         <p className="text-sm text-muted-foreground">No fields on this page. The photo still attaches, and the text below is kept for checking.</p>
                       )}
                       {(page.fields || []).map((field, i) => {
-                        const trio = TRIO.has(field.target);
+                        const trio = needsConfirm(field.target);
                         const inner = (
                           <Input
                             value={field.value || ""}
@@ -408,7 +431,7 @@ export default function ScanIntake() {
                       })}
                     </div>
                   )}
-                  {hasCanvas && (page.fields || []).filter((f) => TRIO.has(f.target)).map((field) => (
+                  {hasCanvas && (page.fields || []).filter((f) => needsConfirm(f.target)).map((field) => (
                     <ConfirmableField
                       key={`trio-${page.id}-${field.target}`}
                       fieldKey={field.target}
