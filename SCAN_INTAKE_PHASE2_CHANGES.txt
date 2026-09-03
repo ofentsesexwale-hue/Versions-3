@@ -1,0 +1,342 @@
+================================================================================
+SCAN INTAKE - PHASE 2 FIXES
+Checkbox detection and the last-wins field merge
+Commit: 1f75cf7
+Date: 3 September 2026
+================================================================================
+
+Scope kept to the two listed findings. OCR engine binding, sa_id handling, the
+gibberish filter and atlas geometry were NOT touched.
+
+Backend tests: 62 of 62 pass (14 new).
+Frontend: yarn build succeeds.
+
+
+--------------------------------------------------------------------------------
+DIFF SUMMARY
+--------------------------------------------------------------------------------
+
+ backend/core/scan_align.py                  |  83 ++++++-
+ backend/core/scan_ocr.py                    | 139 ++++++++++--
+ backend/core/tests/test_checkbox_reading.py | 322 ++++++++++++++++++++++++++++
+ frontend/src/pages/ScanIntake.js            |  18 +-
+ 4 files changed, 537 insertions(+), 25 deletions(-)
+
+
+--------------------------------------------------------------------------------
+BASELINE FIRST: THE DEFECT WAS WORSE THAN PHASE 0 RECORDED
+--------------------------------------------------------------------------------
+
+Measured before any change, on the pristine blank PNGs with no ink at all:
+
+    60 of 76 atlas checkboxes registered as TICKED
+
+Phase 0 reported 26; that count covered a narrower set of groups. Ratios ran
+0.1333 to 0.5974 against the old 0.12 threshold - i.e. the printed outline
+alone cleared the bar in most boxes, and the ones that did not clear it were
+only just below.
+
+The consequence, measured end-to-end on the six fixtures BEFORE the fix. Every
+group is the LAST-DECLARED option in the atlas, on every photo and every
+member slot:
+
+  c01_household.jpg    caregiver.disability     = true          (last of false/true)
+                       caregiver.headship_type  = Other         (last of 6)
+                       caregiver.id_type        = Permit        (last of 3)
+                       caregiver.marital_status = Separated     (last of 6)
+                       caregiver.race           = Indian        (last of 4)
+                       caregiver.sex            = Female        (last of 2)
+                       member.0.disability      = true
+                       member.0.id_type         = Permit
+                       member.0.race            = Indian
+                       member.0.sex             = Female
+  c01_members_a.jpg    member.1/2/3 .disability = true
+                       member.1/2/3 .race       = Indian
+                       member.1/2/3 .sex        = Female
+                       (+ member.1/2 .id_type   = Permit on members_b)
+  c01_members_b.jpg    identical constants for all three slots
+  c02_adult.jpg        no checkbox output
+  c03_mpilo.jpg        no checkbox output
+  c03_ticks.jpg        no checkbox output
+
+Ground truth for c01_household.jpg was read by eye off a contact sheet of the
+aligned crops. The caregiver is an African, female, single, South African
+grandmother with an SA ID and no disability, in a grandparent-headed
+household - a coherent OVC case file, and not one field of it matched what the
+app produced. Only caregiver.sex and member.0.sex were right, by the accident
+of Female being declared last.
+
+
+--------------------------------------------------------------------------------
+FIX 1 - THE DETECTOR MEASURES INK, NOT THE PRINTED BOX
+--------------------------------------------------------------------------------
+
+scan_align.py:267 ink_fill_ratio() did:
+
+    gray = ImageOps.autocontrast(crop.convert('L'))
+    dark = sum(1 for p in gray.getdata() if p < 88)
+    return dark / len(pixels)
+
+Two separate reasons that has no discriminating power:
+
+  * The crop is framed on the printed box, so the outline is inside the
+    measurement. On a box about 28 px across the outline is a fifth of the
+    pixels on its own.
+  * autocontrast stretches the crop's own range, so on a box with NO ink the
+    printed outline is pushed down to pure black. It manufactures a tick out
+    of an empty box.
+
+Now:
+
+  * Ink is counted only in an INSET region, CHECKBOX_INSET = 0.28 of each
+    side, which leaves roughly an 8 px margin on a 28 px box - wider than the
+    +/-3 px alignment residual measured in Phase 0. The printed outline can no
+    longer reach the measured area.
+  * The cutoff comes from the box's OWN paper level (85th percentile of the
+    crop, times 0.6, floor 40) instead of a stretched contrast, so a dim or
+    WhatsApp-compressed photo is judged against its own paper.
+  * Where the matching page of the official blank is available it is passed in
+    as a reference and ink already printed at that spot is discounted. The
+    blank's ink is grown by one pixel first (MinFilter) so a small alignment
+    residual cannot leave a sliver of outline looking like a pen stroke.
+
+Result on the pristine blanks, with NO reference (so this is the inset fix
+measured on its own):
+
+    all 69 checkboxes that carry a target now measure exactly 0.0000
+
+The 7 remaining boxes are on CW 05 and carry NO target and NO group. Their
+atlas boxes have landed on printed text rather than on a checkbox - the crops
+are 25x13 and 40x16 pixels of the words "No", "Yes", "Open file",
+"Emergency", "High", "Mild". No ink-based detector can call those empty,
+because there is real ink in them; the boxes are simply in the wrong place.
+That is atlas geometry, which this phase was told not to touch. They cannot
+write to a household field. With the blank supplied as a reference they read
+empty, and both facts are pinned by tests.
+
+THRESHOLDS, MEASURED NOT GUESSED
+  Taken from the ticked and unticked crops of c01_household.jpg:
+
+    ticked, lowest    0.1339   (member.0.race African)
+    ticked, median    0.2930
+    unticked, highest 0.1116   (member.0.sex Male, ink bleeding in from a
+                                neighbouring mark)
+    unticked, p90     0.0449
+    pristine blank    0.0000   (all 69)
+
+    CHECKBOX_EMPTY_MAX  = 0.06   -> empty
+    CHECKBOX_TICKED_MIN = 0.12   -> ticked
+    between the two              -> unreadable
+
+  checkbox_state() returns ticked / empty / unreadable rather than a bare
+  boolean, so a reading in the band between the thresholds is never turned
+  into an answer.
+
+
+--------------------------------------------------------------------------------
+FIX 2 - A TICK GROUP RESOLVES TO THE BOX THAT CARRIES THE MARK
+--------------------------------------------------------------------------------
+
+scan_ocr.py:373-401 _merge_extracted() did `by_target[target] = item` for every
+atlas field. All four race boxes carry target caregiver.race, so the fourth
+overwrote the first three and the group became a constant.
+
+The full group list, confirmed against form_atlas.py:
+
+  c01           caregiver.id_type          SA ID Number / Passport Number / Permit
+                caregiver.headship_type    6 options
+                caregiver.nationality      South African / Other
+                caregiver.sex              Male / Female
+                caregiver.race             African / White / Coloured / Indian
+                caregiver.marital_status   6 options
+                caregiver.disability       false / true
+                member.0-3 .id_type        3 options each
+                member.0-3 .sex            2 options each
+                member.0-3 .race           4 options each
+                member.0-3 .disability     2 options each
+  process_note  process_note.type_of_engagement   6 options
+  intake        7 boxes with no group and no target (see above)
+
+  C02 and C03 have NO checkbox geometry at all, which is why the three
+  c02/c03 fixtures produce no checkbox output before or after this change.
+  That is the Phase 0 atlas-coverage finding, not a detection bug, and it is
+  also why the end-to-end tick test uses c01_household.jpg rather than
+  c03_ticks.jpg - c03_ticks.jpg has real ticks on the paper but the atlas has
+  no boxes to read them from.
+
+Now a new _resolve_option_groups() collapses each group to ONE field before
+the merge:
+
+    exactly one marked, no faint boxes  -> that option, confidence 0.8
+    exactly one marked, a faint sibling -> that option, flagged, note
+                                           "one box is too faint to be sure"
+    two or more marked                  -> BLANK, flagged,
+                                           note "N boxes are marked"
+    none marked, one unreadable         -> BLANK, flagged,
+                                           note "no box could be read as marked"
+    none marked at all                  -> BLANK, flagged, note "no box is marked"
+
+The per-box tick evidence travels on private keys (_tick, _ink) and is
+stripped by the resolver, so it never reaches the stored page or the browser
+(verified: no key beginning with an underscore appears in the API payload).
+
+The resolved field carries `options` (the whole group) and `option` (the one
+chosen), so the review canvas can still offer the other answers.
+
+_merge_extracted no longer lets declaration order decide anything. Where two
+atlas boxes claim one target it ranks them explicitly (_atlas_priority): a
+resolved tick group beats a free-text box, and a box with a value beats an
+empty one. This matters in exactly one place today - C01 puts a free-text
+"Describe" box on caregiver.nationality, the target its tick group already
+owns, and that box was reading the word fragment "= hai" off the paper.
+
+
+--------------------------------------------------------------------------------
+AFTER: CHECKBOX OUTPUT ON THE SIX FIXTURES
+--------------------------------------------------------------------------------
+
+c01_household.jpg  (ground truth known; 10 correct, 1 blank, 0 WRONG of 11)
+    caregiver.nationality     = South African         OK
+    caregiver.id_type         = SA ID Number          OK  (flagged, faint sibling)
+    caregiver.headship_type   = Grand Parent Headed   OK  (flagged, faint sibling)
+    caregiver.sex             = Female                OK
+    caregiver.race            = African               OK
+    caregiver.marital_status  = Single                OK
+    caregiver.disability      = false                 OK
+    member.0.id_type          = SA ID Number          OK
+    member.0.race             = African               OK
+    member.0.disability       = false                 OK
+    member.0.sex              = (blank)               truth Female - two boxes
+                                                      read as marked, so it
+                                                      refuses to choose
+
+c01_members_a.jpg
+    member.1.id_type    = (blank)  "2 boxes are marked"
+    member.1.sex        = Female
+    member.1.race       = African
+    member.1.disability = (blank)  "no box could be read as marked"
+    member.2.id_type    = SA ID Number   (flagged)
+    member.2.sex        = Female
+    member.2.race       = African
+    member.2.disability = false
+    member.3.id_type    = SA ID Number
+    member.3.sex        = Male
+    member.3.race       = African        (flagged)
+    member.3.disability = false
+
+c01_members_b.jpg
+    member.1.id_type = SA ID Number   member.1.sex = Female
+    member.1.race    = African        member.1.disability = false
+    member.2.id_type = SA ID Number   member.2.sex = Female
+    member.2.race    = African        member.2.disability = false
+    member.3.id_type = SA ID Number   member.3.sex = Female
+    member.3.race    = African        member.3.disability = false
+
+c02_adult.jpg      no checkbox output (C02 atlas has no checkbox geometry;
+                   this photo also fails alignment)
+c03_mpilo.jpg      no checkbox output (C03 atlas has no checkbox geometry)
+c03_ticks.jpg      no checkbox output (C03 atlas has no checkbox geometry)
+
+The readings now differ between photos and between member slots, and
+member.3.sex reads Male on one page and Female on another - the detector is
+responding to the image instead of to the atlas declaration order.
+
+
+--------------------------------------------------------------------------------
+FRONTEND
+--------------------------------------------------------------------------------
+
+frontend/src/pages/ScanIntake.js - one field now represents a whole group, so:
+
+  * fieldsToValues / mergeValuesIntoFields understand a group field (one that
+    carries an `options` array) and its chosen option. Without this the staff
+    member could no longer change a group's answer on the review canvas: the
+    canvas sets values[target] to the option it was clicked on, and the old
+    per-option matching would have thrown that away.
+  * The canvas low-confidence lookup falls back to matching by target, so when
+    a group could not be read EVERY box in that group is flagged amber for a
+    look, not just the one that happened to win.
+
+
+--------------------------------------------------------------------------------
+TESTS ADDED - backend/core/tests/test_checkbox_reading.py (14 tests)
+--------------------------------------------------------------------------------
+
+class BlankPaperTicksNothingTests   (the permanent regression test)
+
+  test_no_checkbox_on_a_pristine_blank_reads_as_ticked
+      Walks every atlas checkbox that carries a target, on the pristine blank
+      PNG, and asserts each reads EMPTY - not merely "not ticked". Also
+      asserts the box count is 69, so the test cannot quietly start covering
+      fewer boxes if the atlas changes.
+
+  test_blank_page_measured_against_itself_has_no_added_ink
+      All 76 boxes, including the 7 mis-placed CW 05 ones, read empty once the
+      blank is discounted. This locks in the reference plumbing.
+
+  test_a_drawn_tick_is_seen_and_its_neighbours_are_not
+      A synthetic X drawn into caregiver.race White: White reads ticked, the
+      other three read empty.
+
+class OptionGroupResolutionTests   (the resolver, 7 tests)
+
+  test_the_marked_option_wins_not_the_last_declared
+  test_every_option_can_win                     (subTest over all four races)
+  test_two_marked_options_leave_the_field_blank
+  test_no_marked_option_leaves_the_field_blank
+  test_a_reading_too_close_to_call_is_flagged_not_guessed
+  test_a_faint_neighbour_keeps_the_answer_but_asks_for_a_look
+  test_non_group_fields_pass_through_untouched
+      Also asserts the private _tick / _ink keys never survive the resolver.
+
+class SyntheticPageThroughAtlasTests   (detector + resolver on a real page)
+
+  test_one_ticked_option_reads_back_through_the_atlas
+      A tick drawn in caregiver.race White - deliberately not the
+      last-declared option - comes back as White through _atlas_fields, and
+      the untouched sex and marital-status groups come back blank.
+
+  test_two_ticked_options_read_back_as_blank_through_the_atlas
+
+class FixtureTicksReachTheFileTests   (real photo, real pen, real models)
+
+  test_real_pen_ticks_are_written_through_apply_buckets
+      c01_household.jpg through process_upload, then apply_buckets, then
+      assertions on the saved Caregiver and HouseholdMember: race African,
+      sex Female, marital_status Single, headship Grand Parent Headed,
+      id_type SA ID Number, disability False, member.0.race African.
+
+  test_no_group_is_a_constant_across_the_member_fixtures
+      Guards the original symptom directly: reads both member pages and fails
+      if every group still returns one constant value across all slots and
+      both photos.
+
+
+--------------------------------------------------------------------------------
+NOTES FOR THE NEXT PHASE
+--------------------------------------------------------------------------------
+
+1. The 7 CW 05 checkbox boxes are in the wrong place on the sheet - their
+   crops contain printed words, not a box. Atlas geometry.
+
+2. C02 and C03 have no checkbox geometry at all, so ticks on those sheets are
+   invisible to the app no matter how good the detector is. Atlas coverage.
+
+3. member.0.sex on c01_household.jpg reads two boxes as marked because ink
+   from the neighbouring mark bleeds into the Male box after alignment. It
+   correctly refuses to answer. Tightening it needs better alignment, not a
+   better detector.
+
+4. C01 declares a free-text "Describe" box on caregiver.nationality, the same
+   target as the nationality tick group. Ranking works around it, but the
+   Describe box should have its own target.
+
+5. git push cannot authenticate from this machine, so the commits are local
+   only. This predates Phase 0 - the branch was already well ahead of
+   origin/main before any of this work started.
+
+STOPPED HERE as instructed.
+
+================================================================================
+END OF PHASE 2 REPORT
+================================================================================
