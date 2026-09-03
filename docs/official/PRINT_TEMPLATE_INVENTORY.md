@@ -35,6 +35,10 @@ These still exist for batch/full-file printing. They are **INVENTED** relative t
 
 Girl/Boy Index and family contract: no atlas. Attach-only.
 
-## Source pack held for later (uploads, not yet atlas)
+## Source pack held for later (not yet atlas)
 
-CW 01–14, COW 1–3, Group Work Proposal + GRW 02–04, procedure manual, admin-tools training deck, monthly reporting workbook. Classify + attach until an atlas page exists.
+The beneficiary **table of contents** (Yes/No evidence checklist) is `beneficiary-file-contents.png`, transcribed in [`BENEFICIARY_FILE_CONTENTS.md`](BENEFICIARY_FILE_CONTENTS.md).
+
+Official CW 01–14 and COW 1–3 Word/Excel originals are in [`dsd-source/`](dsd-source/). Classify + attach until an atlas page exists.
+
+Still only in earlier uploads, not copied into this folder yet: Group Work Proposal + GRW 02–04, procedure manual, admin-tools training deck, monthly reporting workbook.
