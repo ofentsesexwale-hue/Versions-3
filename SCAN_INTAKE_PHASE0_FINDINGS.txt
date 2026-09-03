@@ -1,0 +1,696 @@
+================================================================================
+SCAN INTAKE - PHASE 0 ROOT-CAUSE INVESTIGATION
+OVC CaseFile (Django REST + React + SQLite offline desktop app)
+Investigation only. No code was changed in this phase.
+Date: 3 September 2026
+================================================================================
+
+
+--------------------------------------------------------------------------------
+HEADLINE
+--------------------------------------------------------------------------------
+
+The framing that these are not three independent OCR bugs is right, but the
+shared cause is NOT alignment. I measured the warp residual, and on C01/C03 the
+homography lands within +/-3 pixels of the blank (about 0.1 of a form row)
+across the whole page. Alignment is working.
+
+The shared cause is that the atlas is treated as ground truth by three
+consumers but was never validated against the blank PNG it claims to describe,
+and every stage downstream of the crop is "accept whatever came back".
+
+Concretely:
+  * one function, _merge_extracted, silently collapses same-target fields
+    last-wins;
+  * one threshold, ink_fill_ratio > 0.12, fires on the printed checkbox
+    outline itself;
+  * one keyword fallback, _after_label, feeds printed form-label text into
+    real model targets.
+
+Each of those alone is enough to produce all three reported symptoms.
+
+I ran the real pipeline over the six fixtures in
+backend/core/tests/fixtures/handwrite/ to get measurements rather than
+inference. Everything below cites either code or that run.
+
+
+--------------------------------------------------------------------------------
+1. FORM CLASSIFICATION: C01 vs C02 vs C03 vs CW 05 vs COW 2
+--------------------------------------------------------------------------------
+
+There are TWO independent classifiers and their disagreement is never resolved.
+
+TEXT CLASSIFIER
+  classify_text                        backend/core/scan_templates.py:66
+  keyword table CLASSIFY_KEYWORDS      backend/core/scan_templates.py:36
+
+  Uppercases the full-page OCR blob, counts substring hits, takes the single
+  highest-scoring form. Confidence = min(0.95, 0.35 + 0.2 * hits).
+
+  The keyword lists are badly unbalanced:
+    c01  has 5 keywords              scan_templates.py:52
+    c02  has 2: ['C02', 'C 02']      scan_templates.py:53
+    c03  has 2: ['C03', 'C 03']      scan_templates.py:54
+
+  So a C02 page tops out at one hit and 0.55 confidence. That is exactly what
+  the fixture run produced for c02_adult.jpg.
+
+VISUAL CLASSIFIER
+  identify_form_page                   backend/core/scan_align.py:220
+
+  Loops every blank page in blanks.json, tries 0 and 180 degrees
+  (scan_align.py:240), calls match_blank, picks the highest inlier count, and
+  rejects everything if the best is under 14 inliers (scan_align.py:248).
+
+HOW THEY ARE WIRED TOGETHER
+  backend/core/scan_ocr.py:427-438
+
+      form_type, form_conf = classify_text(text)
+      vis_type, vis_page, vis_warp, vis_inliers, vis_failed = \
+          identify_form_page(working, hint=form_type)
+      if vis_type and not vis_failed:
+          form_type, form_conf = vis_type, min(0.95, 0.45 + vis_inliers / 80.0)
+
+  Two problems:
+
+  (a) The text guess is passed in as `hint`, and the hint RESTRICTS the visual
+      search to blank keys starting with that code (scan_align.py:228-231).
+      A wrong text guess therefore narrows the visual matcher to the wrong
+      form. The unrestricted re-scan only happens if the hinted best is under
+      14 inliers (scan_align.py:248-250).
+
+  (b) form_confidence is a pure function of inlier count, not of agreement
+      between the two classifiers. That number is not a confidence in any
+      useful sense - see the C03 measurement in section 2.
+
+
+--------------------------------------------------------------------------------
+2. ALIGNMENT
+--------------------------------------------------------------------------------
+
+The chain is: contour-based page extraction -> a claimed deskew -> ORB +
+BFMatcher knn ratio test + RANSAC homography onto the blank PNG.
+
+  crop_document                        scan_align.py:86
+    Downsamples to 1100 px, Canny + findContours, accepts the first 4-point
+    approxPolyDP covering more than 20% of the frame.
+    MEASURED: failed on 2 of 6 fixtures (c01_members_a.jpg, c02_adult.jpg),
+    returning the photo untouched.
+
+  deskew_and_contrast                  scan_align.py:32
+    Effectively dead code. It inverts the grayscale and takes
+    np.column_stack(np.where(gray > 0))       scan_align.py:40-41
+    which selects every pixel that is not pure white - i.e. essentially the
+    whole photo - so minAreaRect returns the frame's own angle, which fails
+    the abs(angle) < 15 guard at scan_align.py:49.
+    MEASURED: fired on 0 of 6 fixtures.
+    The coordinates are also (row, col) rather than (x, y), so the angle would
+    be computed in a transposed space even if it did fire.
+
+  _homography_to_blank                 scan_align.py:162
+    Shrinks both images to 880 px for ORB, requires 12 good ratio-test matches
+    (scan_align.py:194) and 10 RANSAC inliers (scan_align.py:202), then warps
+    to the blank's native size.
+
+IS LANDSCAPE-SHOT-AS-PORTRAIT HANDLED, OR ONLY EXIF?
+
+  It is handled structurally, but not correctly. It is not EXIF-only.
+
+  maybe_rotate_to_template             scan_align.py:62
+    Compares the scan's aspect ratio to the blank's. Returns [scan] when they
+    agree, or [rotate(90), rotate(270)] when they differ. Combined with the
+    0/180 loop in identify_form_page, all four orientations are reachable.
+
+  EXIF is separate and applied via ImageOps.exif_transpose at
+    scan_ocr.py:108, scan_ocr.py:142, scan_ocr.py:273,
+    scan_align.py:21, scan_align.py:33
+
+  The problem is that inlier count cannot distinguish those orientations.
+  Probing each rotation directly:
+
+    c03_mpilo   as-is 132   rot90 128   rot180 132   rot270 127
+    c02_adult   as-is  10   rot90  10   rot180  11   rot270   8
+
+  For C03, ALL FOUR rotations produce a "successful" homography with
+  near-identical scores. These forms are dense tables; ORB descriptors on line
+  intersections repeat across the grid, so RANSAC finds a self-consistent
+  mapping of the grid onto a shifted or rotated copy of itself.
+
+  The tie-break then falls entirely to _title_upright_bonus
+  (scan_align.py:146), a RapidOCR pass on the top 22% of the page awarding 40
+  points per keyword hit. So page orientation is decided by whether an
+  upside-down header happens to yield a substring match. And the 0.95
+  form_confidence reported for c03_mpilo is derived from 128 inliers that a
+  180-degree-flipped page also earns.
+
+  For C02 no rotation clears the gate, so match_blank returns (None, 0, True)
+  and the page yields NO ATLAS FIELDS AT ALL. Note also that the only probe
+  scoring failed=False was `as-is`, which maybe_rotate_to_template excludes
+  because the orientations differ - though at 10 inliers it would have been
+  garbage anyway.
+
+RESIDUAL ERROR WHERE ALIGNMENT DOES SUCCEED
+  Measured by cross-correlating ink profiles of the warped page against the
+  blank, in eighths of the page:
+
+    fixture            global dy    worst mid-page band
+    c01_household        +1 px        +1 px  (0.03 rows)
+    c01_members_b         0 px        +1 px  (0.03 rows)
+    c03_mpilo            +1 px        -3 px  (0.14 rows)
+
+CONCLUSION FOR THIS SECTION
+  C02 never aligns. C03's orientation is decided by a coin flip. When
+  alignment does succeed it is accurate. Anything wrong in a C01 or C03 field
+  is therefore downstream of the warp.
+
+
+--------------------------------------------------------------------------------
+3. ATLAS COORDINATE SPACE
+--------------------------------------------------------------------------------
+
+Boxes are NORMALISED 0-1 FRACTIONS OF THE OFFICIAL BLANK PNG.
+
+  built by _box                        form_atlas.py:79
+  documented at                        form_atlas.py:1-5
+
+There is no CSS-pixel or print-point space anywhere in the atlas.
+
+THREE CONSUMERS READ THE IDENTICAL fields_for() OUTPUT:
+
+  SCAN         crop_box (scan_align.py:255) multiplies the fractions by the
+               warped image size, and the warp target is exactly the blank's
+               size (scan_align.py:216 warps to (w, h) taken from the blank at
+               scan_align.py:167).
+
+  PRINT        official_canvas.html:85-88 sets left/top/width/height as
+               box[n] * 100 + '%' over an <img> of the same blank at
+               width:100%.
+
+  FILL CANVAS  OfficialFormCanvas.js:24-27, same percentages.
+
+ANSWER TO "DO PRINT AND SCAN USE THE IDENTICAL ATLAS AND IMAGE SIZE?"
+
+  YES. Print overlay and scan crops use the identical atlas in the identical
+  coordinate space at the identical (normalised) image size. A print/scan
+  mismatch is not possible by construction. If printed text lands in the wrong
+  place, the atlas box itself is wrong, and the scan crop is wrong in exactly
+  the same way.
+
+  This is actually a useful property: one calibration pass fixes both.
+
+RESOLUTION NOTE
+  The blanks are rendered at "scale": 2.0 (official_blanks/blanks.json line 2),
+  i.e. about 144 dpi, giving 1190x1684 portrait and 1684x1190 landscape.
+  Because the warp target is the blank, EVERY FIELD CROP IS CAPPED AT THAT
+  RESOLUTION regardless of photo quality.
+
+  Measured crop sizes on the aligned C01 page:
+    name / surname          644 x 32 px
+    ID number               451 x 33 px
+    checkboxes              25x26 up to 33x34 px
+
+  Handwriting arrives at the OCR engine roughly 30 px tall.
+
+  On these particular fixtures the incoming photos are already only about
+  800x1280 (WhatsApp-compressed, 150-180 KB), so the 144 dpi target is not the
+  binding constraint HERE - but it will be the ceiling for any properly-shot
+  photo.
+
+
+--------------------------------------------------------------------------------
+4. ATLAS COVERAGE - STATED EXPLICITLY
+--------------------------------------------------------------------------------
+
+C02 AND C03 BOTH HAVE A CALIBRATED BLANK-PNG ATLAS ENTRY TODAY.
+
+This is NOT a C01/CW 05/COW 2-only situation. has_geometry
+(form_atlas.py:336) returns True for c01, intake, c02, c03,
+family_care_plan and cow2_note, and False only for process_note.
+
+  form              blank PNG                        size         atlas fields
+  ----------------  -------------------------------  -----------  ------------
+  c01               c01_p0.png, c01_p1.png           1190x1684    128
+  intake (CW 05)    intake_p0/1/2.png                1190x1684     17
+  c02               c02_p0.png                       1684x1190      5
+  c03               c03_p0.png                       1684x1190      4
+  family_care_plan  family_care_plan_p0.png          1684x1190      3
+  cow2_note         cow2_p0/1.png                    1191x1684      3
+  process_note      (none)                           -             13 unreachable
+
+So the warp/crop pipeline CAN apply to C02/C03 as-is.
+
+But the coverage is nominal, and the numbers reveal how the boxes were made:
+
+  C01 boxes are measured to four decimals
+    form_atlas.py:129-137     e.g. (0.2790, 0.0926, 0.4891, 0.1105)
+
+  C02 and C03 boxes are round three-decimal guesses
+    form_atlas.py:273-285     e.g. (0.115, 0.238, 0.465, 0.258)
+
+I overlaid them on the blanks and extracted the actual crops. The box CENTRES
+are close to right, but the boxes are 1.5x to 2x TOO TALL and extend well past
+the table's right edge. For c03_mpilo the box heights are 0.021-0.032 of page
+height where one identity row is about 0.018. Every crop therefore contains
+two rows of handwriting:
+
+  "Beneficiary ID" crop  ->  1904261049081 plus the top of the Name row
+  "Name" crop            ->  Mpilo plus the top of Khanyi
+  "Surname" crop         ->  Khanyi plus the top of 11622
+  "HH number" crop       ->  11622 with its top clipped
+
+What the pipeline actually returned for c03_mpilo.jpg:
+  caregiver.id_number                = '74'
+  caregiver.name                     = 'nAPio'
+  caregiver.surname                  = 'Khany'
+  household.org_household_number     = '622'
+
+And for c03_ticks.jpg:
+  caregiver.id_number                = '0'
+  caregiver.name                     = 'iy'
+  caregiver.surname                  = ''
+  household.org_household_number     = 'Jao altel ena eS a'
+
+DEAD FLAGS
+  form_atlas.py:36, :46 and :56 declare `identity_only` and `header_only`
+  flags for C02/C03/family_care_plan. NOTHING in the codebase reads them.
+
+
+--------------------------------------------------------------------------------
+5. IS OCR RUN ON THE FULL WARPED PAGE OR ON EACH FIELD CROP?
+--------------------------------------------------------------------------------
+
+BOTH, on every page.
+
+  full page    _ocr_image(working)          scan_ocr.py:426
+               Runs a full-page pass at --psm 6 plus RapidOCR. Feeds
+               classification and the keyword fallback.
+
+  per field    _atlas_fields                scan_ocr.py:309
+               Crops each atlas box and calls _ocr_crop per field.
+
+  combined by  _merge_extracted             scan_ocr.py:373
+
+THAT MERGE IS ONE OF THE CORE DEFECTS:
+
+      for item in atlas_fields or []:              # scan_ocr.py:377-401
+          target = item.get('target') or ''
+          if target:
+              by_target[target] = item
+
+Same-target fields overwrite each other, last one wins.
+
+Since _c01_member emits four separate member.N.race checkbox entries and six
+caregiver.marital_status entries (form_atlas.py:104-124 and 151-167), EVERY
+CHECKBOX GROUP IS SILENTLY REDUCED TO WHICHEVER OPTION IS DECLARED LAST IN
+THE ATLAS.
+
+In the fixture run that is exactly what happened, on all three C01 pages:
+
+  sex             = 'Female'      (last option in the group)
+  race            = 'Indian'      (last option in the group)
+  disability      = 'true'        (last option in the group)
+  id_type         = 'Permit'      (last option in the group)
+  marital_status  = 'Separated'   (last option in the group)
+  headship_type   = 'Other'       (last option in the group)
+
+The tick position on the paper is never consulted.
+
+
+--------------------------------------------------------------------------------
+6. WHICH ENGINE IS BOUND TO WHICH FIELD - IS IT HARDCODED?
+--------------------------------------------------------------------------------
+
+Hardcoded, in two places, and one of the bindings is backwards.
+
+FULL PAGE                              scan_ocr.py:106-138
+  RapidOCR and Tesseract both run, texts are concatenated, confidence is
+  max() of the two.
+
+PER CROP                               scan_ocr.py:154-224
+  Branches on spec['kind']:
+
+    kind        engine
+    ----------  --------------------------------------------------------------
+    checkbox    neither - ink_fill_ratio pixel count only  (scan_ocr.py:155-159)
+    sa_id       TESSERACT ONLY, --psm 8 with
+                tessedit_char_whitelist=0123456789
+    handwrite   RapidOCR preferred, Tesseract only if RapidOCR is empty
+    all others  higher confidence of the two
+
+THE sa_id EXCLUSION IS EXPLICIT              scan_ocr.py:162-166
+
+      rapid_text, rapid_conf = '', 0.0
+      if kind != 'sa_id':
+          from .scan_engines import read_line
+          rapid_text, rapid_conf = read_line(prepared)
+
+RapidOCR - the engine the app installs specifically for handwriting - is
+DISABLED FOR THE ONE FIELD TYPE that is handwritten in a printed cell grid on
+every one of these forms.
+
+  The c03_mpilo ID crop is plainly legible (1904261049081, visible in the
+  extracted crop) and the pipeline returned '74'.
+
+  On c01_household the aligned page clearly shows 1511010326080 and the
+  pipeline returned '4'.
+
+That single digit is then written to the household as an ID number, because
+sanitize_ocr_value passes id_number targets through untouched
+(scan_text.py:95-96).
+
+THE CHECKBOX PATH IS WORSE
+  ink_fill_ratio (scan_align.py:267) counts pixels below 88 after autocontrast,
+  and _ocr_crop ticks the box at ratio > 0.12. The crops are about 30x30 px and
+  INCLUDE THE PRINTED BOX OUTLINE, whose border alone is 14-24% of the crop.
+
+  Running the detector against the PRISTINE BLANK PNG, which contains no ink
+  whatsoever, 26 checkboxes register as ticked:
+
+    FALSE TICK on blank: caregiver.race / African             ratio=0.1688
+    FALSE TICK on blank: caregiver.race / White               ratio=0.2065
+    FALSE TICK on blank: caregiver.race / Coloured            ratio=0.2022
+    FALSE TICK on blank: caregiver.race / Indian              ratio=0.2379
+    FALSE TICK on blank: caregiver.sex / Male                 ratio=0.1828
+    FALSE TICK on blank: caregiver.sex / Female               ratio=0.2081
+    FALSE TICK on blank: caregiver.marital_status / Married    ratio=0.1896
+    FALSE TICK on blank: caregiver.marital_status / Divorced   ratio=0.2365
+    FALSE TICK on blank: caregiver.marital_status / Widowed    ratio=0.2320
+    FALSE TICK on blank: caregiver.marital_status / Single     ratio=0.1783
+    FALSE TICK on blank: caregiver.marital_status / Cohabiting ratio=0.2052
+    FALSE TICK on blank: caregiver.marital_status / Separated  ratio=0.1924
+    FALSE TICK on blank: caregiver.disability / false          ratio=0.1391
+    FALSE TICK on blank: caregiver.disability / true           ratio=0.1979
+    FALSE TICK on blank: caregiver.nationality / South African ratio=0.1791
+    FALSE TICK on blank: caregiver.nationality / Other         ratio=0.1708
+    FALSE TICK on blank: caregiver.headship_type / Youth Headed ratio=0.1667
+    FALSE TICK on blank: member.0.id_type / SA ID Number       ratio=0.1624
+    FALSE TICK on blank: member.0.sex / Male                   ratio=0.2042
+    FALSE TICK on blank: member.0.sex / Female                 ratio=0.1963
+    FALSE TICK on blank: member.0.race / African               ratio=0.2000
+    FALSE TICK on blank: member.0.race / White                 ratio=0.2137
+    FALSE TICK on blank: member.0.race / Coloured              ratio=0.1774
+    FALSE TICK on blank: member.0.race / Indian                ratio=0.2112
+    FALSE TICK on blank: member.0.disability / false           ratio=0.1771
+    FALSE TICK on blank: member.0.disability / true            ratio=0.2415
+
+  Checkbox detection has no discriminating power at all. Combined with the
+  last-wins merge in section 5, checkbox output is a CONSTANT.
+
+
+--------------------------------------------------------------------------------
+7. GIBBERISH FILTER - WHAT DOES IT ACTUALLY TEST?
+--------------------------------------------------------------------------------
+
+looks_like_gibberish                   scan_text.py:24
+
+It is CHARSET AND SHAPE HEURISTICS ONLY. No dictionary. No confidence input.
+No label list.
+
+It returns False for anything under 5 letters, then flags:
+  * no vowels at all
+  * a run of 6 or more consonants
+  * 12+ letters with 92%+ unique characters and no vowel-consonant-vowel
+    pattern
+
+DOES IT REJECT FORM LABELS LIKE SURNAME / FIRST NAME / ID NO?
+
+  NO. It accepts every one of them verbatim as a person's surname.
+  Measured directly:
+
+    candidate            gibberish?   -> caregiver.surname   -> household.town
+    -------------------  -----------  -------------------    ----------------
+    'SURNAME'            False        'SURNAME'              'SURNAME'
+    'FIRST NAME'         False        'FIRST NAME'           'FIRST NAME'
+    'ID NO'              False        'ID NO'                'ID NO'
+    'Surname'            False        'Surname'              'Surname'
+    'Known As'           False        'Known As'             'Known As'
+    'Nationality'        False        'Nationality'          'Nationality'
+    'Date of Birth'      False        'Date of Birth'        'Date of Birth'
+    'Passport Number'    False        'Passport Number'      'Passport Number'
+    'Permit'             False        'Permit'               'Permit'
+    'Household'          False        'Household'            'Household'
+    'Organisation'       False        'Organisation'         'Organisation'
+    'Personnel'          False        'Personnel'            'Personnel'
+    'Comments'           False        'Comments'             'Comments'
+
+  It also accepted all of the real junk from the fixture run:
+
+    'pI esgorarig'    False   -> saved as household.town
+    'Vane Wat Loca'   False   -> saved as household.municipality
+    'ern ee'          False   -> saved as household.ward
+    'nAPio'           False   -> saved as caregiver.name
+    'oholoza'         False   -> saved as caregiver.surname
+    'eer" sess Se'    False   -> saved as disability_description
+
+  The downstream plausible_person_name gate (scan_text.py:43) only checks
+  length, vowel presence and letter ratio, so 'pI esgorarig' passes as a name.
+
+  ID targets bypass sanitation entirely (scan_text.py:95-96):
+    '4'             -> '4'
+    '144'           -> '144'
+    '019042'        -> '019042'
+    'not a number'  -> 'not a number'
+
+REAL EXAMPLE OF A LABEL LANDING IN A REAL TARGET
+  On c01_members_b.jpg the keyword path produced:
+    caregiver.known_as = "'Nationallty Hencoo Date"
+  The printed word "Nationality" stored as what someone is known as.
+
+THE MECHANISM
+  _after_label                         scan_templates.py:77
+    Finds a label in the flattened full-page blob and returns the next six
+    words. On a dense form the text following a label in reading order is very
+    often the NEXT LABEL, and RapidOCR's reading order on these tables is not
+    reliably left-to-right. The c02_adult.jpg blob came back in reverse column
+    order:
+      "...IDnunberi Nntionallty: IKnownAs: Surnamei Name: Pursonnel:
+       Organisationi C02-ADULT"
+
+  extract_fields applies this to caregiver.surname, caregiver.name,
+  household.town, household.province and eight more targets for form types
+  intake, c01, c02, c03 AND 'unknown' (scan_templates.py:132-197), so an
+  unrecognised page still writes into household fields.
+
+TWO FURTHER MIS-BINDINGS IN THE SAME FUNCTION
+
+  (a) _first_sa_id (scan_templates.py:94) scans the WHOLE PAGE for any 13-digit
+      run and assigns it to caregiver.id_number, caregiver.date_of_birth and
+      caregiver.sex (scan_templates.py:124-130). On c01_members_b.jpg - a page
+      containing only members 2, 3 and 4 - this attributed 2212280261081 and a
+      2022 date of birth to the CAREGIVER.
+
+  (b) Every C02/C03 atlas field targets caregiver.* (form_atlas.py:274-285)
+      even though C03 IS THE CHILD BENEFICIARY FORM. A child's name and ID
+      overwrite the head of household.
+
+
+--------------------------------------------------------------------------------
+8. IMAGE I/O AND MAX DIMENSIONS
+--------------------------------------------------------------------------------
+
+Entry point: render_pages                scan_ocr.py:284
+
+  PDFs    -> _pdf_pages_to_images        scan_ocr.py:227
+             pypdfium2 at scale=2, falling back to pypdf text extraction.
+
+  Photos  -> _open_photo                 scan_ocr.py:256
+             PIL.Image.open plus HEIC handling.
+
+HEIC
+  _is_heic sniffs the ftyp / heic / heif / mif1 / msf1 box
+    scan_ocr.py:250-253
+  pillow_heif.register_heif_opener is called at import and retried lazily on
+  failure
+    scan_ocr.py:13-22, :259, :263
+
+JPEG / PNG / WEBP / WHATSAPP-COMPRESSED
+  Whatever Pillow supports. There is no format-specific handling and NO
+  special path for WhatsApp-compressed input.
+
+EXIF ROTATION
+  Applied via ImageOps.exif_transpose, repeatedly and harmlessly, at
+    scan_ocr.py:108, :142, :273
+    scan_align.py:21, :33
+
+MAX DIMENSIONS, IN PIPELINE ORDER
+
+  stage                       limit                             code
+  --------------------------  --------------------------------  -----------------
+  page-contour detection      1100 px longest side              scan_align.py:94-97
+  working image after crop    2400 px longest side              scan_ocr.py:278-280
+  ORB feature matching        880 px longest side               scan_align.py:169-174
+  WARP OUTPUT                 the blank's native size            scan_align.py:216
+                              (1190x1684 / 1684x1190, ~144 dpi)
+
+ANSWER TO "WHAT MAX DIMENSION IS USED FOR WARP?"
+  The source is capped at 2400 px, but the OUTPUT is fixed at the blank's
+  ~144 dpi, and that is what every field crop is taken from. Field crops end
+  up 25-38 px tall.
+
+  _prepare_line_crop (scan_ocr.py:141) then upsamples to a 48 px floor and x3
+  with a sharpen - inventing pixels rather than recovering detail.
+
+
+--------------------------------------------------------------------------------
+9. PRINT PATH FOR ATLAS FORMS
+--------------------------------------------------------------------------------
+
+SAME ATLAS, SAME BLANK PNG, NO SECOND LAYOUT - for atlas forms.
+
+  print_form                           print_views.py:72-79
+    Checks has_geometry first and routes to print_official.
+
+  print_official                       form_views.py:81
+    Builds one page per blank with fields_for(form, i) and renders
+    print/official_canvas.html.
+
+  official_canvas.html:60-99
+    Loads the blank as an <img> and positions absolutely-placed .ink divs at
+    the atlas percentages, CLIENT-SIDE in the browser DOM. There is no
+    server-side drawing of strings onto the PNG.
+
+  values_for_household                 form_io.py:35
+    Reads the same targets back through the model.
+
+CONCLUSION
+  Section 3's finding holds: print CANNOT disagree with scan about where a
+  field is. If C02/C03 print into the wrong place, it is because the boxes in
+  form_atlas.py:273-285 are wrong, and the scan crops are wrong identically.
+  So the "printed text in the wrong place" symptom is NOT caused by a dual
+  layout - it is the same bad atlas box seen from the other side.
+
+THE DUAL-PATH RISK EXISTS ONLY FOR FORMS WITHOUT ATLAS GEOMETRY
+  process_note has 13 atlas fields defined (form_atlas.py:298-312) but
+  'geometry': 'missing' (form_atlas.py:74), so has_geometry is False, printing
+  falls through to the separate HTML template at print_views.py:35, and its
+  atlas boxes are dead. Those 13 boxes are also unreachable from scan, since
+  _process_one only calls _atlas_fields when has_geometry is true
+  (scan_ocr.py:440).
+
+
+--------------------------------------------------------------------------------
+10. DOES THE SCAN PATH CHECK A SCANNED ID AGAINST OTHER HOUSEHOLDS?
+--------------------------------------------------------------------------------
+
+NO. Nothing in Scan Intake or household assembly checks a scanned ID against
+other households.
+
+THE CHECK EXISTS AND WORKS - IT IS JUST NOT WIRED IN
+  IdCheckView                          views.py:1671
+    Matches on the indexed id_number_digits column within scoped_household_qs,
+    so live/TEST separation is respected automatically, and returns a
+    `duplicates` list.
+
+  It is only ever called from three MANUAL surfaces:
+    IdCheckHint used by CaregiverForm.js:107
+    IdCheckHint used by MemberForm.js:90
+    FormFillPage.js:38
+
+  ScanIntake.js NEVER calls /id-check/, and there is no server-side check in
+  scan_views.py or form_io.py.
+
+THREE RELATED GAPS IN THE SAME WRITE PATH
+
+(a) THE CONFIRM GATE HAS A DEAD BRANCH        scan_views.py:238-243
+
+      if target in (
+          'caregiver.surname', 'caregiver.id_number', 'caregiver.date_of_birth',
+          'member.surname', 'member.id_number', 'member.date_of_birth',
+      ) and not field.get('confirmed'):
+
+    The atlas never emits 'member.surname'. It emits member.0.surname through
+    member.3.surname (form_atlas.py:99-124). NO MEMBER FIELD IS EVER GATED.
+
+    ScanIntake.js:17-21 has the same problem: its TRIO set covers member.0.*
+    but not slots 1-3, so members 2, 3 and 4 get neither a server check nor a
+    UI confirm control.
+
+(b) VALUES ARE AUTO-MARKED AS HUMAN-CONFIRMED
+    apply_buckets sets the confirmation flags purely on presence, for the
+    caregiver (form_io.py:136-138) and for every member slot
+    (form_io.py:171-173):
+
+      for trio in ('surname', 'id_number', 'date_of_birth'):
+          if cg_data.get(trio):
+              cg_data[f'{trio}_confirmed'] = True
+
+    So the '4' read from c01_household.jpg is stored as a caregiver ID number
+    FLAGGED AS VERIFIED, and it will not appear in the supervisor Verification
+    queue.
+
+(c) BUCKETS ARE FLATTENED LAST-WINS ACROSS ALL PAGES
+    buckets[target] = value              scan_views.py:243
+
+    Keyed by target across the whole job, so uploading a C02 and a C03 in one
+    batch means both write caregiver.name / caregiver.surname /
+    caregiver.id_number and whichever page sorts last silently wins - a
+    child's identity overwriting an adult's, with no warning.
+
+ALSO WORTH FLAGGING WHILE IN THIS FILE
+  _write_buckets has about 28 lines of UNREACHABLE duplicated code after its
+  `return household` statement:  scan_views.py:301-328
+
+
+--------------------------------------------------------------------------------
+SYNTHESIS
+--------------------------------------------------------------------------------
+
+The three reported symptoms map onto five independent defects, each
+individually sufficient to produce them.
+
+SYMPTOM: gibberish in name fields
+  * over-tall C02/C03 boxes crop two rows into one field       (section 4)
+  * looks_like_gibberish is charset-only and rejects nothing
+    label-like                                                  (section 7)
+
+SYMPTOM: gibberish or 1-digit ID fields
+  * RapidOCR hardcoded off for sa_id                            (section 6)
+  * sanitize_ocr_value passes any string through for ID targets (section 7)
+
+SYMPTOM: recognised text in the wrong boxes
+  * _merge_extracted last-wins collapses checkbox groups to a
+    constant                                                    (section 5)
+  * _after_label pulls the next printed label into real targets (section 7)
+  * C02/C03 target caregiver.* on a child form                  (section 7)
+  * job-wide buckets[target] flattening across pages            (section 10)
+
+SYMPTOM: "unable to read" a photo a human can read
+  * C02 never clears 12 ORB matches, so it produces zero atlas
+    fields                                                      (section 2)
+  * crop_document failed on 2 of 6 fixtures                     (section 2)
+
+SYMPTOM: plausible-looking wrong data reaching the database
+  * auto-set *_confirmed = True                                 (section 10)
+  * member slots ungated                                        (section 10)
+  * no duplicate-ID check                                       (section 10)
+
+THE TWO MOST SURPRISING FINDINGS RELATIVE TO THE ASSUMED DIAGNOSIS
+
+  1. ALIGNMENT IS NOT THE PROBLEM on C01/C03. The residual is +/-3 px.
+
+  2. CHECKBOX READING HAS ZERO DISCRIMINATING POWER. It reports ticks on a
+     blank sheet with no ink, and then the merge reduces each group to a fixed
+     answer.
+
+  Finding 2 means the sex, race, disability, ID-type, marital-status and
+  headship values on every scanned C01 in the database so far are CONSTANTS,
+  NOT READINGS. That is worth checking against live data before Phase 1
+  begins.
+
+
+--------------------------------------------------------------------------------
+HOW THESE MEASUREMENTS WERE PRODUCED
+--------------------------------------------------------------------------------
+
+All numbers above came from running the shipped pipeline unmodified against
+the six existing fixtures in backend/core/tests/fixtures/handwrite/
+(c01_household.jpg, c01_members_a.jpg, c01_members_b.jpg, c02_adult.jpg,
+c03_mpilo.jpg, c03_ticks.jpg), with RapidOCR, Tesseract 5 and OpenCV 5.0.0 all
+present and working.
+
+The probe scripts were written to /tmp only. NO FILE IN THE REPOSITORY WAS
+MODIFIED OR CREATED IN THIS PHASE apart from this report.
+
+================================================================================
+END OF PHASE 0 REPORT - awaiting go-ahead before changing any code
+================================================================================
