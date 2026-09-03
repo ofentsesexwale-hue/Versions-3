@@ -1,0 +1,398 @@
+================================================================================
+OVC-CaseFile - Scan Intake PHASE 4
+The gibberish filter, and keyword-extraction mis-attribution
+================================================================================
+
+Scope: the four findings in the Phase 4 brief, and nothing else. Atlas geometry
+- C02/C03 box sizes and targets, and the misplaced CW 05 checkbox boxes - was
+not touched. That is Phase 5.
+
+Result in one line: the form's own printed wording can no longer be saved as
+somebody's answer, the flattened-page-text scraper is switched off on every
+sheet the atlas can measure box by box, a 13-digit run found loose on a page
+no longer names a person, and a half-read date box counts as unread.
+
+
+================================================================================
+1. BEFORE / AFTER - FULL-PAGE KEYWORD EXTRACTION, ALL SIX FIXTURES
+================================================================================
+
+extract_fields() run on the real OCR text of each photograph in
+backend/core/tests/fixtures/handwrite, through the real process_upload
+pipeline.
+
+BEFORE - 8 fields, and every one of them wrong
+----------------------------------------------
+
+  c01_household.jpg   c01 p0
+      caregiver.home_language     Home Language     = 'Shember 2 Members ['
+      household.province          Province          = '2.House Nurrber 2291 Distic!'
+      household.town              Town              = 'Westonariq "Ward SE SAW'
+      household.ward              Ward              = 'SE SAW i) Femi] wnember 3.'
+
+  c01_members_a.jpg   c01 p1
+      (nothing)
+
+  c01_members_b.jpg   c01 p1
+      caregiver.date_of_birth     Date of birth (from ID) = '2022-12-28'
+      caregiver.id_number         SA ID Number            = '2212280261081'
+      caregiver.known_as          Known As                = "'Nationallty Hencoo Date"
+      caregiver.sex               Sex (from ID)           = 'Female'
+
+  c02_adult.jpg       c02 p0   (nothing)
+  c03_mpilo.jpg       c03 p0   (nothing)
+  c03_ticks.jpg       c03 p0   (nothing)
+
+  TOTAL: 8 keyword fields. 8 wrong.
+
+Read what those four c01_household values actually are. 'Province' returned
+'2.House Nurrber 2291 Distic!' - that is the next two labels on the sheet, not
+a province. 'Town' returned 'Westonariq "Ward SE SAW' - a real town with the
+next label stuck to it. 'Ward' returned 'SE SAW i) Femi] wnember 3.'. This is
+_after_label doing exactly what the brief describes: on a dense sheet, what
+follows a label in the flattened blob is the next label.
+
+The four on c01_members_b are worse, because they were plausible. That page is
+a members page - it contains members 2, 3 and 4 and no caregiver section at
+all - yet a caregiver ID, date of birth and sex were extracted from it. The ID
+is a child's, the date of birth 2022-12-28 makes the "caregiver" three years
+old, and 'Nationallty Hencoo Date' was offered as their nickname.
+
+AFTER - 1 field, honest about what it is
+----------------------------------------
+
+  c01_household.jpg   c01 p0   (nothing)
+  c01_members_a.jpg   c01 p1   (nothing)
+
+  c01_members_b.jpg   c01 p1
+      (unassigned)   ID number read on this page - not placed  = '2212280261081'
+                     note: 'A 13-digit ID was read somewhere on this page, but
+                     nothing says whose it is. Type it onto the right person.'
+
+  c02_adult.jpg       c02 p0   (nothing)
+  c03_mpilo.jpg       c03 p0   (nothing)
+  c03_ticks.jpg       c03 p0   (nothing)
+
+  TOTAL: 1 keyword field, attached to nobody, written nowhere.
+
+Nothing was lost by this. Every field the scraper used to fill on these six
+photographs is a field the atlas already reads box by box off the aligned
+image, and it reads them correctly - the C01 address block still comes back as
+Org Household Nr '412', House Number '2291', Street 'Nkululuthweni'. The
+scraper was not adding information; it was overwriting silence with noise.
+
+The child's ID is still shown. It sits in a "Read on the paper, but not
+placed" panel in the review screen, and resolve_buckets has always skipped
+target-less fields, so it cannot reach the database. It also still lands
+correctly on member.2.id_number, which is the box the atlas actually measured.
+
+
+================================================================================
+2. BEFORE / AFTER - DATE-OF-BIRTH BOXES, ALL SIX FIXTURES
+================================================================================
+
+  fixture            field                     BEFORE               AFTER
+  -----------------  ------------------------  -------------------  ------------
+  c01_household      caregiver.date_of_birth   '99b1 Ol11/'         ''
+  c01_household      member.0.date_of_birth    '(Eee eRe oni es'    ''
+  c01_members_a      member.1.date_of_birth    'be-no-bloe'         ''
+  c01_members_a      member.2.date_of_birth    'H1-&o-6ooe'         ''
+  c01_members_a      member.3.date_of_birth    'Z1107o2 12'         ''
+  c01_members_b      caregiver.date_of_birth   '2022-12-28'         (gone - see above)
+  c01_members_b      member.1.date_of_birth    'sllloi tno7'        ''
+  c01_members_b      member.2.date_of_birth    '' + conflict note   '2022-12-28'
+  c01_members_b      member.3.date_of_birth    '2001 28'            ''
+
+Eight non-empty date fields before, one after, and the one that remains is
+correct. Every blanked value above was a field a staff member had to click
+Confirm on, because date_of_birth is one of the three confirm-before-save
+fields. Seven pointless clicks per household, each one an invitation to
+confirm junk by reflex.
+
+The member.2 row went the other way, and it is worth explaining. Its box read
+'Z8'. At the end of Phase 3 that was a real value disagreeing with the
+2022-12-28 the ID number gives, so Phase 3's reconciliation blanked the field
+and raised a conflict for staff to settle. Now 'Z8' is refused as a date
+before reconciliation runs, so the box is simply empty, and an empty box is
+filled from the valid ID. The right date, and one fewer thing to ask a person
+about. Phase 3's conflict machinery is untouched; it just has one less false
+alarm to raise.
+
+
+================================================================================
+3. WHAT WAS WRONG, AND WHAT WAS CHANGED
+================================================================================
+
+FINDING 1 - the filter had no idea what the form says
+-----------------------------------------------------
+looks_like_gibberish tested charset and word shape only. 'SURNAME' is a real
+word made of real letters, so it passed, and so did 'FIRST NAME', 'ID NO',
+'Date of Birth' and 'Passport Number'. Full-page OCR reads the printed labels
+alongside the handwriting and nothing downstream could tell them apart.
+
+Added core/form_labels.py, which builds the lexicon rather than listing it:
+
+  - every label and tick caption in the field atlas for C01, C02, C03, CW 05
+    and COW 2 (the atlas labels are measured off the official blanks, and its
+    own docstring says "Labels follow the NPO PDF. Do not rename them")
+  - the <span class="lbl">, <th>, <h3 class="sub"> and form-title text parsed
+    out of the print templates for CW 05 and COW 2 (C01/C02/C03 print through
+    the official-blank canvas, so they have no HTML template and the atlas is
+    their only source)
+  - the label wording the keyword extractor searches for, which moved out of
+    scan_templates into EXTRACTION_LABELS here, so a label it hunts for is
+    automatically a label it will refuse to hand back
+
+That yields 136 distinct printed labels and a 180-word label vocabulary. Add a
+field to a form and its label joins the lexicon; nothing is kept in step by
+hand, and a test asserts the derivation both ways.
+
+looks_like_form_label() rejects a candidate two ways. Outright, if it matches a
+printed label ignoring case, spacing and punctuation. Or if it is short and
+built entirely from label words - which is how the abbreviations actually
+printed on C01 are caught without guessing at a list of them: 'ID NO' is
+'id' + 'no', 'FIRST NAME' is 'first' + 'name', and both words are already in
+the vocabulary from longer labels.
+
+looks_like_gibberish now returns true for a label OR for keyboard smash. The
+charset rules were not touched, only moved behind _looks_like_smash so the
+sanitiser can reach them on their own. 'hgftrujyfdyt' is still gibberish,
+'Hallie' is still a name, and there is a test asserting the old heuristics
+still do their own job.
+
+One thing this had to get right. A tick's answer IS a printed caption -
+'Female', 'African', 'South African', 'Passport Number' are all captions on
+the sheet and all legitimate values. The lexicon would have thrown away every
+one of them, including the sex Phase 3 works out from an ID number. So the
+lexicon stands aside for checkbox fields and for any target the atlas gives
+tick options to (24 of them, derived from the atlas, not typed out). Those
+fields still get the charset rules. As free text on a name field, 'Female' is
+still refused.
+
+FINDING 2 - _after_label was a primary path on forms that don't need it
+-----------------------------------------------------------------------
+It finds a label in the flattened page blob and returns the next six words. On
+a dense sheet that is usually the next label, and where RapidOCR's reading
+order is not left-to-right - C02 comes back in reverse column order - it is
+not even the right part of the page.
+
+extract_fields now asks the atlas what it can read, through a new
+form_atlas.atlas_coverage(code) returning (has measured geometry?, targets it
+can read box by box). On a sheet with an atlas, scraping is off entirely. On
+any sheet, a target with an atlas box is skipped even if the crop came back
+empty - an empty crop means nothing was written in that box, which is an
+answer, and better than a guess.
+
+  c01        atlas covered, 77 covered targets   -> no scraping
+  c02        atlas covered,  5 covered targets   -> no scraping
+  c03        atlas covered,  4 covered targets   -> no scraping
+  intake     atlas covered,  4 covered targets   -> no scraping
+  cow2_note  atlas covered,  3 covered targets   -> no scraping
+  process_note / assessment / hiv_risk / educational / unknown
+             no measured blank                   -> scraping still available
+
+The atlas decides this, not the caller, so extract_fields cannot be called in
+a way that re-enables the bug. Note that a form can have atlas boxes and no
+official blank to align them to - process_note is one - and in that case it
+reads nothing from those boxes, so atlas_coverage reports no covered targets
+and the scraper stays in play. Getting that wrong would have silently emptied
+the process-note fields.
+
+And even on an atlas-free sheet, _after_label now refuses a candidate that is
+itself printed wording, so one label cannot answer another.
+
+FINDING 3 - _first_sa_id named a person it had no evidence about
+----------------------------------------------------------------
+It scanned the whole page for a 13-digit run and wrote it to
+caregiver.id_number, caregiver.date_of_birth and caregiver.sex. Nothing
+checked whose section of the sheet the number came from. On c01_members_b it
+put a child's ID on the adult and derived a 2022 date of birth for them.
+
+On any sheet with an atlas, the number is now surfaced as an unassigned
+reading - shown, noted, attributed to nobody, and derived from for nobody.
+Sheets with no atlas keep the old behaviour, because scraping is all they
+have; there, an invalid 13-digit number is now marked invalid with its
+problems listed, matching Phase 3, and still derives nothing.
+
+_first_sa_id also now prefers a number that passes every SA ID rule rather
+than one that merely passes the checksum, which is the Phase 3 rule set
+reaching the last place that had not caught up with it.
+
+FINDING 4 - date boxes had no filtering at all
+----------------------------------------------
+Date-kind fields went through OCR and straight to staff. Added
+normalise_date_value(), applied to date-kind fields and to any target ending
+date_of_birth / date_joined / date_registered. A candidate must split into
+three number groups (or one run of eight digits, for a date grid read as one
+block), parse as a real calendar date in one of the three orders that appear
+on these forms, not be in the future, and not be more than 120 years ago.
+Anything else is unread. A two-digit year reads as a birth date, so '01-02-55'
+is 1955 and not 2055.
+
+Same rule as an SA ID after Phase 3: the whole thing or nothing.
+
+
+================================================================================
+4. FILES CHANGED
+================================================================================
+
+ backend/core/form_atlas.py             |  17 ++
+ backend/core/form_labels.py            | 182 +++++++++++++++++
+ backend/core/scan_ocr.py               |   4 +
+ backend/core/scan_templates.py         | 220 +++++++++++----------
+ backend/core/scan_text.py              |  84 +++++++-
+ backend/core/tests/test_form_labels.py | 346 +++++++++++++++++++++++++++++++++
+ backend/core/tests/test_scan_intake.py |  15 +-
+ frontend/src/pages/ScanIntake.js       |  25 +++
+ 8 files changed, 783 insertions(+), 110 deletions(-)
+
+form_labels.py  (new)
+  SCANNED_FORMS, EXTRACTION_LABELS, SHORT_FORM_LABELS, printed_labels(),
+  normalise_label(), option_targets(), looks_like_form_label(). Parses the
+  print templates and reads the atlas; lexicon memoised.
+
+form_atlas.py
+  atlas_coverage(code) -> (covered, targets), memoised. Returns no targets when
+  the form has no official blank to align to.
+
+scan_text.py
+  looks_like_gibberish = label lexicon OR the old charset rules, which moved
+  intact into _looks_like_smash. New normalise_date_value() and _plausible_date().
+  sanitize_ocr_value gained a date branch, a checkbox branch, and an
+  option-target branch that reaches the charset rules without the lexicon.
+
+scan_templates.py
+  extract_fields derives atlas coverage itself and skips covered targets; the
+  thirteen repeated _after_label(...) calls collapsed into a scrape() helper
+  reading EXTRACTION_LABELS. _after_label refuses label-shaped candidates and
+  documents why it is a last resort. _first_sa_id prefers a fully valid number.
+  New _add_page_id() holds the attribution rule.
+
+scan_ocr.py
+  _merge_extracted keeps target-less keyword readings as extras instead of
+  dropping them, so an unassigned ID survives to the screen.
+
+ScanIntake.js
+  "Read on the paper, but not placed" panel listing unattributed readings,
+  with a line saying they are not saved.
+
+
+================================================================================
+5. TESTS
+================================================================================
+
+Full backend suite: 127 tests, all passing (102 at the end of Phase 3, 25 new).
+Frontend build clean.
+
+New file: backend/core/tests/test_form_labels.py
+
+PrintedLabelsAreNotValuesTests
+  every label on the five scanned sheets is refused
+      iterates all 136 derived labels; each must be rejected
+  a label is refused as a name however it was typed
+      each label as-is, upper, lower, trailing colon, padded - against six
+      real name targets
+  the lexicon is drawn from the atlas and the templates
+      asserts the derivation, so removing a source fails the test rather than
+      quietly shrinking the list
+  the short printed forms on the paper are refused        ('ID NO', 'FIRST NAME')
+  real names and places still get through
+      Dlamini, Motswaledi, Mpilo, Khaayi, Kgocsi, Masego, Westonaria,
+      Nkululuthweni, Isixhosa, Sesotho, Grandchild, Hallie
+  the charset rules still do their own job                (no regression)
+  a tick answer is not treated as a label
+      'Female', 'African', 'South African', 'Passport Number', 'SA ID Number',
+      'Grand Parent Headed' survive on their own fields and are refused as names
+
+AfterLabelIsAFallbackOnlyTests
+  no scraped field comes back from an atlas-covered sheet  (all five sheets)
+  a target with an atlas box is never scraped              (every atlas form)
+  an atlas-free sheet still gets its values                (process note)
+  a label never answers for another label
+      every label in EXTRACTION_LABELS followed by five other labels
+  the scraper returns a real value when there is one
+
+PageWideIdIsNotAttributedTests
+  an atlas sheet offers the number without naming a person
+  no caregiver field is written from a page-wide scan      (all five sheets)
+  an atlas-free sheet keeps the old behaviour
+  an invalid number on an atlas-free sheet derives nothing
+  the scan prefers a valid number over the first one seen
+
+FixturePagesTests - the real photographs
+  the child's ID does not land on the caregiver
+      c01_members_b: asserts the page has no caregiver atlas target at all,
+      that no caregiver.id_number / date_of_birth / sex field exists, that the
+      number is present as one unassigned reading, and that it still lands on
+      member.2.id_number where the atlas measured it
+  no printed label is saved as a value on any fixture
+  no junk date is offered on any fixture
+
+JunkDateIsNotOfferedTests
+  the junk off the real photos is refused
+      '99b1 Ol11/', 'be-no-bloe', 'H1-&o-6ooe', 'Z1107o2 12', 'sllloi tno7',
+      '2001 28', 'Z8', '(Eee eRe oni es' - taken from the fixture output, not
+      invented
+  a real date survives however it was written
+      ISO, dd/mm/yyyy, dd.mm.yyyy, spaced, and an eight-digit run
+  a two digit year is read as a birth date not the future
+  a date nobody could have been born on is refused
+  a part read date is refused rather than guessed at       ('1980', '2022-12')
+
+Three pre-existing tests changed, all in ScanIntakeTests. Each asserted the
+old scraper behaviour on an atlas-covered sheet - 'intake' or 'c01' - which is
+the exact path this phase switches off, so as written they encoded the bug.
+Each kept its original intent and now proves the same extraction on an
+atlas-free sheet plus the new rule on the atlas-covered one:
+
+  test_classify_and_extract_intake_labels
+  test_gibberish_name_is_not_saved_as_hallie
+  test_extract_c01_address_from_ocr_text
+
+
+================================================================================
+6. WHAT IS STILL BROKEN (Phase 5)
+================================================================================
+
+Atlas geometry, untouched as instructed, and now the clear next thing. With
+the label and date noise gone, what remains on the fixtures is almost entirely
+boxes pointing at the wrong part of the paper:
+
+  1. C01 printed-field boxes are off. household.province reads 'gAaIGNg',
+     household.town reads 'pI esgorarig', household.ward reads 'ern ee',
+     household.district reads 'ranao'. Those are crops of the wrong region,
+     not bad OCR of the right one - the neighbouring boxes on the same row
+     read correctly (House Number '2291', Street 'Nkululuthweni').
+
+  2. C02 still fails alignment outright (c02_adult.jpg: align_failed=True,
+     zero fields). It has 5 atlas targets against C01's 77.
+
+  3. C03 has 4 atlas targets and reads two of them ('nAPio', 'Khany' for
+     Mpilo Khanyi).
+
+  4. member.N handwrite boxes on C01 read fragments of the wrong cell
+     ('WE Poe ge', 'eR', 'eae' for relationship_to_head), and
+     disability_description picks up table rules ('_ > Fee Oe eee |').
+
+  5. The CW 05 misplaced checkbox boxes noted in Phase 2.
+
+  6. RapidOCR reaching only twelve digits on two ID crops, from Phase 3 -
+     also a crop-edge problem.
+
+Also still open and not in any phase brief so far: the charset heuristics
+accept some real junk ('pI esgorarig', 'oholoza', 'ern ee'). The brief for
+this phase explicitly said not to regress them, and the prescribed fix was the
+lexicon, so they were left exactly as they were. Most of those values come
+from the mis-aimed crops in item 1, so Phase 5 may remove the symptom without
+touching the filter.
+
+
+================================================================================
+Commit
+================================================================================
+
+  Scan Intake: refuse the form's own labels, junk dates, and page-wide ID guesses
+
+The push to the remote failed again - this VM has no GitHub credentials
+('could not read Username for https://github.com'). The commit is on the
+branch locally, as with Phases 1, 2 and 3.
