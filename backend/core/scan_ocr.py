@@ -1,4 +1,5 @@
 """Local OCR for Scan Intake. Nothing is sent off this computer."""
+from difflib import SequenceMatcher
 from functools import lru_cache
 from io import BytesIO
 
@@ -651,6 +652,90 @@ def _merge_extracted(atlas_fields, keyword_fields):
     return extras + list(by_target.values())
 
 
+# A 13-cell crop that includes an extra ruling often yields a 13-digit
+# near-miss (invalid date or checksum). The same page text usually still
+# contains the real number. Only replace when the two readings look like
+# the same ID — never copy a page-wide number onto an empty box.
+_PAGE_ID_NEAR_MISS = 0.65
+
+
+def _derived_id_fields(prefix, parsed, page, bbox):
+    extra = []
+    if parsed.get('dob'):
+        extra.append({
+            'label': 'Date of Birth',
+            'value': parsed['dob'],
+            'target': f'{prefix}.date_of_birth',
+            'kind': 'date',
+            'page': page,
+            'bbox': list(bbox or [0, 0, 1, 1]),
+            'confidence': 0.85,
+            'low_confidence': False,
+            'confirmed': False,
+            DERIVED_KEY: True,
+        })
+    if parsed.get('sex'):
+        extra.append({
+            'label': 'Sex',
+            'value': parsed['sex'],
+            'target': f'{prefix}.sex',
+            'kind': 'printed',
+            'page': page,
+            'bbox': list(bbox or [0, 0, 1, 1]),
+            'confidence': 0.8,
+            'low_confidence': False,
+            'confirmed': False,
+            DERIVED_KEY: True,
+        })
+    return extra
+
+
+def _adopt_valid_page_id(fields):
+    """If a box read an invalid 13-digit near-miss of a valid page ID, keep the valid one."""
+    valid_page = []
+    for item in fields or []:
+        if not item.get('unassigned'):
+            continue
+        parsed = parse_sa_id(item.get('value') or '')
+        if parsed['valid']:
+            valid_page.append(parsed['digits'])
+    if not valid_page:
+        return list(fields or [])
+
+    out = []
+    adopted = []
+    for item in fields or []:
+        target = item.get('target') or ''
+        if item.get('kind') != 'sa_id' or not target.endswith('id_number'):
+            out.append(item)
+            continue
+        parsed = parse_sa_id(item.get('value') or '')
+        if parsed['valid'] or not parsed['is_sa_length']:
+            out.append(item)
+            continue
+        best, best_ratio = None, 0.0
+        for cand in valid_page:
+            ratio = SequenceMatcher(None, parsed['digits'], cand).ratio()
+            if ratio > best_ratio:
+                best, best_ratio = cand, ratio
+        if not best or best_ratio < _PAGE_ID_NEAR_MISS:
+            out.append(item)
+            continue
+        fixed = dict(item)
+        winner = parse_sa_id(best)
+        fixed['value'] = winner['digits']
+        fixed['confidence'] = 0.85
+        fixed['low_confidence'] = False
+        fixed.pop('invalid_id', None)
+        if 'Not a valid SA ID' in (fixed.get('note') or ''):
+            fixed.pop('note', None)
+        out.append(fixed)
+        adopted.append((target.rsplit('.', 1)[0], winner, item.get('page'), item.get('bbox')))
+    for prefix, parsed, page, bbox in adopted:
+        out.extend(_derived_id_fields(prefix, parsed, page, bbox))
+    return out
+
+
 def _clean_fields(fields):
     cleaned = []
     for item in fields or []:
@@ -709,7 +794,8 @@ def _process_one(image, pdf_text, engine, have_tess):
                 geometry_missing = True
             fields = keywords
         else:
-            fields = _merge_extracted(fields, keywords)
+            fields = _adopt_valid_page_id(_merge_extracted(fields, keywords))
+            fields = _reconcile_id_derived(fields)
         fields = _clean_fields(fields)
         return {
             'image': working or image,

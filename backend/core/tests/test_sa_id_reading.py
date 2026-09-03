@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 
 from core.models import Caregiver, Household, HouseholdMember, ScanIntakeJob, ScanIntakePage
 from core.sa_id import id_digits, parse_sa_id
-from core.scan_ocr import best_sa_id_reading, _reconcile_id_derived
+from core.scan_ocr import best_sa_id_reading, _adopt_valid_page_id, _reconcile_id_derived
 from core.scan_text import sanitize_ocr_value
 
 FIXTURES = Path(__file__).resolve().parent / 'fixtures' / 'handwrite'
@@ -184,6 +184,63 @@ class EngineDisagreementTests(TestCase):
         _v, good = best_sa_id_reading([(VALID, 0.5)])
         _v, poor = best_sa_id_reading([(BAD_CHECKSUM, 0.5)])
         self.assertGreater(good, poor)
+
+
+class AdoptPageIdTests(TestCase):
+    """A garbled 13-cell read yields to the valid number found on the same page."""
+
+    def _fields(self, box_id, page_id, target='member.2.id_number'):
+        return [
+            {
+                'label': 'ID number read on this page - not placed',
+                'value': page_id,
+                'target': '',
+                'kind': 'sa_id',
+                'confidence': 0.55,
+                'low_confidence': True,
+                'confirmed': False,
+                'unassigned': True,
+            },
+            {
+                'label': 'ID Number',
+                'value': box_id,
+                'target': target,
+                'kind': 'sa_id',
+                'page': 1,
+                'bbox': [0.2, 0.3, 0.6, 0.35],
+                'confidence': 0.5,
+                'low_confidence': True,
+                'confirmed': False,
+                'invalid_id': True,
+                'note': 'Not a valid SA ID: not a real date of birth',
+            },
+        ]
+
+    def test_a_near_miss_box_takes_the_valid_page_number(self):
+        out = {f.get('target'): f for f in _adopt_valid_page_id(
+            self._fields('2121228026107', '2212280261081'),
+        )}
+        self.assertEqual(out['member.2.id_number']['value'], '2212280261081')
+        self.assertFalse(out['member.2.id_number'].get('invalid_id'))
+        self.assertEqual(out['']['value'], '2212280261081')
+        self.assertTrue(out['']['unassigned'])
+        self.assertEqual(out['member.2.date_of_birth']['value'], '2022-12-28')
+        self.assertEqual(out['member.2.sex']['value'], 'Female')
+
+    def test_an_empty_box_is_not_filled_from_the_page(self):
+        fields = self._fields('', '2212280261081')
+        fields[1].pop('invalid_id', None)
+        fields[1]['value'] = ''
+        out = {f.get('target'): f for f in _adopt_valid_page_id(fields)}
+        self.assertEqual(out['member.2.id_number']['value'], '')
+        self.assertNotIn('member.2.date_of_birth', out)
+
+    def test_a_dissimilar_valid_page_id_is_not_copied(self):
+        out = {f.get('target'): f for f in _adopt_valid_page_id(
+            self._fields('2121228026107', VALID),
+        )}
+        self.assertEqual(out['member.2.id_number']['value'], '2121228026107')
+        self.assertTrue(out['member.2.id_number'].get('invalid_id'))
 
 
 class DerivedValueConflictTests(TestCase):
