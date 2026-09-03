@@ -8,9 +8,10 @@ What was actually supplied
 * The beneficiary-file table of contents (`docs/official/beneficiary-file-contents.png`
   and `BENEFICIARY_FILE_CONTENTS.md`) is a Yes/No evidence checklist. It has
   no provinces, districts, municipalities, towns, or wards.
-* The DSD CW 01–14 / COW 1–3 Word and Excel pack (`docs/official/dsd-source/`)
-  has column headers named Province / District / Service point, but no list
-  of values for this NPO's service area.
+* The DSD / CCG Word pack (`docs/official/dsd-source/`) includes C01
+  (`CCG_Form_C01.docx`) with Province / District / Municipality / Town / Ward
+  cells. Those cells are empty on the blank — there is still no list of values
+  for this NPO's service area. The NPO PDF is a file-order guide only.
 * `seed_data.py` training towns (Umlazi, Soweto, …) are dummy classroom
   data, not this organisation's area — they are not used.
 * The only geographic strings in the supplied Scan Intake material are the

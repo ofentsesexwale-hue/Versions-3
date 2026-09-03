@@ -1,44 +1,79 @@
 # Print template inventory
 
-Official wording and geometry come from `NPO_case_management_file.pdf` (38-page NPO case file). Fill, print, and Scan Intake share one atlas and the frozen blank PNGs in `backend/core/official_blanks/`. Those PNGs are rendered from the PDF at scale 2.0 (landscape sheets rotated 90° so the printed face is upright). A standing test re-renders the PDF and checks SHA-256 against `blanks.json`. If that test fails, fill/print and scan have drifted.
+**Official originals are the Word / `.doc` files** in [`dsd-source/`](dsd-source/).
+The full field inventory is [`WORD_TEMPLATES.md`](WORD_TEMPLATES.md).
 
-## Atlas forms (this pass)
+`NPO_case_management_file.pdf` is a **guide** for how a household file is
+assembled. Do **not** write, print, or scan by overlaying that PDF.
 
-| Code | Official sheet | PDF pp. | Blank PNG | Verdict |
+The current product still stamps frozen blank PNGs in
+`backend/core/official_blanks/` (rendered from the PDF at scale 2.0,
+`ATLAS_VERSION` `npo-pdf-v1.3`) until fill/print/scan is rebuilt onto native
+Word. A standing test re-renders the PDF and checks SHA-256 against
+`blanks.json` so the *current* overlay path does not drift. That test does
+not make the PDF the source of truth.
+
+## Atlas forms (current overlay — to be replaced by Word fill)
+
+| Code | Official Word source | PDF pp. (guide only) | Blank PNG | Verdict |
 | --- | --- | --- | --- | --- |
-| `c01` | C01 Household Details CCG Form v.1.2 | 4–5 | `c01_p0.png`, `c01_p1.png` | **FAITHFUL** — print is the PDF blank + overlay ink, not a redrawn table |
-| `intake` (CW 05) | CW 05 Intake Form, DSD header | 8–10 | `intake_p0.png`–`p2` | **FAITHFUL** — same |
-| `c02` | C02 ADULT Assessment, landscape | 6 | `c02_p0.png` | **FAITHFUL** blank; structured extract = identity only (ticks have no serializer) |
-| `c03` | C03 CHILD Beneficiary Assessment, landscape | 7 | `c03_p0.png` | **FAITHFUL** blank; identity only |
-| `cow2_note` | COW 02 Community Work Process Note, DSD header | Word original | `cow2_p0.png`, `cow2_p1.png` | **FAITHFUL** — print is the official blank + overlay (household number, town, assigned worker). Narratives stay attach-only. |
+| `c01` | `dsd-source/CCG_Form_C01.docx` | 4–5 | `c01_p0.png`, `c01_p1.png` | Overlay still uses the PDF blank; Word is the original |
+| `intake` (CW 05) | `dsd-source/CW_05_Intake_Form_28082019.docx` | 8–10 | `intake_p0.png`–`p2` | Same |
+| `c02` | `dsd-source/C02_Adult_Assessment_Form.docx` | 6 | `c02_p0.png` | Word has the full Yes/No/DK assessment; atlas extract is identity only |
+| `c03` | `dsd-source/C03_Child_Beneficiary_Assessment.docx` | 7 | `c03_p0.png` | Word has the full child assessment ticks; atlas extract is identity only (`member.N`) |
+| `cow2_note` | `dsd-source/COW_2_Process_note_04042019.doc` | Word original | `cow2_p0.png`, `cow2_p1.png` | Overlay on official blank; narratives stay attach-only |
+
+## Word originals not yet on the atlas
+
+| Sheet | File |
+| --- | --- |
+| Family Care Plan | `1Family_Care_Plan.docx` |
+| Educational Progress Record | `Educational_Progress_Record.docx` |
+| Monthly household services (C06 / CO6) | `C06_Monthly_Household_Services_Report.docx` |
+| Site Visit + Family Exit | `04_Process_Notes.docx` (two templates in one file) |
+| Content page | `Content_Page.docx` |
+| NPO check list | `NPO_Check_List.docx` |
+| HIV Risk Assessment pack (six sheets) | `DSD_HIV_Risk_Assessment_FULL_PACK.docx` |
+| Internal / external referral | `CW_4a_*.doc`, `CW_4b_*.doc` |
+| Process note / termination | `CW_11_*.doc`, `CW_13_*.doc` |
 
 ## Older HTML print templates (not the official canvas)
 
-These still exist for batch/full-file printing. They are **INVENTED** relative to the PDF (org letterhead, Arial cards, collapsed page count). Statutory fill/print for C01 and CW 05 must **not** use them.
+These still exist for batch/full-file printing. They are **INVENTED** relative
+to the Word originals (org letterhead, Arial cards, collapsed page count).
+Statutory fill/print for C01 and CW 05 must **not** use them.
 
 | Key | File | Notes |
 | --- | --- | --- |
-| `intake` (legacy HTML) | `print/intake.html` | Invented 2-page CW 05; superseded by official canvas when printing `intake` |
-| `family_care_plan` (legacy) | `print/family_care_plan.html` | Org header; not PDF landscape grid |
+| `intake` (legacy HTML) | `print/intake.html` | Invented 2-page CW 05 |
+| `family_care_plan` (legacy) | `print/family_care_plan.html` | Org header; not the landscape Word grid |
 | `monthly_report` | `print/monthly_report.html` | Invented C06 portrait with org logo |
-| `process_note` | `print/process_note.html` | Approximate CW 11 with DSD header + org logo in `_gov.html` |
+| `process_note` | `print/process_note.html` | Approximate CW 11 |
 | `reporter` | `print/reporter.html` | Approximate CW 02 |
 | `assessment` | `print/assessment.html` | Approximate CW 09 |
 | `referral` | `print/referral.html` | Approximate CW 4B |
 | `termination` | `print/termination.html` | Approximate CW 13 |
-| `hiv_risk`, `hivstat`, `consent` | matching HTML | Approximate; HIV ticks not stored unless already on the member model |
+| `hiv_risk`, `hivstat`, `consent` | matching HTML | Approximate; HIV pack Word has the real sheets |
 | `cow1`, `evaluation`, `group_work` | matching HTML | Approximate COW/GRW |
-| `cow2_note` (legacy HTML) | `print/cow2_note.html` | Invented; superseded by official canvas when printing `cow2_note` |
-| `checklist` | `print/checklist.html` | Approximate NPO checklist |
-| `educational`, `site_visit`, `exit`, `success_story`, `form22` | matching HTML | Org-branded / invented — attach-only is enough |
+| `cow2_note` (legacy HTML) | `print/cow2_note.html` | Invented |
+| `checklist` | `print/checklist.html` | Approximate; Word original is `NPO_Check_List.docx` |
+| `educational`, `site_visit`, `exit`, `success_story`, `form22` | matching HTML | Org-branded; Word originals now exist for educational, site visit, and exit |
 | `_gov.html` | shared | Adds org logo on CW sheets — **forbidden on statutory official-canvas pages** |
 
-Girl/Boy Index and family contract: no atlas. Attach-only.
+Girl/Boy Index and family contract: no dedicated Word sheet beyond CW 09.
+Attach-only until an original is supplied.
 
-## Source pack held for later (not yet atlas)
+## Source pack
 
-The beneficiary **table of contents** (Yes/No evidence checklist) is `beneficiary-file-contents.png`, transcribed in [`BENEFICIARY_FILE_CONTENTS.md`](BENEFICIARY_FILE_CONTENTS.md).
+The beneficiary **table of contents** is `Content_Page.docx` (and the scanned
+`beneficiary-file-contents.png`), transcribed in
+[`BENEFICIARY_FILE_CONTENTS.md`](BENEFICIARY_FILE_CONTENTS.md).
 
-Official CW 01–14 and COW 1–3 Word/Excel originals are in [`dsd-source/`](dsd-source/). Classify + attach until an atlas page exists.
+All CW 01–14, COW 1–3, CCG C01–C03/C06, Family Care Plan, educational progress,
+process notes, check list, content page, and the HIV pack are in
+[`dsd-source/`](dsd-source/). Classify + attach until a Word-fill atlas page
+exists.
 
-Still only in earlier uploads, not copied into this folder yet: Group Work Proposal + GRW 02–04, procedure manual, admin-tools training deck, monthly reporting workbook.
+Still only in earlier uploads, not copied into this folder yet: Group Work
+Proposal + GRW 02–04, procedure manual, admin-tools training deck, monthly
+reporting workbook.

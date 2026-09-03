@@ -1,10 +1,41 @@
-# DSD CW / COW source pack and CCG originals
+# DSD / CCG source pack
 
-Unedited Department of Social Development originals. CW forms dated 28 August 2019, COW forms dated 4 April 2019. CCG C01 and the HIV Risk Assessment pack are undated DSD .docx templates. Filenames keep the DSD date stamp where present. Cursor upload hashes were stripped.
+Unedited Department of Social Development and CCG originals. CW forms dated
+28 August 2019, COW forms dated 4 April 2019. CCG C01–C03/C06, Family Care
+Plan, educational progress, process notes, content page, NPO check list, and
+the HIV Risk Assessment pack are undated `.docx` templates. Filenames keep
+the DSD date stamp where present. Cursor upload hashes were stripped.
 
-Held as reference. Do not redraw these sheets for print or Scan Intake until an atlas page is added.
+**These Word files are the official originals.** The NPO case-management PDF
+is a guide for file order only — do not overlay it. Field-level inventory:
+[`../WORD_TEMPLATES.md`](../WORD_TEMPLATES.md). Beneficiary file index:
+[`../BENEFICIARY_FILE_CONTENTS.md`](../BENEFICIARY_FILE_CONTENTS.md).
 
-The **beneficiary file table of contents** (the Yes/No evidence checklist) is documented in [`../BENEFICIARY_FILE_CONTENTS.md`](../BENEFICIARY_FILE_CONTENTS.md).
+## CCG household file (Word)
+
+| Code | File | Notes |
+| --- | --- | --- |
+| C01 | `CCG_Form_C01.docx` | Household details v.1.2. Duplicate copy: `CCG_Form_C01_Household_Details.docx` |
+| C02 | `C02_Adult_Assessment_Form.docx` | Landscape; identity + Yes/No/DK assessment |
+| C03 | `C03_Child_Beneficiary_Assessment.docx` | Landscape; identity + child assessment ticks |
+| C06 / CO6 | `C06_Monthly_Household_Services_Report.docx` | Landscape monthly services grid v2.0 |
+| FCP | `1Family_Care_Plan.docx` | Landscape; two pages |
+| Educational | `Educational_Progress_Record.docx` | Landscape school terms |
+| Process notes | `04_Process_Notes.docx` | **Two templates:** Site Visit form and Family Exit form |
+| Content page | `Content_Page.docx` | Household file index |
+| NPO check list | `NPO_Check_List.docx` | Supervisor Yes/No evidence table |
+| HIV pack | `DSD_HIV_Risk_Assessment_FULL_PACK.docx` | **Six sheets** in one file (see below) |
+
+### HIV pack sheets (`DSD_HIV_Risk_Assessment_FULL_PACK.docx`)
+
+1. HIV RISK ASSESSMENT FORM (Parts 1–3: screening, risk indicators, action)
+2. Primary Caregiver Consent to Supportive Referral for HIV Testing
+3. Child Assent Form for referral for HIV Testing
+4. Client Referral Form (Part A slip + Part B services, **32 service codes**)
+5. HTS Tracking Form
+6. Beneficiary Details (confidential disclosure)
+
+## CW / COW (2019)
 
 | Code | File |
 | --- | --- |
