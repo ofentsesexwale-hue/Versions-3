@@ -34,10 +34,11 @@ from .permissions import (
 )
 from .form_io import apply_buckets, needs_staff_confirmation
 from .official_blanks import ATLAS_VERSION
+from .sa_id import id_digits
 from .scan_ocr import engine_status, ocr_available, process_upload
 from .scan_templates import CHECKLIST_FOR_FORM, extract_fields, form_choices, form_label
 from .serializers import CaregiverSerializer, HouseholdMemberSerializer, HouseholdSerializer
-from .views import _ensure_checklist, scoped_household_qs
+from .views import _ensure_checklist, duplicate_id_matches, scoped_household_qs
 
 
 def _deny_edit(user):
@@ -169,7 +170,27 @@ def resolve_buckets(pages):
                 'page_index': entry['page_index'],
             })
 
+    _drop_unreadable_ids(values, confirmed)
     return ResolvedScan(values, confirmed, labels, conflicts, held_back)
+
+
+def _drop_unreadable_ids(values, confirmed):
+    """A part-read SA ID is not a short ID, so it must not reach the file.
+
+    The OCR sanitiser already refuses partial digit strings, but page fields
+    come back through the request body on save, so the rule is enforced again
+    here. A number under a Passport or Permit tick is left alone - only an SA
+    ID has to be 13 digits.
+    """
+    for target in [t for t in values if t.endswith('id_number')]:
+        prefix = target.rsplit('.', 1)[0]
+        id_type = (values.get(f'{prefix}.id_type') or 'SA ID Number').strip()
+        if id_type and id_type != 'SA ID Number':
+            continue
+        if id_digits(values[target]):
+            continue
+        values.pop(target)
+        confirmed.discard(target)
 
 
 def _page_payload(page, request):
@@ -216,6 +237,37 @@ def _job_payload(job, request):
         'pages': pages,
         'created_at': job.created_at,
     }
+
+
+def _truthy(value):
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _scanned_id_duplicates(user, resolved, household):
+    """ID numbers on this scan that already belong to somebody on another file.
+
+    Manual entry warns about this while the number is being typed (IdCheckHint);
+    a scan has nobody typing, so the same warning is raised here, before
+    anything is written. Same query, so live and TEST- files stay apart.
+    """
+    out = []
+    for target in sorted(resolved.values):
+        if not target.endswith('id_number') or target not in resolved.confirmed:
+            continue
+        digits = id_digits(resolved.values[target])
+        if not digits:
+            continue
+        matches = duplicate_id_matches(
+            user, digits, exclude_household=household.pk if household else None,
+        )
+        if matches:
+            out.append({
+                'target': target,
+                'label': resolved.labels.get(target, target),
+                'id_number': digits,
+                'matches': matches,
+            })
+    return out
 
 
 class ScanIntakeViewSet(viewsets.ViewSet):
@@ -372,6 +424,14 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             return Response({
                 'detail': 'Confirm the highlighted surname, ID and date of birth before saving.',
                 'unconfirmed': unconfirmed,
+            }, status=400)
+
+        duplicates = _scanned_id_duplicates(request.user, resolved, job.household)
+        if duplicates and not _truthy(request.data.get('accept_duplicates')):
+            return Response({
+                'detail': 'One of the ID numbers on this scan is already on another file. '
+                          'Check whether this is the same person before saving.',
+                'duplicates': duplicates,
             }, status=400)
 
         with transaction.atomic():

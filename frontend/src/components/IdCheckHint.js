@@ -47,7 +47,7 @@ export function IdCheckHint({
 
   return (
     <div className="space-y-2 text-sm" data-testid="id-check-hint">
-      {info.luhn_ok ? (
+      {(info.valid ?? info.luhn_ok) ? (
         <p className="flex items-center gap-1.5 text-emerald-800">
           <BadgeCheck className="h-4 w-4" /> {info.message}
         </p>

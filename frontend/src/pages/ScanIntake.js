@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Camera, ImagePlus, Loader2, ScanLine, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Camera, ImagePlus, Loader2, ScanLine, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmableField } from "@/components/ConfirmableField";
+import { IdCheckHint } from "@/components/IdCheckHint";
 import OfficialFormCanvas from "@/components/official/OfficialFormCanvas";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -68,14 +69,31 @@ function mergeValuesIntoFields(fields, values) {
 function mergedFromPages(pages) {
   const values = {};
   const rows = [];
-  const seen = new Set();
+  const byTarget = new Map();
   (pages || []).forEach((p) => {
     (p.fields || []).forEach((f) => {
-      if (!f.target || !(f.value || "").toString().trim()) return;
-      values[f.target] = f.kind === "checkbox" && f.option ? f.option : f.value;
-      if (seen.has(f.target)) return;
-      seen.add(f.target);
-      rows.push({ target: f.target, label: f.label, value: values[f.target], confirmed: f.confirmed });
+      if (!f.target) return;
+      const value = (f.value || "").toString().trim();
+      // A field left blank because two readings disagreed still belongs in the
+      // summary: the note is the only place staff learn about the clash.
+      const flagged = !!(f.note || f.conflict || f.invalid_id);
+      if (!value && !flagged) return;
+      if (value) values[f.target] = f.kind === "checkbox" && f.option ? f.option : f.value;
+      const existing = byTarget.get(f.target);
+      if (existing) {
+        if (!existing.value && value) existing.value = values[f.target];
+        if (!existing.note && f.note) existing.note = f.note;
+        return;
+      }
+      const row = {
+        target: f.target,
+        label: f.label,
+        value: value ? values[f.target] : "",
+        confirmed: f.confirmed,
+        note: f.note || "",
+      };
+      byTarget.set(f.target, row);
+      rows.push(row);
     });
   });
   return { values, rows };
@@ -95,6 +113,7 @@ export default function ScanIntake() {
   const [pageTab, setPageTab] = useState({});
   const [openText, setOpenText] = useState({});
   const [engine, setEngine] = useState(null);
+  const [duplicates, setDuplicates] = useState(null);
 
   const err = (e) => {
     const data = e?.response?.data || {};
@@ -162,6 +181,7 @@ export default function ScanIntake() {
   };
 
   const setField = (pageId, index, patch) => {
+    setDuplicates(null);
     patchPages(job.pages.map((p) => {
       if (p.id !== pageId) return p;
       const fields = p.fields.map((f, i) => (i === index ? { ...f, ...patch } : f));
@@ -170,6 +190,7 @@ export default function ScanIntake() {
   };
 
   const setPageValues = (pageId, values) => {
+    setDuplicates(null);
     patchPages(job.pages.map((p) => {
       if (p.id !== pageId) return p;
       return { ...p, fields: mergeValuesIntoFields(p.fields, values) };
@@ -183,16 +204,22 @@ export default function ScanIntake() {
     })));
   };
 
-  const confirm = async () => {
+  const confirm = async (acceptDuplicates = false) => {
     setSaving(true);
     try {
-      const res = await api.post(`/scan-intake/${job.id}/confirm/`, { pages: job.pages });
+      const res = await api.post(`/scan-intake/${job.id}/confirm/`, {
+        pages: job.pages,
+        ...(acceptDuplicates ? { accept_duplicates: true } : {}),
+      });
+      setDuplicates(null);
       toast.success(`Saved to file ${res.data.org_household_number}`);
       if (res.data.held_back?.length) {
         toast.warning(res.data.detail, { duration: 12000 });
       }
       navigate(`/households/${res.data.household}`);
     } catch (e) {
+      const found = e?.response?.data?.duplicates;
+      setDuplicates(found?.length ? found : null);
       toast.error(err(e));
     } finally {
       setSaving(false);
@@ -329,16 +356,31 @@ export default function ScanIntake() {
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {merged.rows.map((row) => {
-                    const trio = needsConfirm(row.target);
-                    if (!trio) {
+                    const pageField = (job.pages || []).flatMap((p) => p.fields || []).find((f) => f.target === row.target);
+                    const note = row.note ? (
+                      <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-800" data-testid={`scan-note-${row.target}`}>
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {row.note}
+                      </p>
+                    ) : null;
+                    const idHint = row.target.endsWith("id_number") ? (
+                      <div className="mt-2">
+                        <IdCheckHint
+                          idNumber={row.value}
+                          idType={merged.values[`${row.target.replace(/\.id_number$/, "")}.id_type`]}
+                          householdId={preHousehold || undefined}
+                        />
+                      </div>
+                    ) : null;
+                    if (!needsConfirm(row.target)) {
                       return (
                         <div key={row.target} className="space-y-1">
                           <Label>{row.label}</Label>
                           <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm">{row.value}</p>
+                          {note}
+                          {idHint}
                         </div>
                       );
                     }
-                    const pageField = (job.pages || []).flatMap((p) => p.fields || []).find((f) => f.target === row.target);
                     return (
                       <ConfirmableField
                         key={row.target}
@@ -349,6 +391,8 @@ export default function ScanIntake() {
                         onConfirm={() => confirmTrio(row.target)}
                       >
                         <span className="text-sm">{row.value}</span>
+                        {note}
+                        {idHint}
                       </ConfirmableField>
                     );
                   })}
@@ -477,11 +521,53 @@ export default function ScanIntake() {
               </Card>
             );
           })}
+          {duplicates && (
+            <div
+              className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+              data-testid="scan-duplicate-warning"
+            >
+              <p className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="h-4 w-4" /> This ID is already on another file
+              </p>
+              {duplicates.map((dup) => (
+                <div key={dup.target} className="mt-2">
+                  <p>
+                    {dup.label} {dup.id_number}
+                  </p>
+                  <ul className="mt-1 space-y-1">
+                    {(dup.matches || []).map((m) => (
+                      <li key={`${m.role}-${m.household_id}`}>
+                        <Link className="underline" to={`/households/${m.household_id}`}>
+                          {m.name || "Unnamed"} · {m.org_household_number} ({m.role})
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <p className="mt-3 text-amber-900">
+                Open the file above and check whether this is the same person. If it is somebody
+                else, correct the ID before saving.
+              </p>
+            </div>
+          )}
           <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-[#f3ead8]/95 p-3">
             <Button variant="outline" onClick={() => { setJob(null); setFiles([]); }}>Start over</Button>
-            <Button onClick={confirm} disabled={saving} className="gap-2" data-testid="scan-intake-confirm-button">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to case file
-            </Button>
+            {duplicates ? (
+              <Button
+                variant="secondary"
+                onClick={() => confirm(true)}
+                disabled={saving}
+                className="gap-2 bg-amber-500 text-white hover:bg-amber-600"
+                data-testid="scan-intake-save-anyway-button"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save anyway
+              </Button>
+            ) : (
+              <Button onClick={() => confirm()} disabled={saving} className="gap-2" data-testid="scan-intake-confirm-button">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to case file
+              </Button>
+            )}
           </div>
         </>
       )}

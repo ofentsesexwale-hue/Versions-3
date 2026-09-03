@@ -93,7 +93,11 @@ def sanitize_ocr_value(target, value, kind=None):
     if not text:
         return ''
     if kind == 'sa_id' or (target or '').endswith('id_number'):
-        return text
+        # Spaces and dashes are normal on a form; a short read is not a short
+        # ID. Returning the partial digits is what put '74' and '4' into ID
+        # fields, so anything that is not 13 digits is simply unreadable.
+        from .sa_id import id_digits
+        return id_digits(text)
     if looks_like_gibberish(text):
         return ''
     if target in _NAME_TARGETS or (target or '').endswith('.name') or (target or '').endswith('.surname') or (target or '').endswith('.known_as'):

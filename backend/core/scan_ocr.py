@@ -6,7 +6,7 @@ from PIL import Image, ImageFilter, ImageOps
 
 from .form_atlas import fields_for, has_geometry
 from .official_blanks import ATLAS_VERSION, blank_path
-from .sa_id import parse_sa_id
+from .sa_id import SA_ID_LENGTH, parse_sa_id
 from .scan_align import TICK_MARKED, TICK_UNREADABLE
 from .scan_templates import classify_text, extract_fields
 from .scan_text import looks_like_gibberish, sanitize_ocr_value
@@ -15,6 +15,9 @@ from .scan_text import looks_like_gibberish, sanitize_ocr_value
 # stripped there so it never reaches the stored page or the browser.
 TICK_KEY = '_tick'
 INK_KEY = '_ink'
+# Marks a date of birth or sex worked out from the ID digits rather than read
+# off the paper. Stripped once the two readings have been reconciled.
+DERIVED_KEY = '_from_id'
 
 
 def _register_heif():
@@ -158,6 +161,47 @@ def _prepare_line_crop(crop, kind):
     return image
 
 
+def best_sa_id_reading(readings):
+    """Pick the best 13-digit ID among what the engines saw.
+
+    An SA ID is handwritten digits in a printed cell grid, which both engines
+    misread in different ways, so the checksum is the tie-breaker rather than
+    either engine's own confidence. Order of preference: a reading that passes
+    every SA ID rule, then any 13-digit reading, then engine confidence. If no
+    reading is 13 digits long the field is unreadable and stays empty - a
+    partial digit string is never an ID.
+    """
+    candidates = []
+    seen = set()
+    digit_runs = [''.join(ch for ch in (text or '') if ch.isdigit()) for text, _c in readings]
+    for (_text, conf), digits in zip(readings, digit_runs):
+        if digits and digits not in seen:
+            seen.add(digits)
+            candidates.append((digits, float(conf or 0.0)))
+    # Each engine may catch a different part of the cell grid, so a joined
+    # reading is worth testing - but only when the checksum vouches for it.
+    # Otherwise two partial reads would be stitched into a plausible-looking
+    # ID that nobody wrote.
+    joined = ''.join(digit_runs)[:SA_ID_LENGTH]
+    if joined not in seen and parse_sa_id(joined)['valid']:
+        candidates.append((joined, 0.0))
+
+    best, best_rank = '', None
+    for digits, conf in candidates:
+        trimmed = digits[:SA_ID_LENGTH]
+        parsed = parse_sa_id(trimmed)
+        rank = (
+            0 if parsed['valid'] else 1,
+            0 if parsed['is_sa_length'] else 1,
+            -conf,
+        )
+        if best_rank is None or rank < best_rank:
+            best, best_rank = trimmed, rank
+    if len(best) != SA_ID_LENGTH:
+        return '', 0.2
+    return best, (0.9 if parse_sa_id(best)['valid'] else 0.55)
+
+
 def _ocr_crop(crop, kind, reference=None):
     if kind == 'checkbox':
         from .scan_align import checkbox_state
@@ -166,12 +210,10 @@ def _ocr_crop(crop, kind, reference=None):
             return '', 0.45
         return ('X' if state == TICK_MARKED else ''), 0.8
     prepared = _prepare_line_crop(crop, kind)
-    rapid_text, rapid_conf = '', 0.0
-    if kind != 'sa_id':
-        from .scan_engines import read_line
-        rapid_text, rapid_conf = read_line(prepared)
-        if kind == 'handwrite' and looks_like_gibberish(rapid_text):
-            rapid_text, rapid_conf = '', 0.0
+    from .scan_engines import read_line
+    rapid_text, rapid_conf = read_line(prepared)
+    if kind == 'handwrite' and looks_like_gibberish(rapid_text):
+        rapid_text, rapid_conf = '', 0.0
     psm = 8 if kind == 'sa_id' else 7
     cfg = f'--oem 1 --psm {psm}'
     if kind == 'sa_id':
@@ -207,15 +249,7 @@ def _ocr_crop(crop, kind, reference=None):
     except Exception:
         pass
     if kind == 'sa_id':
-        digits = ''.join(ch for ch in (rapid_text + ' ' + tess_text) if ch.isdigit())
-        # Prefer a 13-digit SA ID from either engine.
-        blob = ''.join(ch for ch in rapid_text if ch.isdigit()) + ''.join(ch for ch in tess_text if ch.isdigit())
-        for candidate in (tess_text, ''.join(ch for ch in rapid_text if ch.isdigit()), digits):
-            only = ''.join(ch for ch in (candidate or '') if ch.isdigit())[:13]
-            if len(only) == 13:
-                return only, 0.75
-        only = ''.join(ch for ch in (tess_text or rapid_text or '') if ch.isdigit())[:13]
-        return only, (0.7 if only else 0.2)
+        return best_sa_id_reading([(tess_text, tess_conf), (rapid_text, rapid_conf)])
     # Prefer RapidOCR on names/handwriting; Tesseract only if RapidOCR is empty.
     if rapid_text and (kind == 'handwrite' or rapid_conf >= tess_conf or not tess_text):
         text, mean = rapid_text, rapid_conf
@@ -347,11 +381,12 @@ def _atlas_fields(form_type, aligned, page_index):
             # The group resolver decides which option wins; on its own a box
             # only knows whether it carries a mark.
             value = option if (option and tick == TICK_MARKED) else ''
+        id_problems = []
         if spec['kind'] == 'sa_id' and value:
             parsed = parse_sa_id(value)
-            if parsed.get('digits'):
-                value = parsed['digits']
-                conf = 0.9 if parsed.get('luhn_ok') else 0.5
+            value = parsed['digits']
+            id_problems = parsed['problems']
+            conf = 0.9 if parsed['valid'] else 0.5
         item = {
             'label': spec['label'],
             'value': value,
@@ -363,6 +398,11 @@ def _atlas_fields(form_type, aligned, page_index):
             'low_confidence': float(conf) < 0.72 or spec['kind'] in ('handwrite', 'narrative') or not value,
             'confirmed': False,
         }
+        if id_problems:
+            # Shown to staff rather than blanked, but never treated as usable.
+            item['invalid_id'] = True
+            item['low_confidence'] = True
+            item['note'] = 'Not a valid SA ID: ' + '; '.join(id_problems)
         if spec.get('option'):
             item['option'] = spec['option']
         if spec.get('group'):
@@ -375,7 +415,9 @@ def _atlas_fields(form_type, aligned, page_index):
         if spec['kind'] == 'sa_id' and spec.get('target', '').endswith('id_number') and value:
             parsed = parse_sa_id(value)
             prefix = spec['target'].rsplit('.', 1)[0]
-            if parsed.get('dob'):
+            # parse_sa_id only fills these once every rule passes, so an ID
+            # that fails the date or the checksum derives nothing.
+            if parsed['dob']:
                 out.append({
                     'label': 'Date of Birth',
                     'value': parsed['dob'],
@@ -383,11 +425,12 @@ def _atlas_fields(form_type, aligned, page_index):
                     'kind': 'date',
                     'page': spec['page'],
                     'bbox': list(spec['box']),
-                    'confidence': 0.85 if parsed.get('luhn_ok') else 0.45,
-                    'low_confidence': not parsed.get('luhn_ok'),
+                    'confidence': 0.85,
+                    'low_confidence': False,
                     'confirmed': False,
+                    DERIVED_KEY: True,
                 })
-            if parsed.get('sex'):
+            if parsed['sex']:
                 out.append({
                     'label': 'Sex',
                     'value': parsed['sex'],
@@ -395,9 +438,10 @@ def _atlas_fields(form_type, aligned, page_index):
                     'kind': 'printed',
                     'page': spec['page'],
                     'bbox': list(spec['box']),
-                    'confidence': 0.8 if parsed.get('luhn_ok') else 0.4,
-                    'low_confidence': not parsed.get('luhn_ok'),
+                    'confidence': 0.8,
+                    'low_confidence': False,
                     'confirmed': False,
+                    DERIVED_KEY: True,
                 })
     return out
 
@@ -462,6 +506,69 @@ def _without_tick_keys(item):
     return out
 
 
+def _reconcile_id_derived(fields):
+    """Settle a date of birth or sex that the ID digits and the paper both give.
+
+    A valid ID number yields a date of birth and a sex, and C01 also has a
+    written date-of-birth box and a sex tick group. Filling an empty box from
+    the ID is useful. Quietly replacing what somebody wrote is not: where the
+    two disagree, neither reading is presented as the answer, and both are put
+    on the field so staff can settle it. A blank date of birth is still filled
+    from the confirmed ID when the file is written (see form_io.apply_buckets).
+    """
+    grouped = {}
+    order = []
+    out = []
+    for item in fields or []:
+        target = item.get('target') or ''
+        if not target:
+            out.append(item)
+            continue
+        if target not in grouped:
+            grouped[target] = {'paper': [], 'from_id': None}
+            order.append(target)
+        if item.get(DERIVED_KEY):
+            grouped[target]['from_id'] = {k: v for k, v in item.items() if k != DERIVED_KEY}
+        else:
+            grouped[target]['paper'].append(item)
+
+    for target in order:
+        paper_items = grouped[target]['paper']
+        from_id = grouped[target]['from_id']
+        if from_id is None:
+            out.extend(paper_items)
+            continue
+        paper = next((p for p in paper_items if (p.get('value') or '').strip()), None)
+        if paper is None:
+            # Nothing written in the box: take the ID's answer, but keep the
+            # box it belongs to so the canvas still draws it in the right place.
+            filled = dict(paper_items[0]) if paper_items else {}
+            filled.update({
+                'value': from_id['value'],
+                'confidence': from_id.get('confidence', 0.85),
+                'low_confidence': False,
+            })
+            out.append(filled or from_id)
+            continue
+        out.extend(p for p in paper_items if p is not paper)
+        paper_value = (paper.get('value') or '').strip()
+        id_value = (from_id.get('value') or '').strip()
+        if paper_value == id_value:
+            out.append(paper)
+            continue
+        conflicted = dict(paper)
+        conflicted['value'] = ''
+        conflicted['low_confidence'] = True
+        conflicted['confidence'] = 0.35
+        conflicted['conflict'] = {'from_form': paper_value, 'from_id_number': id_value}
+        conflicted['note'] = (
+            f'The form reads "{paper_value}" but the ID number gives "{id_value}". '
+            'Check the document and type the right one.'
+        )
+        out.append(conflicted)
+    return out
+
+
 def _atlas_priority(item):
     """Rank two atlas boxes that claim the same target, so order cannot decide.
 
@@ -479,7 +586,7 @@ def _merge_extracted(atlas_fields, keyword_fields):
     """Keep atlas boxes; fill empty targets from full-page OCR only when the text is plausible."""
     by_target = {}
     extras = []
-    for item in _resolve_option_groups(atlas_fields):
+    for item in _reconcile_id_derived(_resolve_option_groups(atlas_fields)):
         target = item.get('target') or ''
         if not target:
             extras.append(item)

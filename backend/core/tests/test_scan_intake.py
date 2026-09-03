@@ -258,11 +258,14 @@ class ScanConfirmationGateTests(TestCase):
                 self.assertEqual(Household.objects.count(), 0)
 
     def test_confirmed_member_slot_saves_from_any_of_the_four_slots(self):
+        # One ID per slot: each pass writes a new household, and reusing one
+        # number would (rightly) trip the duplicate-ID warning.
+        ids = ['8001015009087', '8502025100089', '9003035200083', '9504045300086']
         for slot in range(4):
             with self.subTest(slot=slot):
                 job = self._job([(
                     'c01',
-                    _trio(f'member.{slot}', 'Motswaledi', '8001015009087', '1980-01-01'),
+                    _trio(f'member.{slot}', 'Motswaledi', ids[slot], '1980-01-01'),
                 )])
                 ok = self.client.post(f'/api/scan-intake/{job.pk}/confirm/', {}, format='json')
                 self.assertEqual(ok.status_code, 200, ok.data)

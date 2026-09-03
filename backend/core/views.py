@@ -1668,6 +1668,44 @@ class ChoicesView(APIView):
         return choices_view(request)
 
 
+def duplicate_id_matches(user, digits, exclude_household=None, exclude_caregiver=None,
+                         exclude_member=None):
+    """People already on file carrying these ID digits, within the user's scope.
+
+    scoped_household_qs keeps live and TEST- files apart, so a training user
+    never sees a live person and vice versa. Shared by the manual-entry hint
+    and the Scan Intake save so both warn on the same grounds.
+    """
+    digits = digits_only(digits)
+    if len(digits) < 6:
+        return []
+    hh_qs = scoped_household_qs(user)
+    cg_qs = Caregiver.objects.filter(household__in=hh_qs, id_number_digits=digits)
+    mem_qs = HouseholdMember.objects.filter(household__in=hh_qs, id_number_digits=digits)
+    if exclude_household:
+        cg_qs = cg_qs.exclude(household_id=exclude_household)
+        mem_qs = mem_qs.exclude(household_id=exclude_household)
+    if exclude_caregiver:
+        cg_qs = cg_qs.exclude(pk=exclude_caregiver)
+    if exclude_member:
+        mem_qs = mem_qs.exclude(pk=exclude_member)
+    duplicates = []
+    for role, qs in (('caregiver', cg_qs), ('member', mem_qs)):
+        for p in qs.select_related('household')[:10]:
+            duplicates.append({
+                'role': role,
+                'name': f'{p.name} {p.surname}'.strip(),
+                'id_number': p.id_number,
+                'household_id': p.household_id,
+                'org_household_number': p.household.org_household_number,
+            })
+    return duplicates
+
+
+def _int_or_none(value):
+    return int(value) if value and str(value).isdigit() else None
+
+
 class IdCheckView(APIView):
     """Checksum / DOB from an SA ID, plus duplicate people already on file."""
     permission_classes = [IsAuthenticated, IsStaffRole]
@@ -1675,39 +1713,13 @@ class IdCheckView(APIView):
     def get(self, request):
         raw = request.query_params.get('q') or request.query_params.get('id_number') or ''
         parsed = parse_sa_id(raw)
-        digits = parsed['digits']
-        duplicates = []
-        exclude_hh = request.query_params.get('exclude_household')
-        exclude_cg = request.query_params.get('exclude_caregiver')
-        exclude_mem = request.query_params.get('exclude_member')
-        if len(digits) >= 6:
-            hh_qs = scoped_household_qs(request.user)
-            cg_qs = Caregiver.objects.filter(household__in=hh_qs, id_number_digits=digits)
-            mem_qs = HouseholdMember.objects.filter(household__in=hh_qs, id_number_digits=digits)
-            if exclude_hh and exclude_hh.isdigit():
-                cg_qs = cg_qs.exclude(household_id=int(exclude_hh))
-                mem_qs = mem_qs.exclude(household_id=int(exclude_hh))
-            if exclude_cg and exclude_cg.isdigit():
-                cg_qs = cg_qs.exclude(pk=int(exclude_cg))
-            if exclude_mem and exclude_mem.isdigit():
-                mem_qs = mem_qs.exclude(pk=int(exclude_mem))
-            for p in cg_qs.select_related('household')[:10]:
-                duplicates.append({
-                    'role': 'caregiver',
-                    'name': f'{p.name} {p.surname}'.strip(),
-                    'id_number': p.id_number,
-                    'household_id': p.household_id,
-                    'org_household_number': p.household.org_household_number,
-                })
-            for p in mem_qs.select_related('household')[:10]:
-                duplicates.append({
-                    'role': 'member',
-                    'name': f'{p.name} {p.surname}'.strip(),
-                    'id_number': p.id_number,
-                    'household_id': p.household_id,
-                    'org_household_number': p.household.org_household_number,
-                })
-        parsed['duplicates'] = duplicates
+        parsed['duplicates'] = duplicate_id_matches(
+            request.user,
+            parsed['digits'],
+            exclude_household=_int_or_none(request.query_params.get('exclude_household')),
+            exclude_caregiver=_int_or_none(request.query_params.get('exclude_caregiver')),
+            exclude_member=_int_or_none(request.query_params.get('exclude_member')),
+        )
         return Response(parsed)
 
 
