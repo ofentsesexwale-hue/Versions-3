@@ -30,7 +30,7 @@ download_rapidocr_wheels() {
   mkdir -p "$WHEELS"
   echo "Downloading RapidOCR Windows wheels…"
   "$ROOT/backend/.venv/bin/python" -m pip download \
-    rapidocr-onnxruntime onnxruntime pyclipper shapely pyyaml tqdm six protobuf flatbuffers
+    rapidocr-onnxruntime onnxruntime pyclipper shapely pyyaml tqdm six protobuf flatbuffers \
     -d "$WHEELS" \
     --python-version 3.12 \
     --platform win_amd64 \
