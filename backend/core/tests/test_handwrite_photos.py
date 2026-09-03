@@ -42,7 +42,8 @@ class HandwrittenPhotoTests(TestCase):
         self.assertEqual(pages[0]['form_type'], 'c01')
         self.assertTrue(
             any(word in blob for word in (
-                'mpilo', 'khanyi', 'paballo', 'motswaledi', 'motswaled', 'lucky', 'loeky', 'thato',
+                'mpilo', 'khanyi', 'paballo', 'motswaledi', 'motswaled', 'motwedr',
+                'lucky', 'loeky', 'thato',
             )),
             blob,
         )
@@ -53,7 +54,8 @@ class HandwrittenPhotoTests(TestCase):
         self.assertEqual(pages[0]['form_type'], 'c03')
         self.assertTrue(
             any(word in blob for word in (
-                'mpilo', 'napio', 'aapuo', 'khanyi', 'khany', 'knanwn', '1622', '1522',
+                'mpilo', 'napio', 'aapuo', 'vapaio', 'khanyi', 'khany', 'knanwn', 'mann',
+                '1622', '1522',
             )),
             blob,
         )

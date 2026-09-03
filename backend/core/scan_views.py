@@ -49,8 +49,8 @@ def _deny_edit(user):
 
 # Which person each kind of sheet describes. Sheets sharing a subject are the
 # same person's page-set and may be merged (C01 page 1 + page 2, C01 + CW 05,
-# C01 + C02 for the same adult). A C03 child sheet is a different person, so
-# its identity values must never land on the adult's record.
+# C01 + C02 for the same adult). A C03 child sheet is a different person.
+# C03 identity is assembled onto a member slot at save, never onto caregiver.*.
 PERSON_SUBJECT_BY_FORM = {
     'c01': 'adult',
     'intake': 'adult',
@@ -61,6 +61,12 @@ PERSON_SUBJECT_BY_FORM = {
 # The subject whose identity fields own the caregiver record, best first.
 SUBJECT_PRIORITY = ('adult', 'child')
 
+# Identity fields on C03 that describe the child beneficiary.
+C03_IDENTITY_FIELDS = {
+    'name', 'surname', 'known_as', 'id_number', 'date_of_birth',
+    'nationality', 'sex', 'id_type',
+}
+
 
 class ResolvedScan(NamedTuple):
     """What one scan job wants to write, after grouping pages by person."""
@@ -70,6 +76,8 @@ class ResolvedScan(NamedTuple):
     labels: dict          # target -> human label, for messages
     conflicts: list       # same person, same field, two different readings
     held_back: list       # another person's identity values, not written
+    child_identities: list  # C03 children, slotted onto member.N at save
+    needs_review: list    # pre-Phase-6 caregiver.* data that must not be moved
 
 
 def _person_subject(page):
@@ -81,19 +89,30 @@ def _is_person_target(target):
     return target.startswith('caregiver.') or target.startswith('member.')
 
 
-def resolve_buckets(pages):
+def _c03_identity_field(target):
+    """If this C03 target is the child's identity, return the field name."""
+    parts = (target or '').split('.')
+    if len(parts) == 2 and parts[0] == 'caregiver' and parts[1] in C03_IDENTITY_FIELDS:
+        return parts[1]
+    if len(parts) == 3 and parts[0] == 'member' and parts[1].isdigit() and parts[2] in C03_IDENTITY_FIELDS:
+        return parts[2]
+    return ''
+
+
+def resolve_buckets(pages, household=None):
     """Group the values read off each photo by the person that photo is about.
 
     Household-level values (address, reference numbers, notes) merge across
-    every sheet. Identity values merge only inside one subject, so two sheets
-    about different people can never overwrite each other through a shared
-    target name. Disagreements inside one subject are reported instead of
-    being silently resolved by page order.
+    every sheet. Adult identity (caregiver.*, and member.N.* from C01) merge
+    only inside the adult subject. C03 child identity is collected separately
+    and written onto a member slot at save, so a lone C03 cannot create a
+    caregiver row.
     """
     shared = {}
     subjects = {}
     order = []
     conflicts = []
+    child_pages = []
 
     def record(store, target, field, page):
         value = (field.get('value') or '').strip()
@@ -110,7 +129,6 @@ def resolve_buckets(pages):
             }
             return
         if entry['value'] == value or entry['page_id'] == page.pk:
-            # Same reading, or the same sheet listing the field twice.
             entry['confirmed'] = entry['confirmed'] or bool(field.get('confirmed'))
             return
         conflicts.append({
@@ -132,9 +150,13 @@ def resolve_buckets(pages):
 
     for page in pages:
         subject = _person_subject(page)
+        if page.form_type == 'c03':
+            child_pages.append(page)
         for field in page.fields or []:
             target = (field.get('target') or '').strip()
             if not target or not (field.get('value') or '').strip():
+                continue
+            if page.form_type == 'c03' and _c03_identity_field(target):
                 continue
             if _is_person_target(target):
                 if subject not in subjects:
@@ -170,8 +192,160 @@ def resolve_buckets(pages):
                 'page_index': entry['page_index'],
             })
 
+    child_identities = _collect_c03_children(child_pages)
+    needs_review = []
+    _bind_c03_children(values, confirmed, labels, conflicts, child_identities, household, needs_review)
+
     _drop_unreadable_ids(values, confirmed)
-    return ResolvedScan(values, confirmed, labels, conflicts, held_back)
+    return ResolvedScan(values, confirmed, labels, conflicts, held_back, child_identities, needs_review)
+
+
+def _collect_c03_children(pages):
+    """One child identity per C03 sheet, from member.N.* or legacy caregiver.*."""
+    children = []
+    for page in pages:
+        fields = {}
+        confirmed = set()
+        labels = {}
+        legacy = False
+        for field in page.fields or []:
+            target = (field.get('target') or '').strip()
+            value = (field.get('value') or '').strip()
+            name = _c03_identity_field(target)
+            if not name or not value:
+                continue
+            if target.startswith('caregiver.'):
+                legacy = True
+            if name in fields and fields[name] != value:
+                # Two readings on the same sheet; keep the first, staff can edit.
+                continue
+            fields[name] = value
+            labels[name] = field.get('label') or name
+            if field.get('confirmed'):
+                confirmed.add(name)
+        if not fields:
+            continue
+        children.append({
+            'fields': fields,
+            'confirmed': confirmed,
+            'labels': labels,
+            'legacy_caregiver_targets': legacy,
+            'page_index': page.index,
+            'form_label': form_label(page.form_type),
+        })
+    return children
+
+
+def _bind_c03_children(values, confirmed, labels, conflicts, children, household, needs_review):
+    """Put each C03 child onto a member slot, or flag a pre-Phase-6 caregiver hit."""
+
+    existing_members = []
+    caregiver = None
+    if household is not None:
+        existing_members = list(household.members.order_by('id'))
+        caregiver = getattr(household, 'caregiver', None)
+
+    def used_slots():
+        slots = {i for i in range(len(existing_members))}
+        for key in values:
+            parts = key.split('.')
+            if parts[0] == 'member' and len(parts) >= 2 and parts[1].isdigit():
+                slots.add(int(parts[1]))
+        return slots
+
+    def id_on_job_member(digits):
+        for key, value in values.items():
+            parts = key.split('.')
+            if (
+                parts[0] == 'member' and len(parts) == 3 and parts[1].isdigit()
+                and parts[2] == 'id_number' and id_digits(value) == digits
+            ):
+                return int(parts[1])
+        return None
+
+    for child in children:
+        fields = child['fields']
+        digits = id_digits(fields.get('id_number') or '')
+        cg_digits = id_digits(getattr(caregiver, 'id_number', '') or '') if caregiver else ''
+        cg_name = (
+            f'{(caregiver.name or "").strip()} {(caregiver.surname or "").strip()}'.lower()
+            if caregiver else ''
+        )
+        child_name = f'{fields.get("name", "").strip()} {fields.get("surname", "").strip()}'.lower()
+
+        if caregiver and digits and cg_digits and digits == cg_digits:
+            needs_review.append({
+                'reason': 'legacy_c03_on_caregiver',
+                'detail': (
+                    'This C03 identity is already on the caregiver record from a '
+                    'scan before Phase 6. It was not moved onto a member and the '
+                    'caregiver row was not changed.'
+                ),
+                'page_index': child['page_index'],
+                'id_number': fields.get('id_number'),
+                'name': fields.get('name'),
+                'surname': fields.get('surname'),
+            })
+            continue
+        if caregiver and child_name.strip() and child_name == cg_name:
+            needs_review.append({
+                'reason': 'legacy_c03_on_caregiver',
+                'detail': (
+                    'This C03 name already sits on the caregiver record from a '
+                    'scan before Phase 6. It was not moved onto a member and the '
+                    'caregiver row was not changed.'
+                ),
+                'page_index': child['page_index'],
+                'name': fields.get('name'),
+                'surname': fields.get('surname'),
+            })
+            continue
+
+        slot = None
+        if digits:
+            for index, member in enumerate(existing_members):
+                if id_digits(member.id_number or '') == digits:
+                    slot = index
+                    break
+            if slot is None:
+                slot = id_on_job_member(digits)
+        if slot is None:
+            taken = used_slots()
+            slot = 0
+            while slot in taken:
+                slot += 1
+
+        for name, value in fields.items():
+            target = f'member.{slot}.{name}'
+            if target in values and values[target] != value:
+                conflicts.append({
+                    'target': target,
+                    'label': child['labels'].get(name, name),
+                    'values': [
+                        {'value': values[target], 'page_index': None, 'form_label': 'Already on file'},
+                        {
+                            'value': value,
+                            'page_index': child['page_index'],
+                            'form_label': child['form_label'],
+                        },
+                    ],
+                })
+                continue
+            values[target] = value
+            labels[target] = child['labels'].get(name, name)
+            if name in child['confirmed']:
+                confirmed.add(target)
+        if child.get('legacy_caregiver_targets'):
+            needs_review.append({
+                'reason': 'c03_targets_rewritten',
+                'detail': (
+                    'This C03 sheet still had caregiver.* field names from before '
+                    'Phase 6. They were written to a household member, not the '
+                    'caregiver.'
+                ),
+                'page_index': child['page_index'],
+                'member_slot': slot,
+            })
 
 
 def _drop_unreadable_ids(values, confirmed):
@@ -415,7 +589,7 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                     page.fields = item['fields']
                 page.save()
 
-        resolved = resolve_buckets(job.pages.all())
+        resolved = resolve_buckets(job.pages.all(), household=job.household)
 
         if resolved.conflicts:
             return Response({
@@ -475,6 +649,13 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                 'person and were not written to this file — open the household and type them '
                 'onto the right person.'
             )
+        if resolved.needs_review:
+            payload['needs_review'] = resolved.needs_review
+            extra = (
+                f'{len(resolved.needs_review)} value(s) from a C03 sheet need a person to '
+                'check — they were not silently moved off the caregiver record.'
+            )
+            payload['detail'] = f"{payload['detail']} {extra}".strip() if payload.get('detail') else extra
         return Response(payload)
 
     def _write_buckets(self, request, job, resolved):

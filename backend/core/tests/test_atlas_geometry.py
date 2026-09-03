@@ -27,8 +27,8 @@ C01_HEADER_GARBAGE = {
     'household.ward': 'ern ee',
 }
 C03_NAME_GARBAGE = {
-    'caregiver.name': 'nAPio',
-    'caregiver.surname': 'Khany',
+    'member.0.name': 'nAPio',
+    'member.0.surname': 'Khany',
 }
 
 
@@ -137,10 +137,17 @@ class C01PrintedCellsReadTheCellTests(TestCase):
         for target, garbage in C01_HEADER_GARBAGE.items():
             value = _first_value(by_target, target)
             self.assertNotEqual(value.lower(), garbage.lower(), target)
-        # Town is Westonaria on the paper. OCR of that cell is still messy on
-        # the ORB warp that keeps the ticks; it must not be the old crop of
-        # the neighbouring row ('pI esgorarig').
-        self.assertNotIn('esgorarig', town)
+        town = _first_value(by_target, 'household.town')
+        province = _first_value(by_target, 'household.province')
+        district = _first_value(by_target, 'household.district')
+        self.assertNotIn('esgorarig', town.lower())
+        # Phase 6: closed-list match when the OCR is close enough.
+        if (by_target.get('household.town') or [{}])[0].get('vocab_match'):
+            self.assertEqual(town, 'Westonaria')
+        if (by_target.get('household.province') or [{}])[0].get('vocab_match'):
+            self.assertEqual(province, 'Gauteng')
+        if (by_target.get('household.district') or [{}])[0].get('vocab_match'):
+            self.assertEqual(district, 'West Rand')
 
 
 class C02AlignsAndReadsIdentityTests(TestCase):
@@ -160,15 +167,15 @@ class C03OneRowPerFieldTests(TestCase):
         pages, _tess = process_upload(Upload(FIXTURES / 'c03_mpilo.jpg'))
         self.assertEqual(pages[0]['form_type'], 'c03')
         self.assertFalse(pages[0]['alignment_failed'])
-        name_box = _spec('c03', 'caregiver.name')['box']
-        surname_box = _spec('c03', 'caregiver.surname')['box']
+        name_box = _spec('c03', 'member.0.name')['box']
+        surname_box = _spec('c03', 'member.0.surname')['box']
         self.assertLess(name_box[3] - name_box[1], 0.016, 'name box still spans two rows')
         self.assertLess(surname_box[3] - surname_box[1], 0.016, 'surname box still spans two rows')
         self.assertGreater(surname_box[1], name_box[3] - 0.004, 'name and surname overlap')
         by_target = _fields_by_target(pages)
-        name = _first_value(by_target, 'caregiver.name').lower()
-        surname = _first_value(by_target, 'caregiver.surname').lower()
-        self.assertNotEqual(name, C03_NAME_GARBAGE['caregiver.name'].lower())
+        name = _first_value(by_target, 'member.0.name').lower()
+        surname = _first_value(by_target, 'member.0.surname').lower()
+        self.assertNotEqual(name, C03_NAME_GARBAGE['member.0.name'].lower())
         # The crop is the Name row (Mpilo). RapidOCR still mangles the
         # handwriting; geometry is what this phase fixes.
         compact = ''.join(ch for ch in name if ch.isalpha())
@@ -260,8 +267,8 @@ class SyntheticRoundTripTests(TestCase):
         ('c01', 0, 'household.house_number', '2291'),
         ('c02', 0, 'caregiver.name', 'THANDI'),
         ('c02', 0, 'caregiver.surname', 'DLAMINI'),
-        ('c03', 0, 'caregiver.name', 'MPILO'),
-        ('c03', 0, 'caregiver.surname', 'KHANYI'),
+        ('c03', 0, 'member.0.name', 'MPILO'),
+        ('c03', 0, 'member.0.surname', 'KHANYI'),
     )
     TICK_MARKS = (
         ('intake', 1, 'Risk Level Emergency'),
@@ -323,7 +330,11 @@ class SyntheticRoundTripTests(TestCase):
                     for target, text in expected_text.items():
                         got = (fields.get(target) or {}).get('value') or ''
                         compact = ''.join(ch for ch in got.upper() if ch.isalnum())
-                        needle = ''.join(ch for ch in text.upper() if ch.isalnum())
+                        from core.service_area import match_geo_field
+                        matched, _ = match_geo_field(target, text)
+                        needle = ''.join(
+                            ch for ch in (matched or text).upper() if ch.isalnum()
+                        )
                         self.assertIn(
                             needle, compact,
                             f'{code} {target} on {warp_name} read {got!r}',

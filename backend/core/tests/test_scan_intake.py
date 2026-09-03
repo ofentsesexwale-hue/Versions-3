@@ -384,11 +384,13 @@ class ScanCrossPageOverwriteTests(TestCase):
         self.assertEqual(caregiver.surname, 'Dlamini')
         self.assertEqual(caregiver.name, 'Thabo')
         self.assertEqual(caregiver.id_number, '8001015009087')
-        # The child's identity is reported back, not silently dropped or written.
-        held = {row['target']: row['value'] for row in ok.data['held_back']}
-        self.assertEqual(held['caregiver.surname'], 'Khanyi')
-        self.assertEqual(held['caregiver.name'], 'Mpilo')
-        self.assertEqual(held['caregiver.id_number'], '1904261049081')
+        member = Household.objects.get(pk=ok.data['household']).members.get()
+        self.assertEqual(member.surname, 'Khanyi')
+        self.assertEqual(member.name, 'Mpilo')
+        self.assertEqual(member.id_number, '1904261049081')
+        self.assertNotIn('held_back', ok.data)
+        # Legacy C03 caregiver.* names were rewritten onto the member.
+        self.assertTrue(ok.data.get('needs_review'))
 
     def test_page_order_does_not_decide_the_winner(self):
         """The same two sheets uploaded the other way round give the same adult."""

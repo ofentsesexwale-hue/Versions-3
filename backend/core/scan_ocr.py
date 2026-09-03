@@ -361,6 +361,36 @@ def _blank_reference(form_type, page_index):
     return Image.open(path).convert('L')
 
 
+def _apply_geo_vocab(item):
+    """Replace a closed-list OCR near-miss, or flag it if nothing is close."""
+    from .service_area import GEO_LISTS, match_geo_field
+
+    target = item.get('target') or ''
+    if target not in GEO_LISTS:
+        return item
+    if item.get('vocab_match'):
+        return item
+    raw = (item.get('ocr_raw') or item.get('value') or '').strip()
+    if not raw:
+        return item
+    hit, score = match_geo_field(target, raw)
+    item['ocr_raw'] = raw
+    if hit:
+        item['value'] = hit
+        item['vocab_match'] = hit
+        item['vocab_score'] = score
+        item['low_confidence'] = False
+        item['confidence'] = round(max(float(item.get('confidence') or 0), float(score or 0)), 2)
+    else:
+        item['vocab_match'] = ''
+        item['low_confidence'] = True
+        flag = 'Not close to a known place name — check this value.'
+        note = item.get('note') or ''
+        if flag not in note:
+            item['note'] = f'{note}; {flag}' if note else flag
+    return item
+
+
 def _atlas_fields(form_type, aligned, page_index):
     from .scan_align import checkbox_state, crop_box
     blank = _blank_reference(form_type, page_index)
@@ -398,6 +428,7 @@ def _atlas_fields(form_type, aligned, page_index):
             'low_confidence': float(conf) < 0.72 or spec['kind'] in ('handwrite', 'narrative') or not value,
             'confirmed': False,
         }
+        _apply_geo_vocab(item)
         if id_problems:
             # Shown to staff rather than blanked, but never treated as usable.
             item['invalid_id'] = True
@@ -607,6 +638,7 @@ def _merge_extracted(atlas_fields, keyword_fields):
             continue
         item = dict(item)
         item['value'] = incoming
+        _apply_geo_vocab(item)
         prev = by_target.get(target)
         if not prev:
             by_target[target] = item
@@ -624,6 +656,7 @@ def _clean_fields(fields):
     for item in fields or []:
         item = dict(item)
         item['value'] = sanitize_ocr_value(item.get('target') or '', item.get('value') or '', item.get('kind'))
+        _apply_geo_vocab(item)
         cleaned.append(item)
     return cleaned
 

@@ -1,0 +1,186 @@
+================================================================================
+OVC-CaseFile - Scan Intake PHASE 6
+C02/C03 person targeting, and closed-vocabulary geographic OCR
+================================================================================
+
+Atlas version remains npo-pdf-v1.3 (boxes were not re-measured).
+Print and scan still share form_atlas.py. official_canvas.html was not touched.
+
+
+================================================================================
+1. C02 / C03 PERSON TARGETING
+================================================================================
+
+C03 (child beneficiary)
+-----------------------
+Was: name / surname / ID wrote caregiver.* even though the sheet is the child
+page. Phase 1 stopped a C03 in the same job as C02 from overwriting the adult,
+but a C03-only scan still created a caregiver row.
+
+Now: atlas targets are member.0.name / member.0.surname / member.0.id_number.
+At save, resolve_buckets allocates a real member slot:
+
+  * match an existing household member by SA ID
+  * else match a member.N.id_number already in this job (C01 children)
+  * else the next unused slot (0 on an empty file)
+
+A C03-only scan therefore creates a HouseholdMember, not a Caregiver.
+
+C02 (adult assessment) — reviewed, not retargeted
+-------------------------------------------------
+C02 stays caregiver.*. It is the adult assessment of the C01 head of
+household, not an extra adult member. Evidence in this codebase:
+
+  * Phase 1 PERSON_SUBJECT_BY_FORM maps c02 → 'adult' with c01 and CW 05
+  * C01 already lists other household members as member.0–3
+  * C01 + C02 for the same adult still merge onto the caregiver
+
+Household assembly (Phase 0 / Phase 1)
+--------------------------------------
+C03 identity is no longer held_back when an adult sheet is in the same job.
+C02 writes the caregiver; C03 writes a member. Two children in one job take
+two slots.
+
+Migration safety
+----------------
+Already-saved caregiver rows are not rewritten into members.
+
+  * If a C03 page still has the old caregiver.* field names, those values
+    are written to a member (needs_review reason c03_targets_rewritten).
+  * If that identity is already on the household's caregiver (same ID or
+    same name+surname from a pre-Phase-6 save), nothing is moved and
+    nothing is written. needs_review reason legacy_c03_on_caregiver.
+
+
+================================================================================
+2. CLOSED-VOCABULARY GEOGRAPHIC MATCHING
+================================================================================
+
+After OCR, household.province / district / town are compared to a tiny list
+of names that were actually supplied. Below the score threshold (0.60), or
+when two names are equally close, the raw OCR string is kept and the field
+is flagged low-confidence.
+
+Street, house number, personnel, and names never go through this path.
+
+Where the lists came from
+-------------------------
+The beneficiary-file table of contents and the DSD CW/COW pack have NO
+place-name values for this NPO (only column headers named Province /
+District). Training dummy towns in seed_data.py were not used.
+
+The only geographic strings in the supplied Scan Intake material are the
+handwritten cells on c01_household.jpg, as recorded in Phase 5:
+
+  field          canonical     source
+  -------------  ------------  ----------------------------------------------
+  province       Gauteng       photograph / Phase 5 ('GAUTENG' on the cell)
+  district       West Rand     photograph / Phase 5 (cell is West Rand;
+                               synthetic round-trip ink was RANDWEST)
+  town           Westonaria    photograph / Phase 5
+
+Out of scope (no list supplied — raw OCR, no forced match)
+  municipality
+  ward           Phase 5 near-miss 'ern ee' is not close to any supplied
+                 value. No ward list was in the pack or the contents page.
+
+South Africa's nine provinces, Rand West City, Ward 32, and other
+settlements were not added from general knowledge.
+
+
+================================================================================
+3. BEFORE / AFTER — SIX FIXTURES
+================================================================================
+
+BEFORE is Phase 5 on npo-pdf-v1.3. AFTER is Phase 6 targeting + geo match.
+
+--------------------------------------------------------------------------------
+c01_household.jpg
+--------------------------------------------------------------------------------
+  The matcher maps the Phase 5 near-miss *strings* to the supplied names
+  (gAaIGNg → Gauteng, rando/RANDWEST → West Rand, Neslonarig → Westonaria).
+  That is pinned in GeoVocabTests.
+
+  On the live photograph the ORB/SIFT warp still sometimes returns a cell
+  too far from those strings. Those readings are left raw and flagged
+  low-confidence — not forced into a wrong place name.
+
+  field                         BEFORE (Phase 5)          AFTER (this run)
+  ----------------------------  ------------------------  -------------------
+  household.province            'gAaIGNg'                 raw + low-confidence
+                                                      (matcher would accept
+                                                      gAaIGNg → Gauteng)
+  household.district            'rando' / 'ranao'         raw + low-confidence
+                                                      (rando → West Rand)
+  household.town                'Neslonarig' / similar    raw + low-confidence
+                                                      (Neslonarig → Westonaria)
+  household.ward                not 'ern ee'              still raw (no list)
+  household.street              Nkululuthweni             Nkululuthweni
+  household.house_number        2291                      2291
+
+--------------------------------------------------------------------------------
+c01_members_a.jpg / c01_members_b.jpg
+--------------------------------------------------------------------------------
+  No province/district/town cells on these pages. Unchanged. Member
+  handwrite still excludes ruling-line fragments.
+
+--------------------------------------------------------------------------------
+c02_adult.jpg
+--------------------------------------------------------------------------------
+  form_type c02, alignment_failed False. Identity still caregiver.*
+  (blank identity block on this photo). Organisation display unchanged.
+
+--------------------------------------------------------------------------------
+c03_mpilo.jpg / c03_ticks.jpg
+--------------------------------------------------------------------------------
+  BEFORE: caregiver.name / caregiver.surname (OCR still mangles Mpilo/Khanyi)
+  AFTER:  member.0.name / member.0.surname (same crops, correct person slot)
+  Saving a C03-only job creates a member, not a caregiver.
+
+
+================================================================================
+4. DIFF SUMMARY
+================================================================================
+
+  form_atlas.py     C03 identity → member.0.*; C02 stays caregiver.*
+  scan_views.py     C03 children slotted onto members; legacy caregiver
+                    identity flagged needs_review instead of moved
+  service_area.py   closed lists + fuzzy matcher (supplied names only)
+  scan_ocr.py       apply matcher after OCR on province/district/town
+  tests             test_phase6.py plus C03/C02/geo updates
+
+================================================================================
+5. TESTS
+================================================================================
+
+  C03MemberTargetingTests
+      atlas targets member.0 not caregiver
+      C02 atlas stays on caregiver
+      C03-only confirm creates a member, no caregiver row
+      existing caregiver with the same C03 identity is not moved
+
+  GeoVocabTests
+      gAaIGNg / rando / Neslonarig / RANDWEST → Gauteng / West Rand /
+      Westonaria (the Phase 5 near-miss strings)
+      xqzplm and Cape Town left raw + low-confidence
+      street / personnel never matched
+      municipality and ward have no list
+      live fixtures: a geo value is either a supplied canonical name or
+      flagged unmatched (this run's C01 warp was too far, so flagged)
+
+  ScanCrossPageOverwriteTests
+      C02 + C03: caregiver stays the adult; child is a member, not held_back
+
+  C03OneRowPerFieldTests / SyntheticRoundTripTests updated for member.0
+      and for West Rand replacing RANDWEST after the matcher.
+
+
+================================================================================
+6. WHAT THIS PHASE DOES NOT FIX
+================================================================================
+
+  * RapidOCR of messy handwriting on names (Mpilo / Khanyi still near-misses)
+  * Municipality and ward (no closed list was supplied)
+  * C02/C03 assessment ticks still have no model fields
+  * A complete service-area gazetteer — only the names on the supplied
+    C01 photograph are in the matcher. Add real lists here before expanding.

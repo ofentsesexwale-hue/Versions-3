@@ -36,6 +36,9 @@ ATLAS_FORMS = {
         'checklist_item': ('intake_form', 'C02'),
         'geometry': 'pdf',
         'identity_only': True,
+        # C02 is the adult assessment of the C01 head of household
+        # (caregiver), not an extra member. Other adults already sit on
+        # C01 as member.N.
     },
     'c03': {
         'title': 'C03 CHILD Beneficiary Assessment',
@@ -324,14 +327,17 @@ def _build_fields():
         _id_cells('caregiver.id_number', 'ID number', 0,
                   *_inset((0.1538, 0.3253, 0.3278, 0.3464), 0.03, 0.12)),
     ]
+    # C03 is the child beneficiary sheet. Identity writes to a member slot
+    # (allocated at save), never to caregiver.* — that is the head of household
+    # on C01 / the adult on C02.
     c03 = [
         _f('__display.cycw_name', 'CYCW/CCG Name', 0,
            _inset((0.1835, 0.1540, 0.4994, 0.1690), 0.03, 0.10), 'handwrite'),
-        _f('caregiver.id_number', 'Beneficiary ID', 0,
+        _f('member.0.id_number', 'Beneficiary ID', 0,
            _inset((0.1829, 0.1700, 0.4994, 0.1850), 0.03, 0.10), 'sa_id'),
-        _f('caregiver.name', 'Name', 0,
+        _f('member.0.name', 'Name', 0,
            _inset((0.1823, 0.1860, 0.4988, 0.2015), 0.03, 0.10), 'handwrite'),
-        _f('caregiver.surname', 'Surname', 0,
+        _f('member.0.surname', 'Surname', 0,
            _inset((0.1817, 0.2018, 0.4988, 0.2180), 0.03, 0.10), 'handwrite'),
         _f('household.org_household_number', 'HH number', 0,
            _inset((0.1811, 0.2180, 0.4988, 0.2340), 0.03, 0.10), 'printed'),
