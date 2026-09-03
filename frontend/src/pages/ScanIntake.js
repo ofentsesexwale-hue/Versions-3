@@ -527,7 +527,10 @@ export default function ScanIntake() {
               data-testid="scan-duplicate-warning"
             >
               <p className="flex items-center gap-1.5 font-medium">
-                <AlertTriangle className="h-4 w-4" /> This ID is already on another file
+                <AlertTriangle className="h-4 w-4" />
+                {duplicates.some((d) => d.matches?.length)
+                  ? "This ID is already on another file"
+                  : "The same ID was read onto two people"}
               </p>
               {duplicates.map((dup) => (
                 <div key={dup.target} className="mt-2">
@@ -542,12 +545,15 @@ export default function ScanIntake() {
                         </Link>
                       </li>
                     ))}
+                    {(dup.same_scan || []).map((label) => (
+                      <li key={label}>Also read as {label} on this scan</li>
+                    ))}
                   </ul>
                 </div>
               ))}
               <p className="mt-3 text-amber-900">
-                Open the file above and check whether this is the same person. If it is somebody
-                else, correct the ID before saving.
+                Check whether this is the same person. If it is somebody else, correct the ID
+                before saving.
               </p>
             </div>
           )}

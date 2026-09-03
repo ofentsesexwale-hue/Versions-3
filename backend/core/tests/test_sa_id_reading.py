@@ -521,6 +521,56 @@ class DuplicateIdOnScanTests(TestCase):
         self.assertEqual(r.status_code, 400, r.data)
         self.assertEqual(r.data['duplicates'][0]['matches'][0]['role'], 'member')
 
+    def test_one_id_read_onto_two_people_in_one_scan_is_raised(self):
+        """Keyword extraction can put a child's ID on the caregiver as well."""
+        job = ScanIntakeJob.objects.create(created_by=self.user, status='pending')
+        ScanIntakePage.objects.create(
+            job=job, index=0, form_type='c01', form_confidence=0.9, ocr_confidence=0.8,
+            fields=[
+                {'label': 'Surname', 'value': 'Dlamini', 'target': 'caregiver.surname',
+                 'confidence': 0.9, 'confirmed': True},
+                {'label': 'SA ID Number', 'value': '9504045300086',
+                 'target': 'caregiver.id_number', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'Date of Birth', 'value': '1995-04-04',
+                 'target': 'caregiver.date_of_birth', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'member.0 Surname', 'value': 'Dlamini',
+                 'target': 'member.0.surname', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'member.0 ID Number', 'value': '9504045300086',
+                 'target': 'member.0.id_number', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'member.0 Date of Birth', 'value': '1995-04-04',
+                 'target': 'member.0.date_of_birth', 'confidence': 0.9, 'confirmed': True},
+            ],
+        )
+        r = self.client.post(f'/api/scan-intake/{job.pk}/confirm/', {}, format='json')
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertIn('two different people', r.data['detail'])
+        labels = {d['target']: d['same_scan'] for d in r.data['duplicates']}
+        self.assertEqual(labels['caregiver.id_number'], ['member.0 ID Number'])
+        self.assertEqual(labels['member.0.id_number'], ['SA ID Number'])
+        self.assertEqual(Household.objects.count(), 1)
+
+    def test_two_different_ids_on_one_scan_are_not_duplicates(self):
+        job = ScanIntakeJob.objects.create(created_by=self.user, status='pending')
+        ScanIntakePage.objects.create(
+            job=job, index=0, form_type='c01', form_confidence=0.9, ocr_confidence=0.8,
+            fields=[
+                {'label': 'Surname', 'value': 'Dlamini', 'target': 'caregiver.surname',
+                 'confidence': 0.9, 'confirmed': True},
+                {'label': 'SA ID Number', 'value': '9504045300086',
+                 'target': 'caregiver.id_number', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'Date of Birth', 'value': '1995-04-04',
+                 'target': 'caregiver.date_of_birth', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'member.0 Surname', 'value': 'Dlamini',
+                 'target': 'member.0.surname', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'member.0 ID Number', 'value': '9003035200083',
+                 'target': 'member.0.id_number', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'member.0 Date of Birth', 'value': '1990-03-03',
+                 'target': 'member.0.date_of_birth', 'confidence': 0.9, 'confirmed': True},
+            ],
+        )
+        r = self.client.post(f'/api/scan-intake/{job.pk}/confirm/', {}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+
     def test_a_part_read_id_is_not_hunted_for_duplicates(self):
         """'74' is unreadable, so it is dropped rather than matched on."""
         job = self._job('74')

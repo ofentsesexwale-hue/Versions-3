@@ -250,22 +250,31 @@ def _scanned_id_duplicates(user, resolved, household):
     a scan has nobody typing, so the same warning is raised here, before
     anything is written. Same query, so live and TEST- files stay apart.
     """
-    out = []
+    wanted = {}
     for target in sorted(resolved.values):
         if not target.endswith('id_number') or target not in resolved.confirmed:
             continue
         digits = id_digits(resolved.values[target])
-        if not digits:
-            continue
+        if digits:
+            wanted.setdefault(digits, []).append(target)
+
+    out = []
+    for digits, targets in wanted.items():
         matches = duplicate_id_matches(
             user, digits, exclude_household=household.pk if household else None,
         )
-        if matches:
+        for target in targets:
+            # One number read onto two people in the same scan is the same
+            # question, and no household query would catch it.
+            others = [t for t in targets if t != target]
+            if not matches and not others:
+                continue
             out.append({
                 'target': target,
                 'label': resolved.labels.get(target, target),
                 'id_number': digits,
                 'matches': matches,
+                'same_scan': [resolved.labels.get(t, t) for t in others],
             })
     return out
 
@@ -428,9 +437,15 @@ class ScanIntakeViewSet(viewsets.ViewSet):
 
         duplicates = _scanned_id_duplicates(request.user, resolved, job.household)
         if duplicates and not _truthy(request.data.get('accept_duplicates')):
+            on_file = any(d['matches'] for d in duplicates)
             return Response({
-                'detail': 'One of the ID numbers on this scan is already on another file. '
-                          'Check whether this is the same person before saving.',
+                'detail': (
+                    'One of the ID numbers on this scan is already on another file. '
+                    'Check whether this is the same person before saving.'
+                    if on_file else
+                    'The same ID number was read onto two different people on this scan. '
+                    'Correct the wrong one before saving.'
+                ),
                 'duplicates': duplicates,
             }, status=400)
 

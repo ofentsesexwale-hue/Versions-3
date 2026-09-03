@@ -1,0 +1,366 @@
+================================================================================
+OVC-CaseFile - Scan Intake PHASE 3
+SA ID field handling, and the duplicate-ID check wired in
+================================================================================
+
+Scope: the four findings in the Phase 3 brief, and nothing else. The gibberish
+filter, _after_label and the atlas geometry were not touched - they are Phase 4.
+
+Result in one line: an ID field now holds 13 digits or nothing, an ID that
+fails the SA ID rules can no longer quietly supply a date of birth or a sex,
+and an ID that is already on another file stops the save until staff have
+looked at it.
+
+
+================================================================================
+1. FIXTURE-BASED BEFORE / AFTER - ID FIELDS
+================================================================================
+
+Measured with the real photographs in
+backend/core/tests/fixtures/handwrite, through the real process_upload
+pipeline. RapidOCR was available for both runs (rapidocr_available: True).
+
+  fixture              field                  BEFORE            AFTER
+  -------------------  ---------------------  ----------------  -------------------
+  c01_household.jpg    caregiver.id_number    '4'               ''
+  c01_household.jpg    member.0.id_number     '144'             ''
+  c01_members_a.jpg    member.1.id_number     ''                ''
+  c01_members_a.jpg    member.2.id_number     '019042'          ''
+  c01_members_a.jpg    member.3.id_number     '0'               ''
+  c01_members_b.jpg    caregiver.id_number    '2212280261081'   '2212280261081'  (valid)
+  c01_members_b.jpg    member.1.id_number     '4'               ''
+  c01_members_b.jpg    member.2.id_number     '2122712740'      '2212280261081'  (valid)
+  c01_members_b.jpg    member.3.id_number     ''                ''
+  c03_mpilo.jpg        caregiver.id_number    '74'              ''
+  c03_ticks.jpg        caregiver.id_number    '0'               ''
+
+Eleven ID fields across the five photographs. Before: nine of them were
+written to the database as partial digit strings ('4', '74', '144', '0',
+'019042', '2122712740'). After: none are. Every field is either a full
+13-digit number or blank.
+
+One ID was RECOVERED. c01_members_b member.2 read '2122712740' before (ten
+wrong digits from Tesseract) and now reads '2212280261081', which passes every
+SA ID rule. That is finding 1 paying off directly: RapidOCR was the engine
+that read it.
+
+Per-engine detail on the same crops, which is why finding 1 mattered:
+
+  fixture            field                tesseract        rapidocr           chosen
+  -----------------  -------------------  ---------------  -----------------  --------------
+  c01_household      caregiver.id_number  '4'    (0.00)    ''       (0.00)    ''
+  c01_household      member.0.id_number   '144'  (0.00)    '120643170841'     ''  (12 digits)
+  c01_members_a      member.2.id_number   '019042' (0.00)  '1740381' (0.74)   ''
+  c01_members_b      member.2.id_number   '2122712740'     '2212280261081'    '2212280261081'
+  c01_members_b      member.3.id_number   ''     (0.00)    '148062118510'     ''  (12 digits)
+  c03_mpilo          caregiver.id_number  '74'   (0.00)    '1800220' (0.53)   ''
+
+Two things stand out. Tesseract reports 0.00 confidence on every one of these
+crops, so the old "Tesseract is the only reader for sa_id" binding had almost
+nothing to work with. And RapidOCR gets to twelve digits twice
+('120643170841', '148062118510') - close, but twelve digits is not an ID, so
+those are correctly refused. Getting those last digits is a crop-quality
+problem in the ID cell grid, which is Phase 4 (atlas geometry).
+
+DATE OF BIRTH / SEX, same fixtures:
+
+  c01_members_b member.2.date_of_birth
+      BEFORE  'Z8'          (written straight to the field)
+      AFTER   ''            note: 'The form reads "Z8" but the ID number gives
+                            "2022-12-28". Check the document and type the right one.'
+
+That is the only DOB/sex disagreement in the fixture set, and it is exactly
+the case finding 3 describes. No other date of birth changed, because no
+other ID on these photographs is valid enough to derive one.
+
+
+================================================================================
+2. WHAT WAS WRONG, AND WHAT WAS CHANGED
+================================================================================
+
+FINDING 1 - RapidOCR was switched off for the one field that needed it
+----------------------------------------------------------------------
+scan_ocr.py had `if kind != 'sa_id':` around the RapidOCR call, so an SA ID -
+handwritten digits in a printed cell grid, the hardest field on the form - was
+read by Tesseract alone. Worse, the code immediately below it then tried to
+"prefer a 13-digit SA ID from either engine" by looking at a rapid_text
+variable that was always empty. That whole block was dead, along with an
+unused `blob` variable.
+
+Changed: RapidOCR now runs on sa_id crops like every other kind, and the
+candidate choice moved into a named function, best_sa_id_reading(), which
+ranks candidates in the order the brief asked for:
+
+  1. a reading that passes every SA ID rule
+  2. any reading that is 13 digits
+  3. engine confidence
+
+If no candidate reaches 13 digits the function returns '' - never a partial.
+
+The two engines are also tried joined together, because each can catch a
+different part of the cell grid, but only when the checksum vouches for the
+result. Without that guard, '144' + '1206431708' stitches into a 13-digit
+number nobody wrote; that exact false ID appeared during development and is
+now refused.
+
+FINDING 2 - the sanitiser passed ID values through untouched
+------------------------------------------------------------
+scan_text.py had `if kind == 'sa_id' or target.endswith('id_number'): return
+text`, so whatever the engine said went to the field. That is where '74' and
+'4' came from.
+
+sa_id.py was rewritten to hold every rule in one place:
+
+  - id_digits(raw) strips spaces and dashes and returns '' unless exactly
+    13 digits remain.
+  - parse_sa_id() now reports date_ok, valid, citizenship and a list of
+    problems, and only fills dob and sex once EVERY rule passes. Digits 1-6
+    must be a real calendar date with the century chosen so the date is not in
+    the future; digits 7-10 give the sex at the 4999/5000 boundary; digit 11
+    must be 0 (citizen), 1 (permanent resident) or 2 (refugee); digit 13 is the
+    Luhn check over the first twelve.
+
+sanitize_ocr_value now runs id_digits over ID values. A 13-digit number that
+fails the date or the checksum is still returned - staff need to see the
+misread - but it is marked: the field gets invalid_id, low_confidence, and a
+note naming each problem, for example
+
+  'Not a valid SA ID: the first six digits are not a real date of birth;
+   digit 11 is 7, which is not 0 (citizen), 1 (permanent resident) or 2
+   (refugee); the last digit does not check out against the other twelve'
+
+Because parse_sa_id leaves dob and sex empty for such a number, form_io's
+existing derivation cannot fire on it. No extra guard was needed there.
+
+The rule is enforced a second time on the save path. Page fields come back
+through the request body when staff press save, so a partial ID could still
+arrive that way. _drop_unreadable_ids() in scan_views.py removes any
+*.id_number that is not 13 digits, and removes it from the confirmed set too.
+A number sitting under a Passport or Permit tick is left alone - only an SA ID
+has to be 13 digits.
+
+FINDING 3 - a derived date of birth silently replaced the written one
+---------------------------------------------------------------------
+C01 has a written date-of-birth box and a sex tick group, and a valid ID
+yields both. Both readings claimed the same target, and which one survived was
+decided by declaration order in the atlas (for sex, the Phase 2 priority rule
+meant the tick group always beat the ID). Nobody was told.
+
+Added _reconcile_id_derived() in scan_ocr.py, which runs after the Phase 2
+option-group resolver:
+
+  - box empty, ID valid          -> filled from the ID, in the box it belongs
+                                    to so the print canvas still draws it in
+                                    the right place
+  - both present and agreeing    -> kept, no flag
+  - both present and disagreeing -> value blank, low_confidence, a conflict
+                                    record {from_form, from_id_number}, and a
+                                    note naming both readings
+
+Blanking on disagreement is the same rule Phase 2 used for two ticked boxes,
+and it is safe here: a blank date of birth is filled from the confirmed ID
+when the file is written, and date_of_birth is one of the three fields that
+cannot be saved without an explicit staff confirm.
+
+FINDING 4 - the duplicate-ID check was dead
+-------------------------------------------
+IdCheckView had the query but nothing in Scan Intake called it, and there was
+no server-side check at all.
+
+The query was lifted out of the view into duplicate_id_matches() in views.py,
+so the typing screen and the scan screen ask the same question of the same
+data. It still goes through scoped_household_qs, so live and TEST- files stay
+apart in both directions. IdCheckView is now a thin wrapper over it, which
+also removed the hand-rolled exclude parsing.
+
+On the scan side, confirm() now checks every confirmed ID before anything is
+written. If an ID is already on another file the save returns 400 with the
+duplicates, so nothing lands while the question is open. Staff see the same
+amber "This ID is already on another file" panel the typing screen shows, with
+the same links to the other households, and a "Save anyway" button that
+re-posts with accept_duplicates. The panel clears itself as soon as a field is
+edited.
+
+Two smaller things came with it. IdCheckHint is now rendered under every ID
+row in the scan summary, so the checksum message and any duplicate appear
+while staff are still reading the page - the same live hint as manual entry.
+And mergedFromPages now keeps a row for a field that was blanked because two
+readings disagreed, since the note is the only place staff learn about it.
+
+ONE EXTRA GUARD, found while measuring
+--------------------------------------
+c01_members_b showed an ID appearing twice: on member.2 (where it belongs, an
+atlas field) and on caregiver.id_number (where it does not). c01 page 1 has no
+caregiver ID box at all - that value comes from keyword extraction's
+_first_sa_id, which assigns the first 13-digit number found anywhere on the
+page to the caregiver. So a child's ID was about to be written onto the adult.
+
+The root cause is _first_sa_id, which is Phase 4. But the duplicate check
+already had the answer in its hand, so it now also raises the case where one
+ID is read onto two different people in a single scan. No household query
+would ever catch that, because both people are in the same household.
+
+
+================================================================================
+3. FILES CHANGED
+================================================================================
+
+ backend/core/sa_id.py                    | 123 +++++--
+ backend/core/scan_ocr.py                 | 159 +++++++--
+ backend/core/scan_text.py                |   6 +-
+ backend/core/scan_views.py               |  77 +++-
+ backend/core/tests/test_sa_id_reading.py | 579 +++++++++++++++++++++++++++++++
+ backend/core/tests/test_scan_intake.py   |   5 +-
+ backend/core/views.py                    |  78 +++--
+ frontend/src/components/IdCheckHint.js   |   2 +-
+ frontend/src/pages/ScanIntake.js         | 122 ++++++-
+ 9 files changed, 1043 insertions(+), 108 deletions(-)
+
+sa_id.py
+  Rewritten. id_digits(), _dob_from_digits(), CITIZENSHIP, and a parse_sa_id
+  that reports date_ok / valid / citizenship / problems and only derives a date
+  of birth and a sex from a number that passes every rule.
+
+scan_ocr.py
+  RapidOCR no longer skipped for sa_id. New best_sa_id_reading() replaces the
+  dead candidate loop and the unused `blob`. New DERIVED_KEY marker and
+  _reconcile_id_derived(). Atlas ID fields now carry invalid_id and a note when
+  13 digits fail the rules; derived fields no longer carry a made-up
+  low_confidence based on luhn_ok, because they are only produced for valid IDs.
+
+scan_text.py
+  sanitize_ocr_value runs ID values through id_digits instead of returning them
+  as read.
+
+scan_views.py
+  _drop_unreadable_ids() at the end of resolve_buckets. _scanned_id_duplicates()
+  and _truthy(). confirm() blocks on duplicates unless accept_duplicates is
+  sent, with a different message for an ID on another file versus an ID on two
+  people in this scan.
+
+views.py
+  duplicate_id_matches() extracted from IdCheckView, plus _int_or_none().
+  IdCheckView is now a wrapper over it.
+
+ScanIntake.js
+  IdCheckHint under every ID row. Notes rendered on flagged fields.
+  mergedFromPages keeps rows for blanked-but-flagged fields. Duplicate panel
+  and "Save anyway". confirm() takes accept_duplicates - note the save button
+  changed from onClick={confirm} to onClick={() => confirm()}, since the click
+  event would otherwise have been passed in as a truthy accept_duplicates.
+
+IdCheckHint.js
+  Green tick keyed off the new `valid` rather than `luhn_ok`, so a number with
+  a good checksum but an impossible date no longer reads as fine.
+
+
+================================================================================
+4. TESTS
+================================================================================
+
+Full backend suite: 102 tests, all passing (62 at the end of Phase 2, 40 new).
+Frontend build clean.
+
+New file: backend/core/tests/test_sa_id_reading.py
+
+SaIdRuleTests - each rule on its own
+  a real ID gives a date of birth, a sex and a citizenship
+  spaces and dashes are not part of the number      ('800101 5009 087', '800101-5009-087')
+  a failed checksum derives nothing
+  a date that is not on the calendar derives nothing (month 13)
+  twelve and fourteen digits are not IDs at all      (also '74', '4', '019042')
+  the sequence digits decide the sex                 (0001/9999 and the 4999/5000 edge)
+  digit eleven says citizen, resident or refugee     (0/1/2 pass, 3-9 rejected)
+  the century is chosen so nobody is born tomorrow   ('99' -> 1999)
+  a baby born this century reads as this century     ('10' -> 2010)
+
+SanitiserTests
+  a part read is dropped rather than written
+  a full number survives with its spacing stripped
+  thirteen digits that fail the rules still reach staff
+  letters in an ID box are not an ID
+
+EngineDisagreementTests - the checksum settles the argument
+  the reading that passes the checksum wins over a confident one
+      (bad checksum at 0.98 loses to a valid number at 0.31)
+  thirteen digits beat a part read however confident
+  confidence only decides between equals
+  neither engine reaching thirteen digits reads as nothing
+  two halves are only joined when the checksum agrees
+  a valid reading is reported more confidently than a doubtful one
+
+DerivedValueConflictTests
+  a disagreement comes back blank and names both readings
+  an empty box is filled from the ID
+  agreement is not a conflict
+  a ticked sex that disagrees with the ID is flagged
+  fields with no ID reading pass straight through
+  an invalid ID derives nothing to conflict with
+
+ScanIdWriteTests - over the API
+  a part read ID never reaches the field even when confirmed
+      ('74', '4', '019042', 12 digits, 14 digits - all land as '' with the
+       surname still saved)
+  a full ID is written and its spacing stripped
+  a passport number is not held to thirteen digits
+
+FixtureIdReadingTests - permanent regression guard on the real photographs
+  no photograph yields a part read ID
+      every *.id_number across all five fixtures is 13 digits or blank, and
+      any 13-digit value that fails the rules carries invalid_id, low_confidence
+      and a note
+  a date of birth is never taken from an invalid ID
+
+DuplicateIdOnScanTests
+  an ID already on another file blocks the save and names the file
+  the same warning the typing screen shows
+      (asserts IdCheckHint and the scan block return the same households)
+  staff may save once they have seen the warning
+  a new ID saves without a warning
+  the household being scanned into is not its own duplicate
+  a training login is not warned about a live file
+  a member ID on another file is caught too
+  one ID read onto two people in one scan is raised
+  two different IDs on one scan are not duplicates
+  a part read ID is not hunted for duplicates
+
+One Phase 1 test needed a change: ScanConfirmationGateTests
+.test_confirmed_member_slot_saves_from_any_of_the_four_slots wrote the same ID
+into four separate households in four sub-tests, which the new duplicate check
+rightly blocked. Each slot now uses its own valid ID. That is the only
+pre-existing test that moved.
+
+
+================================================================================
+5. WHAT IS STILL BROKEN (Phase 4)
+================================================================================
+
+Not touched, as instructed, but measured while working and worth recording:
+
+  1. _first_sa_id assigns the first 13-digit number found anywhere on a page to
+     caregiver.id_number, regardless of whose it is. On c01_members_b that is a
+     child's ID, dated 2022-12-28, landing on the adult. The new duplicate check
+     now stops it reaching the file, but the extraction itself is still wrong.
+
+  2. RapidOCR reaches twelve digits on two ID crops ('120643170841',
+     '148062118510'). Correctly refused, but a thirteenth digit is being lost
+     at the edge of the cell grid - an atlas geometry / crop question.
+
+  3. Date-of-birth boxes still return junk ('99b1 Ol11/', 'be-no-bloe',
+     '(Eee eRe oni es'). Those are date-kind reads going through the gibberish
+     filter untouched, which is Phase 4. They cannot be saved without a staff
+     confirm, but they should not be offered at all.
+
+  4. c01_household member.0.sex still reads '2 boxes are marked' (Phase 2
+     behaviour, correct). The atlas boxes for that row are the underlying issue.
+
+
+================================================================================
+Commit
+================================================================================
+
+  Scan Intake: hold SA IDs to the 13-digit rules and warn on IDs already on file
+
+The push to the remote failed again - this VM has no GitHub credentials
+('could not read Username for https://github.com'). The commit is on the
+branch locally, as with Phases 1 and 2.
