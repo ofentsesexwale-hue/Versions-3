@@ -6,22 +6,20 @@ The full field inventory is [`WORD_TEMPLATES.md`](WORD_TEMPLATES.md).
 `NPO_case_management_file.pdf` is a **guide** for how a household file is
 assembled. Do **not** write, print, or scan by overlaying that PDF.
 
-**Phase 1 (C01 print):** filling `Official_C01_Template.docx` and downloading
-that Word file. Scan Intake still aligns photos to the old PDF-derived PNG
-blanks — that is why real C01 photos can look “unreadable” / misclassified
-until Phase 2 rebuilds scan blanks from the Word template.
+**Phase 1 (C01 + C02 print):** filling `Official_C01_Template.docx` /
+`C02_Adult_Assessment_Form.docx` and downloading those Word files.
 
-The current product still stamps frozen blank PNGs in
-`backend/core/official_blanks/` for forms other than C01 print
-(`ATLAS_VERSION` `npo-pdf-v1.3`) until those are rebuilt onto native Word.
+**Phase 2 (C01 + C02 scan blanks):** blank PNGs and atlas boxes are measured on
+those Word renders (`ATLAS_VERSION` `word-c01-c02-v2.1`). Other forms still use
+NPO PDF-derived blanks until their Word phases land.
 
-## Atlas forms (current overlay — to be replaced by Word fill)
+## Atlas forms
 
 | Code | Official Word source | PDF pp. (guide only) | Blank PNG | Verdict |
 | --- | --- | --- | --- | --- |
-| `c01` | `dsd-source/Official_C01_Template.docx` | 4–5 | `c01_p0.png`, `c01_p1.png` | **Phase 1 print fills the Word file** (download `.docx`). Scan atlas still uses PDF-derived PNGs until Phase 2 |
-| `intake` (CW 05) | `dsd-source/CW_05_Intake_Form_28082019.docx` | 8–10 | `intake_p0.png`–`p2` | Same |
-| `c02` | `dsd-source/C02_Adult_Assessment_Form.docx` | 6 | `c02_p0.png` | Word has the full Yes/No/DK assessment; atlas extract is identity only |
+| `c01` | `dsd-source/Official_C01_Template.docx` | 4–5 | `c01_p0.png`, `c01_p1.png` | **Word print + Word blanks** |
+| `intake` (CW 05) | `dsd-source/CW_05_Intake_Form_28082019.docx` | 8–10 | `intake_p0.png`–`p2` | Still PDF blank / canvas until a CW 05 Word phase |
+| `c02` | `dsd-source/C02_Adult_Assessment_Form.docx` | 6 | `c02_p0.png` | **Word print + Word blanks**; atlas identity only (Yes/No/DK later) |
 | `c03` | `dsd-source/C03_Child_Beneficiary_Assessment.docx` | 7 | `c03_p0.png` | Word has the full child assessment ticks; atlas extract is identity only (`member.N`) |
 | `cow2_note` | `dsd-source/COW_2_Process_note_04042019.doc` | Word original | `cow2_p0.png`, `cow2_p1.png` | Overlay on official blank; narratives stay attach-only |
 

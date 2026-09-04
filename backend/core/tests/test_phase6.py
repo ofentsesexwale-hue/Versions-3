@@ -87,10 +87,12 @@ class C03MemberTargetingTests(TestCase):
         )
 
     def test_c02_atlas_stays_on_the_caregiver(self):
+        # Official Word C02 has one Name cell (given+surname together), not a
+        # separate Surname / Nationality row like the old NPO PDF blank.
         identity = {f['target'] for f in fields_for('c02') if f['target'].startswith('caregiver.')}
         self.assertIn('caregiver.name', identity)
-        self.assertIn('caregiver.surname', identity)
         self.assertIn('caregiver.id_number', identity)
+        self.assertNotIn('caregiver.nationality', identity)
         self.assertFalse(any(f['target'].startswith('member.') for f in fields_for('c02')))
 
     def test_c03_only_scan_creates_a_member_not_a_caregiver(self):

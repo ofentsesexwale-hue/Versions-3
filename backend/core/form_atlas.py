@@ -1,8 +1,8 @@
 """One field atlas for fill, print, and Scan Intake.
 
 Boxes are normalised 0–1 on the official blank PNG (same file print uses).
-C01 geometry is measured on Official_C01_Template.docx blanks. Other forms
-still use the NPO PDF blanks. Do not rename field labels.
+C01 and C02 geometry is measured on Official Word blanks. Other forms still
+use the NPO PDF blanks. Do not rename field labels.
 """
 from functools import lru_cache
 
@@ -34,9 +34,10 @@ ATLAS_FORMS = {
         'official_title': 'C02 ADULT Assessment Form',
         'header': 'ccg',
         'orientation': 'landscape',
-        'keywords': ['C02', 'C 02', 'ADULT ASSESSMENT', 'CCG FORM'],
+        'keywords': ['C02', 'C 02', 'ADULT ASSESSMENT', 'ADULT Assessment', 'CCG FORM'],
         'checklist_item': ('intake_form', 'C02'),
-        'geometry': 'pdf',
+        # Boxes measured on C02_Adult_Assessment_Form.docx blank PNG (scale 2.0).
+        'geometry': 'word',
         'identity_only': True,
         # C02 is the adult assessment of the C01 head of household
         # (caregiver), not an extra member. Other adults already sit on
@@ -375,19 +376,19 @@ def _build_fields():
         _f('__display.personnel', 'Name', 1, (0.0369, 0.1229, 0.3518, 0.1425), 'printed'),
     ]
 
+    # C02 identity header measured on C02_Adult_Assessment_Form.docx blank
+    # (scale 2.0). Word has one Name cell (given + surname written together).
     c02 = [
         _f('__display.organisation', 'Organisation', 0,
-           _inset((0.1574, 0.2090, 0.3290, 0.2261), 0.04, 0.16), 'printed'),
-        _f('caregiver.name', 'Name', 0,
-           _inset((0.1574, 0.2429, 0.3290, 0.2597), 0.04, 0.16), 'handwrite'),
-        _f('caregiver.surname', 'Surname', 0,
-           _inset((0.1556, 0.2589, 0.3290, 0.2765), 0.04, 0.16), 'handwrite'),
+           _word_cell((0.1150, 0.1100, 0.4900, 0.1270)), 'printed'),
+        _f('__display.personnel', 'Personnel Name', 0,
+           _word_cell((0.1150, 0.1270, 0.4900, 0.1440)), 'printed'),
         _f('household.org_household_number', 'Org Household Number', 0,
-           _inset((0.1544, 0.2757, 0.3284, 0.3102), 0.04, 0.12), 'printed'),
-        _f('caregiver.nationality', 'Nationality', 0,
-           _inset((0.1544, 0.3093, 0.3278, 0.3262), 0.04, 0.16), 'handwrite'),
+           _word_cell((0.1150, 0.1440, 0.4900, 0.1600)), 'printed'),
+        _f('caregiver.name', 'Name', 0,
+           _word_cell((0.1150, 0.1600, 0.4900, 0.1770)), 'handwrite'),
         _id_cells('caregiver.id_number', 'ID number', 0,
-                  *_inset((0.1538, 0.3253, 0.3278, 0.3464), 0.03, 0.12)),
+                  *_word_cell((0.1150, 0.1780, 0.4900, 0.2150), x=0.01)),
     ]
     # C03 is the child beneficiary sheet. Identity writes to a member slot
     # (allocated at save), never to caregiver.* — that is the head of household

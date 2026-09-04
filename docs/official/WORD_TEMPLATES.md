@@ -86,7 +86,9 @@ established.
 
 Comments on service after this assessment.
 
-Scan atlas today maps identity only (`caregiver.*`). Assessment ticks are in
+Scan atlas today maps identity only (`caregiver.name`, `caregiver.id_number`,
+org household number, organisation, personnel). The Official Word sheet has a
+single Name cell (no separate Surname / Nationality). Assessment ticks are in
 the Word file and should be mapped later.
 
 ---

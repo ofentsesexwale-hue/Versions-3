@@ -29,13 +29,16 @@ class AtlasGeometryTests(TestCase):
 
     def test_c01_uses_word_blanks_and_intake_uses_pdf(self):
         self.assertTrue(has_geometry('c01'))
+        self.assertTrue(has_geometry('c02'))
         self.assertTrue(has_geometry('intake'))
         self.assertEqual(form_meta('c01')['geometry'], 'word')
+        self.assertEqual(form_meta('c02')['geometry'], 'word')
         self.assertEqual(form_meta('c01')['pages'], 2)
         self.assertEqual(form_meta('intake')['pages'], 3)
         self.assertTrue(any(f['target'] == 'caregiver.id_number' and f['kind'] == 'sa_id' for f in fields_for('c01')))
         self.assertEqual(fields_for('c01', 0)[0]['label'], 'Org Household Nr')
         self.assertEqual(fields_for('intake', 0)[1]['label'], 'Primary Client Surname')
+        self.assertEqual(load_meta()['pages']['c02:0'].get('source'), 'docx')
 
     def test_blank_png_hash_matches_repo_files(self):
         meta = load_meta()
@@ -133,6 +136,13 @@ class OfficialFormApiTests(TestCase):
             c01['Content-Type'],
         )
         self.assertNotIn(b'official-payload', c01.content)
+        c02 = self.client.get(f'/api/print/c02/?household_id={hid}&token={token}')
+        self.assertEqual(c02.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            c02['Content-Type'],
+        )
+        self.assertNotIn(b'official-payload', c02.content)
         cow = self.client.get(f'/api/print/cow2_note/?household_id={hid}&token={token}')
         self.assertEqual(cow.status_code, 200)
         self.assertIn(b'official-payload', cow.content)

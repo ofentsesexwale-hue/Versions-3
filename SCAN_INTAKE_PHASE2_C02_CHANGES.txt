@@ -1,0 +1,40 @@
+================================================================================
+OVC-CaseFile - Scan Intake / Print PHASE 2 for C02
+Official Word C02 replaces the NPO PDF blank
+================================================================================
+
+Source of truth
+---------------
+docs/official/dsd-source/C02_Adult_Assessment_Form.docx
+
+(The upload C02_Adult_Assessment_Form_b15c.docx is byte-identical.)
+
+
+Phase 1 — print
+---------------
+* word_forms.fill_c02_docx fills the identity header (Organisation, Personnel,
+  Org Household Number, Name = given+surname, ID number).
+* Assessment Yes/No/DK grids stay blank for paper / later atlas work.
+* /api/print/c02/ downloads a .docx (never the official_canvas PDF overlay).
+* Print menu lists "C02 Adult Assessment".
+
+
+Phase 2 — blanks + atlas
+------------------------
+* Blank PNG rendered LibreOffice → PDF → pypdfium2 scale 2.0 → c02_p0.png
+  (1684×1191 landscape).
+* blanks.json c02:0 source=docx; ATLAS_VERSION word-c01-c02-v2.1.
+* form_atlas C02 geometry='word'; boxes measured on the Word blank header.
+* Word has one Name cell (no separate Surname / Nationality rows).
+
+
+Still on NPO PDF (unchanged)
+----------------------------
+C03, CW 05, Family Care Plan, COW 02, and other forms.
+
+
+Next (not this phase)
+---------------------
+Map Yes/No/DK assessment ticks into the atlas once identity print+scan is green.
+Re-photograph a filled Official Word C02 for handwriting fixtures (the current
+c02_adult.jpg is the older NPO Version 1/2016 sheet).

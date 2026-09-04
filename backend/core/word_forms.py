@@ -1,7 +1,8 @@
 """Fill official DSD Word templates. Do not overlay the NPO PDF.
 
 The NPO case-management PDF is a file-order guide only. Print for C01 writes
-into ``docs/official/dsd-source/Official_C01_Template.docx``.
+into ``docs/official/dsd-source/Official_C01_Template.docx``. Print for C02
+writes into ``docs/official/dsd-source/C02_Adult_Assessment_Form.docx``.
 """
 from __future__ import annotations
 
@@ -9,9 +10,11 @@ from io import BytesIO
 from pathlib import Path
 
 from docx import Document
+from docx.table import _Cell
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_C01 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'Official_C01_Template.docx'
+OFFICIAL_C02 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C02_Adult_Assessment_Form.docx'
 
 EMPTY_BOX = '☐'
 MARKED_BOX = '☑'
@@ -19,6 +22,15 @@ MARKED_BOX = '☑'
 
 def official_c01_path() -> Path:
     return OFFICIAL_C01
+
+
+def official_c02_path() -> Path:
+    return OFFICIAL_C02
+
+
+def _tc_cell(table, row_index: int, cell_index: int) -> _Cell:
+    """Return the real cell at (row, col) via XML — row.cells lies on C02 merges."""
+    return _Cell(table.rows[row_index]._tr.tc_lst[cell_index], table)
 
 
 def _clear_cell(cell, text: str = ''):
@@ -254,11 +266,61 @@ def fill_c01_docx(values: dict | None = None, template_path: Path | None = None)
     return buf.getvalue()
 
 
+def _adult_display_name(values: dict) -> str:
+    name = (values.get('caregiver.name') or '').strip()
+    surname = (values.get('caregiver.surname') or '').strip()
+    return ' '.join(part for part in (name, surname) if part)
+
+
+def _fill_c02_header(table, values: dict):
+    """Identity header on C02_Adult_Assessment_Form.docx (table 1)."""
+    org = (
+        values.get('__display.organisation')
+        or values.get('organisation.name')
+        or ''
+    )
+    personnel = values.get('__display.personnel') or ''
+    org_hh = values.get('household.org_household_number') or ''
+    full_name = _adult_display_name(values)
+    id_number = values.get('caregiver.id_number') or ''
+
+    _clear_cell(_tc_cell(table, 0, 1), org)
+    _clear_cell(_tc_cell(table, 1, 1), personnel)
+    _clear_cell(_tc_cell(table, 2, 1), org_hh)
+    _clear_cell(_tc_cell(table, 3, 1), full_name)
+    _clear_cell(_tc_cell(table, 4, 1), id_number)
+
+
+def fill_c02_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Return a filled Official C02 .docx (bytes) from atlas-style values.
+
+    Assessment Yes/No/DK grids stay blank for staff to tick on paper / later
+    atlas work. Identity header is filled from the caregiver file.
+    """
+    path = Path(template_path or official_c02_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official C02 template missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    if len(doc.tables) < 2:
+        raise ValueError('Official C02 template does not have the expected header table')
+    _fill_c02_header(doc.tables[1], values)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
 def values_from_household(household) -> dict:
     """Atlas-style values plus free-text fields the Word sheet needs."""
     from .form_io import values_for_household
+    from .models import Organisation
 
     values = values_for_household(household)
+    org = Organisation.objects.first()
+    if org and not values.get('__display.organisation'):
+        values['__display.organisation'] = org.name or 'Sebueng Itumeleng'
+    elif not values.get('__display.organisation'):
+        values['__display.organisation'] = 'Sebueng Itumeleng'
     cg = getattr(household, 'caregiver', None)
     if cg:
         mapping = {
