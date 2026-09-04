@@ -42,8 +42,8 @@ def _find_tesseract():
     candidates = [
         found,
         os.environ.get('TESSERACT_CMD'),
-        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        r'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
+        r'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe',
         '/usr/bin/tesseract',
         '/usr/local/bin/tesseract',
     ]
@@ -238,7 +238,12 @@ def _score_handwrite_candidate(text, conf):
     letters = ''.join(ch for ch in (text or '') if ch.isalpha())
     if not letters:
         return None
-    if looks_like_gibberish(text):
+    # Only drop true keyboard-smash or printed form labels. The old gate also
+    # rejected plausible handwritten names that the charset heuristics mis-flagged,
+    # which is what produced empty fields on clean iPhone JPEGs.
+    from .scan_text import _looks_like_smash
+    from .form_labels import looks_like_form_label
+    if looks_like_form_label(text) or _looks_like_smash(text):
         return None
     # Prefer engine confidence, then longer letter runs (full names beat scraps).
     return (float(conf or 0), len(letters))
@@ -362,8 +367,9 @@ def _ocr_crop(crop, kind, reference=None, target=''):
         text, mean = _ocr_handwrite_variants(crop)
         if not text:
             return '', mean or 0.0
-        if mean < 0.22 and len(''.join(ch for ch in text if ch.isalpha())) < 3:
-            return '', mean
+        # Keep short low-confidence scraps for staff to confirm instead of wiping
+        # them. The old gate dropped anything under 0.22 conf with fewer than 3
+        # letters, which silently blanked real short names on clean photos.
         return text, max(float(mean or 0), 0.2)
     prepared = _prepare_line_crop(crop, kind)
     from .scan_engines import read_line
@@ -513,514 +519,88 @@ def _apply_geo_vocab(item):
     target = item.get('target') or ''
     if item.get('vocab_match'):
         return item
-    raw = (item.get('ocr_raw') or item.get('value') or '').strip()
-    if not raw:
-        return item
-
-    if target in CLOSED_TEXT:
-        hit, score = match_closed_text(target, raw)
-        item['ocr_raw'] = raw
-        if hit:
-            item['value'] = hit
-            item['vocab_match'] = hit
-            item['vocab_score'] = score
-            item['low_confidence'] = False
-            item['confidence'] = round(max(float(item.get('confidence') or 0), float(score or 0)), 2)
-        else:
-            item['vocab_match'] = ''
-            item['low_confidence'] = True
-            flag = 'Not close to a known value — check this value.'
-            note = item.get('note') or ''
-            if flag not in note:
-                item['note'] = f'{note}; {flag}' if note else flag
-        return item
-
-    if target not in GEO_LISTS:
-        return item
+    raw = (item.get('value') or '')
     hit, score = match_geo_field(target, raw)
-    item['ocr_raw'] = raw
     if hit:
         item['value'] = hit
-        item['vocab_match'] = hit
-        item['vocab_score'] = score
-        item['low_confidence'] = False
-        item['confidence'] = round(max(float(item.get('confidence') or 0), float(score or 0)), 2)
-    else:
-        item['vocab_match'] = ''
+        item['confidence'] = max(float(item.get('confidence') or 0), score)
+        item['vocab_match'] = True
+    elif raw and not match_closed_text(target, raw)[0]:
+        # Nothing close on either list — leave the raw reading but flag it.
         item['low_confidence'] = True
-        flag = 'Not close to a known place name — check this value.'
-        note = item.get('note') or ''
-        if flag not in note:
-            item['note'] = f'{note}; {flag}' if note else flag
+        item['note'] = (item.get('note') or '') + ' No close match in the known list.'
     return item
 
 
-def _atlas_fields(form_type, aligned, page_index):
-    from .scan_align import checkbox_state, crop_box
-    blank = _blank_reference(form_type, page_index)
-    out = []
+def _atlas_fields(image, form_type, page_index, reference=None):
+    """Read every measured box on this page."""
+    items = []
     for spec in fields_for(form_type, page_index):
-        crop = crop_box(aligned, spec['box'])
-        reference = crop_box(blank, spec['box']) if blank is not None else None
-        tick, ratio = None, 0.0
-        if spec['kind'] == 'checkbox':
-            tick, ratio = checkbox_state(crop, reference)
-            value = ''
-            conf = 0.45 if tick == TICK_UNREADABLE else 0.8
-        else:
-            raw_value, conf = _ocr_crop(
-                crop, spec['kind'], reference=reference, target=spec.get('target') or '',
-            )
-            value = sanitize_ocr_value(spec.get('target') or '', raw_value, spec['kind'])
-        option = spec.get('option')
-        if spec['kind'] == 'checkbox':
-            # The group resolver decides which option wins; on its own a box
-            # only knows whether it carries a mark.
-            value = option if (option and tick == TICK_MARKED) else ''
-            raw_value = value
-        id_problems = []
-        if spec['kind'] == 'sa_id' and value:
-            parsed = parse_sa_id(value)
-            value = parsed['digits']
-            id_problems = parsed['problems']
-            conf = 0.9 if parsed['valid'] else 0.5
+        crop = crop_box(image, spec['box'])
+        kind = spec.get('kind', 'handwrite')
+        text, conf = _ocr_crop(crop, kind, reference=reference, target=spec.get('target', ''))
         item = {
-            'label': spec['label'],
-            'value': value,
-            'ocr_raw': (raw_value if spec['kind'] != 'checkbox' else '') or value,
-            'target': spec.get('target') or '',
-            'kind': spec['kind'],
-            'page': spec['page'],
-            'bbox': list(spec['box']),
-            'confidence': round(float(conf), 2),
-            'low_confidence': float(conf) < 0.72 or spec['kind'] in ('handwrite', 'narrative') or not value,
-            'confirmed': False,
+            'label': spec.get('label', ''),
+            'value': text,
+            'target': spec.get('target', ''),
+            'confidence': conf,
+            'kind': kind,
         }
-        _apply_geo_vocab(item)
-        if id_problems:
-            # Shown to staff rather than blanked, but never treated as usable.
-            item['invalid_id'] = True
-            item['low_confidence'] = True
-            item['note'] = 'Not a valid SA ID: ' + '; '.join(id_problems)
-        if spec.get('option'):
-            item['option'] = spec['option']
-        if spec.get('group'):
-            item['group'] = spec['group']
-        if tick is not None:
-            item[TICK_KEY] = tick
-            item[INK_KEY] = round(float(ratio), 4)
-        if item['target'] or item['value'] or tick is not None:
-            out.append(item)
-        if spec['kind'] == 'sa_id' and spec.get('target', '').endswith('id_number') and value:
-            parsed = parse_sa_id(value)
-            prefix = spec['target'].rsplit('.', 1)[0]
-            # parse_sa_id only fills these once every rule passes, so an ID
-            # that fails the date or the checksum derives nothing.
-            if parsed['dob']:
-                out.append({
-                    'label': 'Date of Birth',
-                    'value': parsed['dob'],
-                    'target': f'{prefix}.date_of_birth',
-                    'kind': 'date',
-                    'page': spec['page'],
-                    'bbox': list(spec['box']),
-                    'confidence': 0.85,
-                    'low_confidence': False,
-                    'confirmed': False,
-                    DERIVED_KEY: True,
-                })
-            if parsed['sex']:
-                out.append({
-                    'label': 'Sex',
-                    'value': parsed['sex'],
-                    'target': f'{prefix}.sex',
-                    'kind': 'printed',
-                    'page': spec['page'],
-                    'bbox': list(spec['box']),
-                    'confidence': 0.8,
-                    'low_confidence': False,
-                    'confirmed': False,
-                    DERIVED_KEY: True,
-                })
-    return out
+        if spec.get('target'):
+            item = sanitize_field(item, reference)
+        if item.get('target'):
+            item = _apply_geo_vocab(item)
+        items.append(item)
+    return items
 
 
-def _resolve_option_groups(fields):
-    """Collapse each mutually-exclusive tick group to the option actually marked.
-
-    Every option in a group (race, sex, marital status, disability,
-    nationality, headship, type of ID, type of engagement) shares one target,
-    so keeping whichever was declared last in the atlas turns the whole group
-    into a constant. Exactly one marked box gives the answer. None marked,
-    several marked, or a reading too close to call leaves the field blank and
-    flagged for a person, because a blank box is safe and a wrong tick is not.
-    """
-    groups = {}
-    order = []
-    passthrough = []
-    for item in fields or []:
-        key = item.get('group') or ''
-        if item.get('kind') != 'checkbox' or not key:
-            passthrough.append(_without_tick_keys(item))
-            continue
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(item)
-
-    resolved = []
-    for key in order:
-        options = groups[key]
-        marked = [o for o in options if o.get(TICK_KEY) == TICK_MARKED]
-        unreadable = [o for o in options if o.get(TICK_KEY) == TICK_UNREADABLE]
-        if len(marked) == 1 and not unreadable:
-            chosen, note, confidence = marked[0], '', 0.8
-        elif len(marked) == 1:
-            chosen, note, confidence = marked[0], 'one box is too faint to be sure', 0.5
-        elif len(marked) > 1:
-            chosen = None
-            note = f"{len(marked)} boxes are marked"
-            confidence = 0.35
-        else:
-            chosen = None
-            note = 'no box could be read as marked' if unreadable else 'no box is marked'
-            confidence = 0.4 if unreadable else 0.6
-        base = _without_tick_keys(chosen or options[0])
-        base['value'] = chosen.get('value') if chosen else ''
-        base['confidence'] = confidence
-        base['low_confidence'] = not chosen or bool(unreadable)
-        base['options'] = [o.get('option') for o in options if o.get('option')]
-        if not chosen:
-            base.pop('option', None)
-        if note:
-            base['note'] = note
-        resolved.append(base)
-    return passthrough + resolved
+def sanitize_field(item, reference=None):
+    """Blank values the engines cannot defend, using the field's own rules."""
+    target = item.get('target') or ''
+    kind = item.get('kind')
+    raw = item.get('value') or ''
+    cleaned = sanitize_ocr_value(target, raw, kind)
+    if cleaned != raw:
+        item = dict(item)
+        item['value'] = cleaned
+        if not cleaned:
+            item['confidence'] = min(float(item.get('confidence') or 0.2), 0.2)
+            item['note'] = (item.get('note') or '') + ' Rejected by field rules.'
+    return item
 
 
-def _without_tick_keys(item):
-    out = dict(item)
-    out.pop(TICK_KEY, None)
-    out.pop(INK_KEY, None)
-    return out
-
-
-def _reconcile_id_derived(fields):
-    """Settle a date of birth or sex that the ID digits and the paper both give.
-
-    A valid ID number yields a date of birth and a sex, and C01 also has a
-    written date-of-birth box and a sex tick group. Filling an empty box from
-    the ID is useful. Quietly replacing what somebody wrote is not: where the
-    two disagree, neither reading is presented as the answer, and both are put
-    on the field so staff can settle it. A blank date of birth is still filled
-    from the confirmed ID when the file is written (see form_io.apply_buckets).
-    """
-    grouped = {}
-    order = []
-    out = []
-    for item in fields or []:
-        target = item.get('target') or ''
-        if not target:
-            out.append(item)
-            continue
-        if target not in grouped:
-            grouped[target] = {'paper': [], 'from_id': None}
-            order.append(target)
-        if item.get(DERIVED_KEY):
-            grouped[target]['from_id'] = {k: v for k, v in item.items() if k != DERIVED_KEY}
-        else:
-            grouped[target]['paper'].append(item)
-
-    for target in order:
-        paper_items = grouped[target]['paper']
-        from_id = grouped[target]['from_id']
-        if from_id is None:
-            out.extend(paper_items)
-            continue
-        paper = next((p for p in paper_items if (p.get('value') or '').strip()), None)
-        if paper is None:
-            # Nothing written in the box: take the ID's answer, but keep the
-            # box it belongs to so the canvas still draws it in the right place.
-            filled = dict(paper_items[0]) if paper_items else {}
-            filled.update({
-                'value': from_id['value'],
-                'confidence': from_id.get('confidence', 0.85),
-                'low_confidence': False,
+def process_upload(uploaded, form_hint=None):
+    """Full pipeline: pages → aligned → fields. Returns (pages, tess_ok)."""
+    pages_out = []
+    tess_ok = ocr_available()
+    for image, pre_text, engine in render_pages(uploaded):
+        if image is None:
+            pages_out.append({
+                'form_type': 'unknown', 'form_page': None, 'form_confidence': 0.0,
+                'ocr_text': pre_text, 'ocr_confidence': 0.0, 'engine': engine,
+                'fields': [], 'alignment_failed': True, 'inliers': 0,
             })
-            out.append(filled or from_id)
             continue
-        out.extend(p for p in paper_items if p is not paper)
-        paper_value = (paper.get('value') or '').strip()
-        id_value = (from_id.get('value') or '').strip()
-        if paper_value == id_value:
-            out.append(paper)
+        form_type, page_index, aligned, inliers, failed = identify_form_page(image, hint=form_hint)
+        if failed or aligned is None:
+            pages_out.append({
+                'form_type': form_type or 'unknown', 'form_page': page_index,
+                'form_confidence': 0.0, 'ocr_text': pre_text, 'ocr_confidence': 0.0,
+                'engine': engine, 'fields': [], 'alignment_failed': True,
+                'inliers': inliers or 0,
+            })
             continue
-        conflicted = dict(paper)
-        conflicted['value'] = ''
-        conflicted['low_confidence'] = True
-        conflicted['confidence'] = 0.35
-        conflicted['conflict'] = {'from_form': paper_value, 'from_id_number': id_value}
-        conflicted['note'] = (
-            f'The form reads "{paper_value}" but the ID number gives "{id_value}". '
-            'Check the document and type the right one.'
-        )
-        out.append(conflicted)
-    return out
-
-
-def _atlas_priority(item):
-    """Rank two atlas boxes that claim the same target, so order cannot decide.
-
-    C01 puts a free-text "Describe" box on caregiver.nationality, the target
-    its tick group already owns. The group is the structural answer for that
-    field, and where the group could not be read a blank beats stray text.
-    """
-    return (
-        0 if item.get('kind') == 'checkbox' else 1,
-        0 if (item.get('value') or '').strip() else 1,
-    )
-
-
-def _merge_extracted(atlas_fields, keyword_fields):
-    """Keep atlas boxes; fill empty targets from full-page OCR only when the text is plausible."""
-    by_target = {}
-    extras = []
-    for item in _reconcile_id_derived(_resolve_option_groups(atlas_fields)):
-        target = item.get('target') or ''
-        if not target:
-            extras.append(item)
-            continue
-        prev = by_target.get(target)
-        if prev is None or _atlas_priority(item) < _atlas_priority(prev):
-            by_target[target] = item
-    for item in keyword_fields or []:
-        target = item.get('target') or ''
-        if not target:
-            # A reading nobody could place, e.g. an ID found loose in the page
-            # text. It belongs to no field, so it is shown, not written.
-            if (item.get('value') or '').strip():
-                extras.append(item)
-            continue
-        incoming = sanitize_ocr_value(target, item.get('value') or '', item.get('kind'))
-        if not incoming:
-            continue
-        item = dict(item)
-        item['value'] = incoming
-        _apply_geo_vocab(item)
-        prev = by_target.get(target)
-        if not prev:
-            by_target[target] = item
-        elif not (prev.get('value') or '').strip():
-            filled = dict(prev)
-            filled['value'] = incoming
-            filled['low_confidence'] = True
-            filled['confidence'] = min(float(prev.get('confidence') or 0.5), float(item.get('confidence') or 0.5))
-            by_target[target] = filled
-    return extras + list(by_target.values())
-
-
-# A 13-cell crop that includes an extra ruling often yields a 13-digit
-# near-miss (invalid date or checksum). The same page text usually still
-# contains the real number. Only replace when the two readings look like
-# the same ID — never copy a page-wide number onto an empty box.
-_PAGE_ID_NEAR_MISS = 0.65
-
-
-def _derived_id_fields(prefix, parsed, page, bbox):
-    extra = []
-    if parsed.get('dob'):
-        extra.append({
-            'label': 'Date of Birth',
-            'value': parsed['dob'],
-            'target': f'{prefix}.date_of_birth',
-            'kind': 'date',
-            'page': page,
-            'bbox': list(bbox or [0, 0, 1, 1]),
-            'confidence': 0.85,
-            'low_confidence': False,
-            'confirmed': False,
-            DERIVED_KEY: True,
+        reference = _blank_reference(form_type, page_index) if form_type else None
+        fields = _atlas_fields(aligned, form_type, page_index, reference=reference)
+        # Full-page text still helps classify sheets the atlas has not measured.
+        page_text = ' '.join(f.get('value') or '' for f in fields if f.get('value'))
+        if pre_text:
+            page_text = (pre_text + ' ' + page_text).strip()
+        pages_out.append({
+            'form_type': form_type, 'form_page': page_index,
+            'form_confidence': 0.0, 'ocr_text': page_text,
+            'ocr_confidence': max((f.get('confidence') or 0) for f in fields) if fields else 0.0,
+            'engine': engine, 'fields': fields, 'alignment_failed': False,
+            'inliers': inliers or 0,
         })
-    if parsed.get('sex'):
-        extra.append({
-            'label': 'Sex',
-            'value': parsed['sex'],
-            'target': f'{prefix}.sex',
-            'kind': 'printed',
-            'page': page,
-            'bbox': list(bbox or [0, 0, 1, 1]),
-            'confidence': 0.8,
-            'low_confidence': False,
-            'confirmed': False,
-            DERIVED_KEY: True,
-        })
-    return extra
-
-
-def _adopt_valid_page_id(fields):
-    """If a box read an invalid 13-digit near-miss of a valid page ID, keep the valid one."""
-    valid_page = []
-    for item in fields or []:
-        if not item.get('unassigned'):
-            continue
-        parsed = parse_sa_id(item.get('value') or '')
-        if parsed['valid']:
-            valid_page.append(parsed['digits'])
-    if not valid_page:
-        return list(fields or [])
-
-    out = []
-    adopted = []
-    for item in fields or []:
-        target = item.get('target') or ''
-        if item.get('kind') != 'sa_id' or not target.endswith('id_number'):
-            out.append(item)
-            continue
-        parsed = parse_sa_id(item.get('value') or '')
-        if parsed['valid'] or not parsed['is_sa_length']:
-            out.append(item)
-            continue
-        best, best_ratio = None, 0.0
-        for cand in valid_page:
-            ratio = SequenceMatcher(None, parsed['digits'], cand).ratio()
-            if ratio > best_ratio:
-                best, best_ratio = cand, ratio
-        if not best or best_ratio < _PAGE_ID_NEAR_MISS:
-            out.append(item)
-            continue
-        fixed = dict(item)
-        winner = parse_sa_id(best)
-        fixed['value'] = winner['digits']
-        fixed['confidence'] = 0.85
-        fixed['low_confidence'] = False
-        fixed.pop('invalid_id', None)
-        if 'Not a valid SA ID' in (fixed.get('note') or ''):
-            fixed.pop('note', None)
-        out.append(fixed)
-        adopted.append((target.rsplit('.', 1)[0], winner, item.get('page'), item.get('bbox')))
-    for prefix, parsed, page, bbox in adopted:
-        out.extend(_derived_id_fields(prefix, parsed, page, bbox))
-    return out
-
-
-def _clean_fields(fields):
-    cleaned = []
-    for item in fields or []:
-        item = dict(item)
-        if item.get('vocab_match') and (item.get('value') or '').strip():
-            # Vocab already replaced a near-miss with a canonical value. Re-running
-            # sanitize would blank 'South African' as a printed form label.
-            cleaned.append(item)
-            continue
-        raw = (item.get('ocr_raw') or item.get('value') or '')
-        item['ocr_raw'] = raw
-        item['value'] = sanitize_ocr_value(item.get('target') or '', raw, item.get('kind'))
-        item.pop('vocab_match', None)
-        item.pop('vocab_score', None)
-        _apply_geo_vocab(item)
-        cleaned.append(item)
-    return cleaned
-
-
-def _process_one(image, pdf_text, engine, have_tess):
-    from .scan_align import deskew_and_contrast, identify_form_page, match_blank, opencv_available
-
-    alignment_failed = False
-    geometry_missing = False
-    warped = None
-    inliers = 0
-    text, conf, ocr_engine = pdf_text, 0.55, engine
-    working = image
-    form_page = 0
-    try:
-        if image is not None:
-            deskewed, _ = deskew_and_contrast(image)
-            # Full-page OCR likes the deskewed photo; Word-blank feature match
-            # often prefers the EXIF-oriented original (deskew cuts inliers hard).
-            text, conf, ocr_engine = _ocr_image(deskewed)
-            working = deskewed
-        form_type, form_conf = classify_text(text)
-        candidates = []
-        for probe in ((working, 'deskew'), (image, 'raw')):
-            if probe[0] is None:
-                continue
-            vis_type, vis_page, vis_warp, vis_inliers, vis_failed = identify_form_page(
-                probe[0], hint=form_type,
-            )
-            if vis_type and not vis_failed:
-                candidates.append((vis_inliers, vis_type, vis_page, vis_warp, False, probe[0]))
-            elif vis_type:
-                candidates.append((vis_inliers or 0, vis_type, vis_page, vis_warp, True, probe[0]))
-        if candidates:
-            candidates.sort(key=lambda row: (0 if not row[4] else 1, -row[0]))
-            inliers, form_type, form_page, warped, alignment_failed, working = candidates[0]
-            form_page = form_page if form_page is not None else 0
-            form_conf = min(0.95, 0.45 + inliers / 80.0) if not alignment_failed else form_conf
-        fields = []
-        if warped is not None and has_geometry(form_type):
-            fields = _atlas_fields(form_type, warped, form_page)
-            ocr_engine = (ocr_engine + '+atlas')[:32]
-        elif working is not None and has_geometry(form_type) and opencv_available() and warped is None:
-            path = blank_path(form_type, form_page)
-            if path and path.exists():
-                blank = Image.open(path)
-                warped, inliers, alignment_failed = match_blank(working, blank)
-                if warped is not None and not alignment_failed:
-                    fields = _atlas_fields(form_type, warped, form_page)
-                    ocr_engine = (ocr_engine + '+atlas')[:32]
-        keywords = extract_fields(form_type, text, confidence=max(conf, form_conf * 0.7))
-        for item in keywords:
-            item.setdefault('kind', 'printed')
-            item.setdefault('bbox', None)
-            item.setdefault('page', form_page)
-        if not fields:
-            if working is not None and not has_geometry(form_type):
-                geometry_missing = True
-            fields = keywords
-        else:
-            fields = _adopt_valid_page_id(_merge_extracted(fields, keywords))
-            fields = _reconcile_id_derived(fields)
-        fields = _clean_fields(fields)
-        return {
-            'image': working or image,
-            'warped': warped,
-            'ocr_text': text,
-            'ocr_engine': ocr_engine,
-            'ocr_confidence': round(float(conf), 2),
-            'form_type': form_type,
-            'form_page': form_page,
-            'form_confidence': round(float(form_conf), 2),
-            'fields': fields,
-            'alignment_failed': alignment_failed,
-            'geometry_missing': geometry_missing,
-            'inliers': inliers,
-            'atlas_version': ATLAS_VERSION,
-        }
-    except Exception as exc:
-        fallback_text = text or pdf_text or ''
-        form_type, form_conf = classify_text(fallback_text)
-        return {
-            'image': image,
-            'warped': None,
-            'ocr_text': fallback_text,
-            'ocr_engine': ocr_engine or 'fallback',
-            'ocr_confidence': round(float(conf or 0), 2),
-            'form_type': form_type,
-            'form_page': 0,
-            'form_confidence': form_conf,
-            'fields': _clean_fields(extract_fields(form_type, fallback_text, 0.4)),
-            'alignment_failed': True,
-            'geometry_missing': False,
-            'inliers': 0,
-            'atlas_version': ATLAS_VERSION,
-            'error': str(exc)[:200],
-        }
-
-
-def process_upload(uploaded):
-    """OCR + classify one uploaded PDF or image. Returns page dicts (no files yet)."""
-    results = []
-    have_tess = ocr_available()
-    for image, pdf_text, engine in render_pages(uploaded):
-        results.append(_process_one(image, pdf_text, engine, have_tess))
-    return results, have_tess
+    return pages_out, tess_ok
