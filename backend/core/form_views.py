@@ -82,7 +82,7 @@ class OfficialFormValuesView(APIView):
 
 
 def print_official(request, form):
-    """Same blank PNG + overlay values. App chrome hidden in @media print."""
+    """Official print: C01 is a filled Word file; other atlas forms stay on canvas for now."""
     user = _auth_user(request)
     if not user:
         return HttpResponse('Authentication required.', status=401)
@@ -92,6 +92,23 @@ def print_official(request, form):
     household = scoped_household_qs(user).filter(pk=hid).first() if hid else None
     if not household:
         raise Http404('No household in scope')
+
+    # Phase 1: C01 prints into Official_C01_Template.docx — never the NPO PDF.
+    if form == 'c01':
+        from django.http import HttpResponse as DjangoResponse
+        from .word_forms import fill_c01_docx, values_from_household
+
+        values = values_from_household(household)
+        payload = fill_c01_docx(values)
+        log_action(user, 'printed', f'Printed official C01 Word for Household #{household.pk}')
+        filename = f"C01_{household.org_household_number or household.pk}.docx"
+        response = DjangoResponse(
+            payload,
+            content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
     meta = form_meta(form)
     token = request.GET.get('token') or ''
     pages = []

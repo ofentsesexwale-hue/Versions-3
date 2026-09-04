@@ -9,5 +9,6 @@ pytesseract==0.3.13
 rapidocr-onnxruntime>=1.4
 onnxruntime>=1.16
 opencv-python-headless>=4.8
+python-docx==1.2.0
 Faker==40.37.0
 tzdata==2026.3

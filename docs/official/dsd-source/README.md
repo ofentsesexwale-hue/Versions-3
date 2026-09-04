@@ -15,7 +15,8 @@ is a guide for file order only — do not overlay it. Field-level inventory:
 
 | Code | File | Notes |
 | --- | --- | --- |
-| C01 | `CCG_Form_C01.docx` | Household details v.1.2. Duplicate copy: `CCG_Form_C01_Household_Details.docx` |
+| C01 | `Official_C01_Template.docx` | **Canonical print blank (Phase 1).** Household details v.1.2. Also kept: `CCG_Form_C01.docx` |
+| C01 (older pack) | `CCG_Form_C01.docx` | Earlier CCG Word; print no longer uses this |
 | C02 | `C02_Adult_Assessment_Form.docx` | Landscape; identity + Yes/No/DK assessment |
 | C03 | `C03_Child_Beneficiary_Assessment.docx` | Landscape; identity + child assessment ticks |
 | C06 / CO6 | `C06_Monthly_Household_Services_Report.docx` | Landscape monthly services grid v2.0 |

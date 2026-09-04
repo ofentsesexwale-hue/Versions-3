@@ -19,7 +19,7 @@ still comes from PDF-derived PNGs until Word fill is rebuilt.
 
 | In the file | Official source in this repo |
 | --- | --- |
-| Co1 / C01 | `dsd-source/CCG_Form_C01.docx` |
+| Co1 / C01 | `dsd-source/Official_C01_Template.docx` (print fills this Word file) |
 | Co2 / C02 | `dsd-source/C02_Adult_Assessment_Form.docx` |
 | Co3 / C03 | `dsd-source/C03_Child_Beneficiary_Assessment.docx` |
 | CW 05 | `dsd-source/CW_05_Intake_Form_28082019.docx` |
