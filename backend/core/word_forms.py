@@ -5,7 +5,6 @@ into ``docs/official/dsd-source/Official_C01_Template.docx``.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
 
