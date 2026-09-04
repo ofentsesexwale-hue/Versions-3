@@ -27,21 +27,24 @@ class AtlasGeometryTests(TestCase):
                 self.assertLess(y0, y1, field)
                 self.assertIn(field['kind'], {'sa_id', 'handwrite', 'printed', 'checkbox', 'date', 'narrative'})
 
-    def test_c01_uses_word_blanks_and_intake_uses_pdf(self):
+    def test_c01_c02_c03_and_cw05_use_word_geometry(self):
         self.assertTrue(has_geometry('c01'))
         self.assertTrue(has_geometry('c02'))
         self.assertTrue(has_geometry('intake'))
         self.assertEqual(form_meta('c01')['geometry'], 'word')
         self.assertEqual(form_meta('c02')['geometry'], 'word')
         self.assertEqual(form_meta('c03')['geometry'], 'word')
+        self.assertEqual(form_meta('intake')['geometry'], 'word')
         self.assertEqual(form_meta('c01')['pages'], 2)
-        self.assertEqual(form_meta('intake')['pages'], 3)
+        self.assertEqual(form_meta('intake')['pages'], 4)
         self.assertTrue(any(f['target'] == 'caregiver.id_number' and f['kind'] == 'sa_id' for f in fields_for('c01')))
         self.assertEqual(fields_for('c01', 0)[0]['label'], 'Org Household Nr')
         self.assertEqual(fields_for('intake', 0)[1]['label'], 'Primary Client Surname')
         self.assertEqual(load_meta()['pages']['c02:0'].get('source'), 'docx')
         self.assertEqual(load_meta()['pages']['c03:0'].get('source'), 'docx')
         self.assertEqual(load_meta()['pages']['c03:0'].get('docx_page'), 0)
+        self.assertEqual(load_meta()['pages']['intake:0'].get('source'), 'docx')
+        self.assertEqual(load_meta()['pages']['intake:3'].get('docx_page'), 3)
 
     def test_blank_png_hash_matches_repo_files(self):
         meta = load_meta()
@@ -153,6 +156,13 @@ class OfficialFormApiTests(TestCase):
             c03['Content-Type'],
         )
         self.assertNotIn(b'official-payload', c03.content)
+        intake = self.client.get(f'/api/print/intake/?household_id={hid}&token={token}')
+        self.assertEqual(intake.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            intake['Content-Type'],
+        )
+        self.assertNotIn(b'official-payload', intake.content)
         cow = self.client.get(f'/api/print/cow2_note/?household_id={hid}&token={token}')
         self.assertEqual(cow.status_code, 200)
         self.assertIn(b'official-payload', cow.content)

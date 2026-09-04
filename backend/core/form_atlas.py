@@ -1,8 +1,8 @@
 """One field atlas for fill, print, and Scan Intake.
 
 Boxes are normalised 0–1 on the official blank PNG (same file print uses).
-C01–C03 geometry is measured on Official Word blanks (C03 page 1 only).
-Other forms still use the NPO PDF blanks. Do not rename field labels.
+C01–C03 and CW 05 geometry is measured on Official Word blanks (C03 page 1
+only). Other forms still use the NPO PDF blanks. Do not rename field labels.
 """
 from functools import lru_cache
 
@@ -27,7 +27,8 @@ ATLAS_FORMS = {
         'orientation': 'portrait',
         'keywords': ['CW 05', 'CW05', 'INTAKE FORM', 'PRIMARY CLIENT SURNAME', 'INTAKE REF NUMBER'],
         'checklist_item': ('intake_form', 'CW05'),
-        'geometry': 'pdf',
+        # Boxes measured on CW_05_Intake_Form_28082019.docx blank PNGs (scale 2.0).
+        'geometry': 'word',
     },
     'c02': {
         'title': 'C02 ADULT Assessment Form',
@@ -351,24 +352,38 @@ def _build_fields():
         (0.2754, 0.7761, 0.9673, 0.7910),
     )
 
+    # CW 05 identity + key ticks measured on Official Word blanks (4 pages).
     intake = [
-        _f('household.org_household_number', 'Intake Ref Number', 0, (0.6891, 0.1057, 0.9235, 0.1366), 'printed'),
-        _f('caregiver.surname', 'Primary Client Surname', 0, (0.0874, 0.1663, 0.3664, 0.1960), 'handwrite'),
-        _f('caregiver.name', 'Primary Client First name', 0, (0.3664, 0.1681, 0.6891, 0.1977), 'handwrite'),
-        _f('caregiver.id_number', 'Primary Client ID Number / Date of Birth', 0, (0.6891, 0.1704, 0.9235, 0.1989), 'printed'),
-        _f('', 'Caregiver Surname', 0, (0.0874, 0.3593, 0.3655, 0.3884), 'handwrite'),
-        _f('', 'Caregiver First name', 0, (0.3655, 0.3610, 0.6882, 0.3901), 'handwrite'),
-        _f('', 'Caregiver ID Number / Date of Birth', 0, (0.6882, 0.3628, 0.9235, 0.3913), 'printed'),
-        _f('', 'Presenting problem(s) and expectations of the client', 0, (0.0866, 0.4513, 0.9227, 0.8486), 'narrative'),
-        _f('', 'Primary Problem Code (see CW 06)', 1, (0.0866, 0.4608, 0.3311, 0.4970), 'printed'),
-        _f('', 'Other Problem Codes', 1, (0.3311, 0.4620, 0.9227, 0.5000), 'printed'),
-        _f('', 'Risk Level Emergency', 1, (0.3403, 0.4679, 0.3521, 0.4757), 'checkbox', option='Emergency'),
-        _f('', 'Risk Level High', 1, (0.5370, 0.4691, 0.5487, 0.4768), 'checkbox', option='High'),
-        _f('', 'Risk Level Mild', 1, (0.7345, 0.4697, 0.7454, 0.4780), 'checkbox', option='Mild'),
-        _f('', 'Intake Action Emergency Action', 1, (0.3403, 0.5178, 0.3529, 0.5267), 'checkbox'),
-        _f('', 'Do you consent to the recommended Intake Action above Yes', 2, (0.3412, 0.0926, 0.3538, 0.1015), 'checkbox', option='Yes'),
-        _f('', 'Do you consent to the recommended Intake Action above No', 2, (0.3412, 0.1063, 0.3538, 0.1152), 'checkbox', option='No'),
-        _f('', 'Open file', 2, (0.3714, 0.8195, 0.3832, 0.8284), 'checkbox', option='Open file'),
+        _f('household.org_household_number', 'Intake Ref Number', 0,
+           _word_cell((0.7000, 0.1150, 0.9400, 0.1750), x=0.02), 'printed'),
+        _f('caregiver.surname', 'Primary Client Surname', 0,
+           _word_cell((0.0550, 0.2200, 0.3550, 0.3600), x=0.02), 'handwrite'),
+        _f('caregiver.name', 'Primary Client First name', 0,
+           _word_cell((0.3550, 0.2200, 0.7000, 0.3600), x=0.02), 'handwrite'),
+        _f('caregiver.id_number', 'Primary Client ID Number / Date of Birth', 0,
+           _word_cell((0.7000, 0.2200, 0.9400, 0.3600), x=0.02), 'printed'),
+        _f('', 'Caregiver Surname', 0,
+           _word_cell((0.0550, 0.4200, 0.3550, 0.5000), x=0.02), 'handwrite'),
+        _f('', 'Caregiver First name', 0,
+           _word_cell((0.3550, 0.4200, 0.7000, 0.5000), x=0.02), 'handwrite'),
+        _f('', 'Caregiver ID Number / Date of Birth', 0,
+           _word_cell((0.7000, 0.4200, 0.9400, 0.5000), x=0.02), 'printed'),
+        _f('', 'Presenting problem(s) and expectations of the client', 0,
+           (0.0600, 0.5200, 0.9400, 0.9200), 'narrative'),
+        _f('', 'Primary Problem Code (see CW 06)', 1,
+           _word_cell((0.0600, 0.5300, 0.5200, 0.5650), x=0.02), 'printed'),
+        _f('', 'Other Problem Codes', 1,
+           _word_cell((0.5200, 0.5300, 0.9400, 0.5650), x=0.02), 'printed'),
+        # Tick boxes sit on empty paper left of the printed option words.
+        _f('', 'Risk Level Emergency', 1, (0.3050, 0.5680, 0.3200, 0.5830), 'checkbox', option='Emergency'),
+        _f('', 'Risk Level High', 1, (0.5150, 0.5680, 0.5300, 0.5830), 'checkbox', option='High'),
+        _f('', 'Risk Level Mild', 1, (0.7250, 0.5680, 0.7400, 0.5830), 'checkbox', option='Mild'),
+        _f('', 'Intake Action Emergency Action', 1, (0.3050, 0.6270, 0.3200, 0.6420), 'checkbox'),
+        _f('', 'Do you consent to the recommended Intake Action above Yes', 2,
+           (0.3100, 0.2680, 0.3250, 0.2830), 'checkbox', option='Yes'),
+        _f('', 'Do you consent to the recommended Intake Action above No', 2,
+           (0.3300, 0.2880, 0.3450, 0.3030), 'checkbox', option='No'),
+        _f('', 'Open file', 3, (0.3450, 0.2950, 0.3600, 0.3100), 'checkbox', option='Open file'),
     ]
 
     cow2 = [

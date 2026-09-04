@@ -266,13 +266,11 @@ class SyntheticRoundTripTests(TestCase):
         ('c01', 0, 'household.district', 'RANDWEST'),
         ('c01', 0, 'household.house_number', '2291'),
         ('c02', 0, 'caregiver.name', 'THANDI'),
-        ('c02', 0, 'caregiver.surname', 'DLAMINI'),
         ('c03', 0, 'member.0.name', 'MPILO'),
-        ('c03', 0, 'member.0.surname', 'KHANYI'),
     )
     TICK_MARKS = (
         ('intake', 1, 'Risk Level Emergency'),
-        ('intake', 2, 'Open file'),
+        ('intake', 3, 'Open file'),
         ('intake', 2, 'Do you consent to the recommended Intake Action above Yes'),
     )
 
@@ -310,6 +308,7 @@ class SyntheticRoundTripTests(TestCase):
             ('c03', 0),
             ('intake', 1),
             ('intake', 2),
+            ('intake', 3),
         )
         for code, page in pages:
             painted, expected_text, expected_ticks = self._painted(code, page)

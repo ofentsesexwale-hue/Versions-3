@@ -1,0 +1,34 @@
+================================================================================
+OVC-CaseFile - Print / Scan PHASE 2 for CW 05 (Intake)
+Official Word CW 05 replaces the NPO PDF blank
+================================================================================
+
+Source of truth
+---------------
+docs/official/dsd-source/CW_05_Intake_Form_28082019.docx
+
+(Byte-identical to the office upload CW_05_Intake_Form_28082019_5c44.docx.)
+
+Atlas key remains ``intake``.
+
+
+Phase 1 — print
+---------------
+* word_forms.fill_cw05_docx fills Intake Ref Number + Primary Client
+  Surname / First name / ID.
+* Caregiver-of-child rows, narratives, risk/consent ticks stay blank for paper.
+* /api/print/intake/ downloads a .docx (never official_canvas).
+
+
+Phase 2 — blanks + atlas
+------------------------
+* LibreOffice → PDF → pypdfium2 scale 2.0 → intake_p0.png … intake_p3.png
+  (Word exports **4** portrait pages; old NPO PDF had 3).
+* blanks.json intake:* source=docx; ATLAS_VERSION word-c01-c02-c03-cw05-v2.3.
+* Identity boxes recalibrated on page 0; risk ticks page 1; consent page 2;
+  Open file page 3.
+
+
+Still later
+-----------
+Richer CW 05 tick groups (full intake-action set) and narrative OCR.

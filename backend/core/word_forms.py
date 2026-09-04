@@ -1,7 +1,7 @@
 """Fill official DSD Word templates. Do not overlay the NPO PDF.
 
-The NPO case-management PDF is a file-order guide only. Print for C01–C03
-writes into the Official Word templates under ``docs/official/dsd-source/``.
+The NPO case-management PDF is a file-order guide only. Print for C01–C03 and
+CW 05 writes into the Official Word templates under ``docs/official/dsd-source/``.
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_C01 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'Official_C01_Template.docx'
 OFFICIAL_C02 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C02_Adult_Assessment_Form.docx'
 OFFICIAL_C03 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C03_Child_Beneficiary_Assessment.docx'
+OFFICIAL_CW05 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'CW_05_Intake_Form_28082019.docx'
 
 EMPTY_BOX = '☐'
 MARKED_BOX = '☑'
@@ -30,6 +31,14 @@ def official_c02_path() -> Path:
 
 def official_c03_path() -> Path:
     return OFFICIAL_C03
+
+
+def official_cw05_path() -> Path:
+    return OFFICIAL_CW05
+
+
+# Alias used by print/scan code (atlas key is ``intake``).
+official_intake_path = official_cw05_path
 
 
 def _tc_cell(table, row_index: int, cell_index: int) -> _Cell:
@@ -380,6 +389,38 @@ def fill_c03_docx(
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
+
+
+def _fill_cw05_identity(table, values: dict):
+    """Identity block on CW_05_Intake_Form_28082019.docx (table 0)."""
+    _clear_cell(_tc_cell(table, 1, 1), values.get('household.org_household_number') or '')
+    _clear_cell(_tc_cell(table, 3, 0), values.get('caregiver.surname') or '')
+    _clear_cell(_tc_cell(table, 3, 1), values.get('caregiver.name') or '')
+    id_or_dob = values.get('caregiver.id_number') or values.get('caregiver.date_of_birth') or ''
+    _clear_cell(_tc_cell(table, 3, 2), id_or_dob)
+
+
+def fill_cw05_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Return a filled Official CW 05 Intake .docx (bytes).
+
+    Fills intake ref + primary client identity. Caregiver-of-child rows,
+    narratives, risk ticks, and consent stay blank for paper / later atlas.
+    """
+    path = Path(template_path or official_cw05_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official CW 05 template missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    if not doc.tables:
+        raise ValueError('Official CW 05 template does not have the expected tables')
+    _fill_cw05_identity(doc.tables[0], values)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+# Atlas / print key for CW 05 is ``intake``.
+fill_intake_docx = fill_cw05_docx
 
 
 def values_from_household(household) -> dict:

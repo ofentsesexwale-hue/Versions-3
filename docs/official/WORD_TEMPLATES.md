@@ -384,15 +384,15 @@ Instructions plus **CLIENT REFERRAL FORM**:
 
 ## CW series (`.doc` / CW 05 `.docx`)
 
-Unchanged originals: CW 4a internal referral, CW 4b external referral, CW 11
-process note, CW 13 termination, CW 05 intake.
+Unchanged originals (still PDF/canvas atlas): CW 4a internal referral, CW 4b
+external referral, CW 11 process note, CW 13 termination.
 
-CW 05 fields include: intake ref; primary client surname / first name / ID or
-DOB; caregiver details if the client is a child; presenting problems;
-preliminary assessment; primary and other problem codes (CW 06); risk level
-(CW 07: Emergency 24–48 hours / High 1 week / Mild 3 weeks); intake actions
-(emergency, internal assessment, case consultation, CW 4A, CW 4B, issue
-resolved, comprehensive assessment not required); referral follow-up.
+**CW 05** (`CW_05_Intake_Form_28082019.docx`) is on Word print + Word blanks
+(`intake` atlas key, 4 pages). Fields include: intake ref; primary client
+surname / first name / ID or DOB; caregiver details if the client is a child;
+presenting problems; preliminary assessment; primary and other problem codes
+(CW 06); risk level (CW 07: Emergency 24–48 hours / High 1 week / Mild 3
+weeks); intake actions; referral follow-up; consent; open file.
 
 ---
 
