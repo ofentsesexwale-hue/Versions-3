@@ -213,7 +213,9 @@ ATLAS_FORMS = {
         'orientation': 'portrait',
         'keywords': ['COW 02', 'COW 2', 'COMMUNITY WORK PROCESS NOTE', 'NAME OF COMMUNITY'],
         'checklist_item': ('process_note', 'SAW Process note - CW 11'),
-        'geometry': 'pdf',
+        # Boxes measured on COW_2_Process_note_04042019.docx blank PNGs (scale 2.0).
+        'geometry': 'word',
+        'identity_only': True,
     },
 }
 
@@ -519,9 +521,13 @@ def _build_fields():
     ]
 
     cow2 = [
-        _f('household.org_household_number', 'Ref No', 0, (0.8237, 0.1099, 0.9622, 0.1395), 'printed'),
-        _f('household.town', 'Name of Community', 0, (0.5097, 0.1395, 0.6650, 0.1692), 'printed'),
-        _f('__display.personnel', 'Name', 1, (0.0369, 0.1229, 0.3518, 0.1425), 'printed'),
+        # Measured on Official COW 02 Word blank (1191×1684).
+        _f('household.org_household_number', 'Ref No', 0,
+           _word_cell((0.7200, 0.1100, 0.9600, 0.1400), x=0.01), 'printed'),
+        _f('household.town', 'Name of Community', 0,
+           _word_cell((0.4500, 0.1450, 0.6600, 0.1750), x=0.01), 'printed'),
+        _f('__display.personnel', 'Name', 1,
+           _word_cell((0.0400, 0.1450, 0.3500, 0.1750), x=0.01), 'printed'),
     ]
 
     # C02 identity header measured on C02_Adult_Assessment_Form.docx blank

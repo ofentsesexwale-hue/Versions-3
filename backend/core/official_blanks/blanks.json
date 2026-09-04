@@ -47,26 +47,6 @@
       "source_docx": "docs/official/dsd-source/C03_Child_Beneficiary_Assessment.docx",
       "note": "Page 1 only; trailing blank Word page ignored"
     },
-    "cow2_note:0": {
-      "file": "cow2_p0.png",
-      "pdf_page": 1,
-      "rotate": 0,
-      "width": 1191,
-      "height": 1684,
-      "sha256": "e780ff4323e3470040714c38b42f1248114ff965f1a77be06534bd887b472c4d",
-      "orientation": "portrait",
-      "source_pdf": "docs/official/COW_2_Process_note_04042019.pdf"
-    },
-    "cow2_note:1": {
-      "file": "cow2_p1.png",
-      "pdf_page": 2,
-      "rotate": 0,
-      "width": 1191,
-      "height": 1684,
-      "sha256": "a3b349cb926f90898339901dcac6ffb9a80625947cc6bbddbc8f0f5a4d6a8e03",
-      "orientation": "portrait",
-      "source_pdf": "docs/official/COW_2_Process_note_04042019.pdf"
-    },
     "intake:0": {
       "file": "intake_p0.png",
       "rotate": 0,
@@ -385,6 +365,28 @@
       "docx_page": 2,
       "source": "docx",
       "source_docx": "docs/official/dsd-source/CW_4b_External_Referral_form_28082019.docx"
+    },
+    "cow2_note:0": {
+      "file": "cow2_p0.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "03b1004b3122ade366364ef458bacb3564c4bbe4d3a6a28e6c741910bc22716c",
+      "orientation": "portrait",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/COW_2_Process_note_04042019.docx"
+    },
+    "cow2_note:1": {
+      "file": "cow2_p1.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "ddfc0e2306f3ed720c5bf3b39969c6bec4c5180cc2430ec815419c9a9851296a",
+      "orientation": "portrait",
+      "docx_page": 1,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/COW_2_Process_note_04042019.docx"
     }
   },
   "c01_source": "Official_C01_Template.docx",

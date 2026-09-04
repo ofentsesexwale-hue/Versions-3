@@ -6,7 +6,7 @@ The full field inventory is [`WORD_TEMPLATES.md`](WORD_TEMPLATES.md).
 `NPO_case_management_file.pdf` is a **guide** for how a household file is
 assembled. Do **not** write, print, or scan by overlaying that PDF.
 
-**Current atlas version:** `word-c01-c02-c03-cw05-fcp-hiv-remaining-v2.5`
+**Current atlas version:** `word-c01-c02-c03-cw05-fcp-hiv-remaining-cow2-v2.6`
 
 ## Atlas forms on Official Word (print downloads `.docx`)
 
@@ -31,6 +31,7 @@ assembled. Do **not** write, print, or scan by overlaying that PDF.
 | `termination` | `CW_13_Termination_report_28082019.docx` | `termination_p0` | From official `.doc` |
 | `internal_referral` | `CW_4a_Internal_Referral_form_28082019.docx` | `internal_referral_p0`–`p1` | From official `.doc` |
 | `referral` | `CW_4b_External_Referral_form_28082019.docx` | `referral_p0`–`p2` | From official `.doc` |
+| `cow2_note` | `COW_2_Process_note_04042019.docx` | `cow2_p0`–`p1` | From official `.doc`; identity only |
 
 ## Still not Official Word print (legacy HTML invents)
 
@@ -51,9 +52,8 @@ are **not** wired to Word fill yet:
 
 ## Official blank that is PDF (not NPO, not Word PNG from this phase)
 
-| Code | Source | Notes |
-| --- | --- | --- |
-| `cow2_note` | `docs/official/COW_2_Process_note_04042019.pdf` (from COW 2 `.doc`) | Official COW PDF blank + canvas overlay — **not** the NPO case-management PDF |
+None. Every atlas blank is rendered from Official Word (or a `.doc`→`.docx`
+companion). The NPO case-management PDF is a file-order guide only.
 
 ## NPO case-management PDF
 

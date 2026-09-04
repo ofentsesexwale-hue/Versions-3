@@ -142,7 +142,7 @@ class OfficialFormApiTests(TestCase):
         self.assertEqual(blank.status_code, 200)
         self.assertEqual(blank['Content-Type'], 'image/png')
 
-    def test_print_c01_downloads_word_and_cow2_uses_official_canvas(self):
+    def test_print_c01_and_cow2_download_word(self):
         created = self.client.post('/api/households/', {'town': 'Umlazi'}, format='json')
         hid = created.data['id']
         token = Token.objects.get(user=self.user).key
@@ -176,6 +176,9 @@ class OfficialFormApiTests(TestCase):
         self.assertNotIn(b'official-payload', intake.content)
         cow = self.client.get(f'/api/print/cow2_note/?household_id={hid}&token={token}')
         self.assertEqual(cow.status_code, 200)
-        self.assertIn(b'official-payload', cow.content)
-        self.assertIn(b'cow2_note/blank', cow.content)
-        self.assertNotIn(b'Sebueng Itumeleng', cow.content)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            cow['Content-Type'],
+        )
+        self.assertNotIn(b'official-payload', cow.content)
+        self.assertEqual(cow.content[:2], b'PK')

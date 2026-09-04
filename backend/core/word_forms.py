@@ -35,6 +35,7 @@ OFFICIAL_CW11 = DS / 'CW_11_Process_note_28082019.docx'
 OFFICIAL_CW13 = DS / 'CW_13_Termination_report_28082019.docx'
 OFFICIAL_CW4A = DS / 'CW_4a_Internal_Referral_form_28082019.docx'
 OFFICIAL_CW4B = DS / 'CW_4b_External_Referral_form_28082019.docx'
+OFFICIAL_COW2 = DS / 'COW_2_Process_note_04042019.docx'
 
 EMPTY_BOX = '☐'
 MARKED_BOX = '☑'
@@ -118,6 +119,10 @@ def official_cw4a_path() -> Path:
 
 def official_cw4b_path() -> Path:
     return OFFICIAL_CW4B
+
+
+def official_cow2_path() -> Path:
+    return OFFICIAL_COW2
 
 
 # Alias used by print/scan code (atlas key is ``intake``).
@@ -915,6 +920,27 @@ def fill_referral_docx(values: dict | None = None, template_path: Path | None = 
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
+
+
+def fill_cow2_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill COW 02 identity (Ref No, community, practitioner name). Narratives stay blank."""
+    path = Path(template_path or official_cow2_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official COW 02 missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    header = doc.tables[0]
+    _clear_cell(_tc_cell(header, 0, 2), values.get('household.org_household_number') or '')
+    _clear_cell(_tc_cell(header, 1, 3), values.get('household.town') or '')
+    if len(doc.tables) > 2:
+        sig = doc.tables[2]
+        _clear_cell(_tc_cell(sig, 1, 0), values.get('__display.personnel') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+fill_cow2_note_docx = fill_cow2_docx
 
 
 def values_from_household(household) -> dict:

@@ -101,6 +101,7 @@ WORD_PRINT_FORMS = {
     'termination': ('fill_termination_docx', 'CW13', 'CW 13 Termination'),
     'internal_referral': ('fill_internal_referral_docx', 'CW4A', 'CW 4a Internal Referral'),
     'referral': ('fill_referral_docx', 'CW4B', 'CW 4b External Referral'),
+    'cow2_note': ('fill_cow2_docx', 'COW02', 'COW 02 Process Note'),
 }
 
 

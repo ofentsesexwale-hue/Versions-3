@@ -1,8 +1,8 @@
 """Canonical blank pages for fill, print, and Scan Intake.
 
 Official Word (and converted .doc→.docx) blanks live under ``official_blanks/``.
-COW 02 still uses its official PDF blank. The NPO case-management PDF is a
-file-order guide only — never invent a second HTML layout for statutory sheets.
+The NPO case-management PDF is a file-order guide only — never invent a second
+HTML layout for statutory sheets.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 BLANKS_DIR = Path(__file__).resolve().parent / 'official_blanks'
 META_PATH = BLANKS_DIR / 'blanks.json'
-ATLAS_VERSION = 'word-c01-c02-c03-cw05-fcp-hiv-remaining-v2.5'
+ATLAS_VERSION = 'word-c01-c02-c03-cw05-fcp-hiv-remaining-cow2-v2.6'
 
 
 def load_meta():
