@@ -391,7 +391,7 @@ class FixtureIdReadingTests(TestCase):
     """
 
     FIXTURE_NAMES = (
-        'c01_household.jpg', 'c01_members_a.jpg', 'c01_members_b.jpg',
+        'c01_official_page0.jpg', 'c01_official_page1.jpg',
         'c03_mpilo.jpg', 'c03_ticks.jpg',
     )
 
@@ -442,7 +442,7 @@ class FixtureIdReadingTests(TestCase):
     def test_a_date_of_birth_is_never_taken_from_an_invalid_id(self):
         from core.scan_ocr import process_upload
 
-        for name in ('c01_household.jpg', 'c01_members_a.jpg'):
+        for name in ('c01_official_page0.jpg', 'c01_official_page1.jpg'):
             path = FIXTURES / name
             if not path.exists():
                 continue

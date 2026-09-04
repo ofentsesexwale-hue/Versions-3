@@ -125,6 +125,21 @@ def crop_document(image):
     height = int(max(height_a, height_b))
     if width < 200 or height < 200:
         return image, False
+    src_area = float(h * w)
+    crop_area = float(width * height)
+    # A table grid on C01 often approximates as a 4-gon. Reject crops that
+    # throw away most of the photo, flip portrait/landscape, or turn a tall
+    # phone photo into a near-square (page-0 household table only).
+    if crop_area < 0.45 * src_area:
+        return image, False
+    src_land = w > h
+    crop_land = width > height
+    if src_land != crop_land and crop_area < 0.75 * src_area:
+        return image, False
+    if (not src_land) and height < 0.75 * h:
+        return image, False
+    if (not src_land) and (width / max(1, height)) > 0.92:
+        return image, False
     dest = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]], dtype='float32')
     matrix = cv2.getPerspectiveTransform(pts, dest)
     warped = cv2.warpPerspective(mat, matrix, (width, height), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
@@ -295,12 +310,15 @@ def _fit_page_to_blank(scan, blank):
 
     Rotate to the blank's orientation and stretch. Only accepted when the
     header still reads as this form, so a C02 photo cannot land on C01.
+    Returns a low inlier count so a real feature match on another blank wins
+    identify_form_page's score, and so a deskewed near-miss cannot lock onto
+    the wrong sheet at the 14-inlier gate.
     """
     best = None
     for probe in maybe_rotate_to_template(scan, blank):
         fitted = probe.resize(blank.size, Image.Resampling.LANCZOS)
         bonus = _title_upright_bonus(fitted)
-        if bonus < 40:
+        if bonus < 80:
             continue
         if best is None or bonus > best[0]:
             best = (bonus, fitted)

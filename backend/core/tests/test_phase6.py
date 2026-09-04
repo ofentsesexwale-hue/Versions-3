@@ -187,9 +187,8 @@ class GeoVocabTests(TestCase):
 
     def test_six_fixtures_geo_fields_use_only_supplied_lists(self):
         names = (
-            'c01_household.jpg',
-            'c01_members_a.jpg',
-            'c01_members_b.jpg',
+            'c01_official_page0.jpg',
+            'c01_official_page1.jpg',
             'c02_adult.jpg',
             'c03_mpilo.jpg',
             'c03_ticks.jpg',

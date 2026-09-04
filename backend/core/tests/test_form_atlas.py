@@ -27,9 +27,10 @@ class AtlasGeometryTests(TestCase):
                 self.assertLess(y0, y1, field)
                 self.assertIn(field['kind'], {'sa_id', 'handwrite', 'printed', 'checkbox', 'date', 'narrative'})
 
-    def test_c01_and_intake_share_pdf_blanks(self):
+    def test_c01_uses_word_blanks_and_intake_uses_pdf(self):
         self.assertTrue(has_geometry('c01'))
         self.assertTrue(has_geometry('intake'))
+        self.assertEqual(form_meta('c01')['geometry'], 'word')
         self.assertEqual(form_meta('c01')['pages'], 2)
         self.assertEqual(form_meta('intake')['pages'], 3)
         self.assertTrue(any(f['target'] == 'caregiver.id_number' and f['kind'] == 'sa_id' for f in fields_for('c01')))
@@ -49,6 +50,8 @@ class AtlasGeometryTests(TestCase):
         meta = load_meta()
         docs = {}
         for key, info in meta['pages'].items():
+            if info.get('source') == 'docx' or 'pdf_page' not in info:
+                continue
             pdf_rel = info.get('source_pdf') or meta['source_pdf']
             pdf_path = REPO / pdf_rel
             self.assertTrue(pdf_path.exists(), pdf_path)
@@ -66,13 +69,13 @@ class AtlasGeometryTests(TestCase):
                 f'{key} HTML/scan blank drifted from {pdf_rel}',
             )
 
-    def test_c01_text_boxes_match_blank_inputs(self):
+    def test_c01_text_boxes_match_word_blank_inputs(self):
         org = next(f for f in fields_for('c01') if f['target'] == 'household.org_household_number')
-        self.assertAlmostEqual(org['box'][0], 0.2790, places=3)
-        self.assertAlmostEqual(org['box'][1], 0.0926, places=3)
-        self.assertAlmostEqual(org['box'][2], 0.4891, places=3)
+        self.assertAlmostEqual(org['box'][0], 0.2807, places=3)
+        self.assertAlmostEqual(org['box'][1], 0.1097, places=3)
         name = next(f for f in fields_for('c01') if f['target'] == 'caregiver.name')
-        self.assertAlmostEqual(name['box'][0], 0.2437, places=3)
+        self.assertAlmostEqual(name['box'][0], 0.2892, places=3)
+        self.assertGreater(name['box'][1], 0.30)
         self.assertTrue(has_geometry('cow2_note'))
         self.assertEqual(form_meta('cow2_note')['pages'], 2)
         ref = next(f for f in fields_for('cow2_note') if f['target'] == 'household.org_household_number')

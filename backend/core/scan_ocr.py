@@ -153,10 +153,18 @@ def _prepare_line_crop(crop, kind):
     image = ImageOps.exif_transpose(crop.convert('RGB'))
     image = ImageOps.autocontrast(image)
     width, height = image.size
+    # Official Word C01 rows are ~25px tall. RapidOCR drops letter tops when the
+    # crop is a thin strip, so pad before any upscale.
+    if height < 40:
+        pad = max(12, (48 - height) // 2)
+        padded = Image.new('RGB', (width, height + pad * 2), (255, 255, 255))
+        padded.paste(image, (0, pad))
+        image = padded
+        width, height = image.size
     if height < 48:
         scale = 48 / max(height, 1)
         image = image.resize((max(1, int(width * scale)), 48), Image.Resampling.LANCZOS)
-    if kind in ('handwrite', 'printed', 'date') and max(image.size) < 900:
+    if kind in ('handwrite', 'printed', 'date', 'sa_id') and max(image.size) < 900:
         image = image.resize((image.size[0] * 3, image.size[1] * 3), Image.Resampling.LANCZOS)
         image = image.filter(ImageFilter.SHARPEN)
     return image
@@ -312,14 +320,19 @@ def _open_photo(raw, name):
 
 
 def _prepare_photo(image):
-    """EXIF-orient and shrink after the paper has been cropped."""
+    """EXIF-orient and shrink after the paper has been cropped.
+
+    Cap is high enough that Official C01 phone photos (~2100×3100) keep enough
+    detail for Word-blank feature match. Shrinking to 2400 used to flip page 2
+    onto the page-1 blank (91 inliers vs 185 at full size).
+    """
     image = ImageOps.exif_transpose(image)
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
     width, height = image.size
     longest = max(width, height)
-    if longest > 2400:
-        scale = 2400 / longest
+    if longest > 3600:
+        scale = 3600 / longest
         image = image.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
     return image
 
@@ -758,20 +771,28 @@ def _process_one(image, pdf_text, engine, have_tess):
     form_page = 0
     try:
         if image is not None:
-            working, _ = deskew_and_contrast(image)
-            text, conf, ocr_engine = _ocr_image(working)
+            deskewed, _ = deskew_and_contrast(image)
+            # Full-page OCR likes the deskewed photo; Word-blank feature match
+            # often prefers the EXIF-oriented original (deskew cuts inliers hard).
+            text, conf, ocr_engine = _ocr_image(deskewed)
+            working = deskewed
         form_type, form_conf = classify_text(text)
-        vis_type, vis_page, vis_warp, vis_inliers, vis_failed = identify_form_page(working, hint=form_type)
-        if vis_type and not vis_failed:
-            form_type, form_conf = vis_type, min(0.95, 0.45 + vis_inliers / 80.0)
-            form_page = vis_page if vis_page is not None else 0
-            warped = vis_warp
-            inliers = vis_inliers
-            alignment_failed = False
-        elif vis_type:
-            form_type = vis_type
-            form_page = vis_page or 0
-            alignment_failed = True
+        candidates = []
+        for probe in ((working, 'deskew'), (image, 'raw')):
+            if probe[0] is None:
+                continue
+            vis_type, vis_page, vis_warp, vis_inliers, vis_failed = identify_form_page(
+                probe[0], hint=form_type,
+            )
+            if vis_type and not vis_failed:
+                candidates.append((vis_inliers, vis_type, vis_page, vis_warp, False, probe[0]))
+            elif vis_type:
+                candidates.append((vis_inliers or 0, vis_type, vis_page, vis_warp, True, probe[0]))
+        if candidates:
+            candidates.sort(key=lambda row: (0 if not row[4] else 1, -row[0]))
+            inliers, form_type, form_page, warped, alignment_failed, working = candidates[0]
+            form_page = form_page if form_page is not None else 0
+            form_conf = min(0.95, 0.45 + inliers / 80.0) if not alignment_failed else form_conf
         fields = []
         if warped is not None and has_geometry(form_type):
             fields = _atlas_fields(form_type, warped, form_page)

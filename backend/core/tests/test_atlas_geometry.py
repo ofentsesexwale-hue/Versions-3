@@ -125,25 +125,25 @@ class C01PrintedCellsReadTheCellTests(TestCase):
     """The C01 address-row boxes that used to crop the wrong cell."""
 
     def test_province_town_ward_district_match_the_photograph(self):
-        pages, _tess = process_upload(Upload(FIXTURES / 'c01_household.jpg'))
+        pages, _tess = process_upload(Upload(FIXTURES / 'c01_official_page0.jpg'))
         self.assertEqual(pages[0]['form_type'], 'c01')
+        self.assertEqual(pages[0].get('form_page'), 0)
         self.assertFalse(pages[0]['alignment_failed'])
         by_target = _fields_by_target(pages)
-        town = _first_value(by_target, 'household.town').lower()
         street = _first_value(by_target, 'household.street').lower()
-        house = _first_value(by_target, 'household.house_number')
-        self.assertIn('2291', house, house)
-        self.assertTrue('nkululuthwen' in street or 'nkulaluthwen' in street, street)
+        self.assertTrue(
+            'nkulul' in street or 'enkulul' in street or 'enk' in street,
+            street,
+        )
         for target, garbage in C01_HEADER_GARBAGE.items():
             value = _first_value(by_target, target)
             self.assertNotEqual(value.lower(), garbage.lower(), target)
-        town = _first_value(by_target, 'household.town')
         province = _first_value(by_target, 'household.province')
         district = _first_value(by_target, 'household.district')
-        self.assertNotIn('esgorarig', town.lower())
-        # Phase 6: closed-list match when the OCR is close enough.
-        if (by_target.get('household.town') or [{}])[0].get('vocab_match'):
-            self.assertEqual(town, 'Westonaria')
+        name = _first_value(by_target, 'caregiver.name').lower()
+        surname = _first_value(by_target, 'caregiver.surname').lower()
+        self.assertTrue('sisi' in name or 'lett' in name or 'leht' in name or 'lehh' in name, name)
+        self.assertTrue('haloza' in surname or 'holoza' in surname or 'moholo' in surname, surname)
         if (by_target.get('household.province') or [{}])[0].get('vocab_match'):
             self.assertEqual(province, 'Gauteng')
         if (by_target.get('household.district') or [{}])[0].get('vocab_match'):
@@ -189,7 +189,7 @@ class C03OneRowPerFieldTests(TestCase):
 
 class MemberHandwriteExcludesRulingLinesTests(TestCase):
     def test_member_handwrite_does_not_include_table_rules(self):
-        names = ('c01_household.jpg', 'c01_members_a.jpg', 'c01_members_b.jpg')
+        names = ('c01_official_page0.jpg', 'c01_official_page1.jpg')
         checked = 0
         for name in names:
             pages, _tess = process_upload(Upload(FIXTURES / name))

@@ -4,21 +4,25 @@
   "pages": {
     "c01:0": {
       "file": "c01_p0.png",
-      "pdf_page": 4,
       "rotate": 0,
-      "width": 1190,
+      "width": 1191,
       "height": 1684,
-      "sha256": "c7636dba67ceac6f72465b3717b311d2006ebfedc8c52bc3e42cf79b8f2f388e",
-      "orientation": "portrait"
+      "sha256": "ba202a69d3592ed111cc676d452e242f689d832d8d8c77fbc2323a28133ff8f1",
+      "orientation": "portrait",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/Official_C01_Template.docx"
     },
     "c01:1": {
       "file": "c01_p1.png",
-      "pdf_page": 5,
       "rotate": 0,
-      "width": 1190,
+      "width": 1191,
       "height": 1684,
-      "sha256": "8ce8d6414d29c363c752083e24e7c2949d595cc983195d65d8ab43ff0f178dc1",
-      "orientation": "portrait"
+      "sha256": "1fcc7916095ad712d611c0ef04026393ebeb28b518ee6c54e909c4ffadf9ee28",
+      "orientation": "portrait",
+      "docx_page": 1,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/Official_C01_Template.docx"
     },
     "c02:0": {
       "file": "c02_p0.png",
@@ -94,5 +98,7 @@
       "orientation": "portrait",
       "source_pdf": "docs/official/COW_2_Process_note_04042019.pdf"
     }
-  }
+  },
+  "c01_source": "Official_C01_Template.docx",
+  "c01_source_docx": "docs/official/dsd-source/Official_C01_Template.docx"
 }

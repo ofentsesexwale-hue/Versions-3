@@ -1,6 +1,7 @@
-"""Canonical blank pages rendered from the NPO case-management PDF.
+"""Canonical blank pages for fill, print, and Scan Intake.
 
-Fill, print, and Scan Intake must use these files — never a second HTML layout.
+C01 blanks are rendered from Official_C01_Template.docx. Other forms still
+use the NPO case-management PDF pages. Never invent a second HTML layout.
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from pathlib import Path
 
 BLANKS_DIR = Path(__file__).resolve().parent / 'official_blanks'
 META_PATH = BLANKS_DIR / 'blanks.json'
-ATLAS_VERSION = 'npo-pdf-v1.3'
+ATLAS_VERSION = 'word-c01-v2.0'
 
 
 def load_meta():
