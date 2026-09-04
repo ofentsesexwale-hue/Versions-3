@@ -251,7 +251,7 @@ async function boot() {
     startOffice();
   }
   try {
-    await setSplashStatus("Opening the office file…");
+    await setSplashStatus("Loading");
     await waitForHttp(UI_URL, 90000);
     await setSplashStatus("Almost ready…");
     await mainWindow.loadURL(UI_URL);

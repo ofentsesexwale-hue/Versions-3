@@ -1,4 +1,4 @@
-export default function LaunchScreen({ message = "Opening the office file…" }) {
+export default function LaunchScreen({ message = "Loading" }) {
   return (
     <div
       className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#f3ead8] px-6"
