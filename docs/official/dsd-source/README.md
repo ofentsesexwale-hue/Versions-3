@@ -57,6 +57,7 @@ Also kept: `HIV_Caregiver_Consent.docx`, `HIV_Child_Assent.docx` (single sheets)
 | --- | --- |
 | COW 1 | `COW_1_Planning_04042019.doc` |
 | COW 2 | `COW_2_Process_note_04042019.doc` |
+| COW 2 (fillable) | `COW_2_Process_note_04042019.docx` | LibreOffice conversion of the official `.doc` |
 | COW 3 | `COW_3_Evaluation_0404209.doc` |
 | CW 01 | `CW_01_Screening_Reg_28082019.xlsx` |
 | CW 02 | `CW_02_Reporter_Form_28082019.doc` |
