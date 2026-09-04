@@ -41,7 +41,30 @@ def _looks_like_smash(value):
     text = ' '.join((value or '').split())
     if not text:
         return False
+    # Printed table chrome that lands in handwriting boxes ("Member 4.", "IVember 4.", "Add-Member-1").
+    if re.search(r'(?:member|[mv]?ember)', text, re.I) and re.search(r'\d', text):
+        return True
+    if re.search(r'\badd[\s\-]*m?ember\b', text, re.I):
+        return True
+    # Cropped "Describe:" label from the nationality / disability row.
+    if re.fullmatch(r'd?escribe:?', text, re.I):
+        return True
     letters = _letters(text)
+    # Sparse ruling-noise OCR: "te re ee", "fe eee" (several tiny tokens).
+    tokens = [t for t in re.split(r'[^A-Za-z]+', text) if t]
+    if len(tokens) >= 2 and all(len(t) <= 2 for t in tokens) and len(letters) <= 8:
+        return True
+    if letters and set(letters) <= set('eosatrn') and len(letters) >= 4 and len(set(letters)) <= 3:
+        return True
+    # "fe eee" / "eae" style ruling noise: mostly e with tiny helpers.
+    if len(letters) >= 4 and letters.count('e') / len(letters) >= 0.6:
+        return True
+    if len(letters) >= 3 and len(set(letters)) == 1:
+        return True
+    # Long runs of the same few letters (EYIMIIIMMI) are table-rule noise.
+    if len(letters) >= 8 and len(set(letters)) <= 4:
+        if max(letters.count(ch) for ch in set(letters)) >= 4:
+            return True
     if len(letters) < 5:
         return False
     if not any(v in letters for v in _VOWELS):
@@ -53,6 +76,32 @@ def _looks_like_smash(value):
         if not re.search(r'[aeiou]{1}[a-z]{1,3}[aeiou]', letters):
             return True
     return False
+
+
+def title_case_name(value):
+    """Light title-case for person names after OCR (Thato, not thato)."""
+    parts = []
+    for raw in (value or '').split():
+        if not raw:
+            continue
+        if raw.isupper() and len(raw) > 1:
+            parts.append(raw.capitalize())
+        elif raw.islower():
+            parts.append(raw.capitalize())
+        else:
+            parts.append(raw[0].upper() + raw[1:] if raw else raw)
+    return ' '.join(parts)
+
+
+def split_glued_name_caps(value):
+    """Insert spaces where RapidOCR glued GivenNameSurname without a gap.
+
+    'SisiLebtie' → 'Sisi Lebtie', 'otshelaMicsegc' → 'otshela Micsegc'.
+    """
+    text = ' '.join((value or '').split())
+    if not text:
+        return ''
+    return re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', text).strip()
 
 
 def plausible_person_name(value):
@@ -174,17 +223,32 @@ def sanitize_ocr_value(target, value, kind=None):
         # real answers, including when worked out from an ID number, so only
         # the charset rules apply to a choice field.
         return '' if _looks_like_smash(text) else text
+    # Closed-list answers (nationality, relationship) are also printed on the
+    # form as captions. Once OCR / vocab has produced the canonical string,
+    # keep it — looks_like_gibberish would otherwise blank 'South African'.
+    from .scan_vocab import CLOSED_TEXT, match_closed_text
+    if target in CLOSED_TEXT:
+        hit, _score = match_closed_text(target, text)
+        if hit:
+            return hit
+        if text in CLOSED_TEXT[target]:
+            return text
     if kind == 'sa_id' or (target or '').endswith('id_number'):
         # Spaces and dashes are normal on a form; a short read is not a short
         # ID. Returning the partial digits is what put '74' and '4' into ID
         # fields, so anything that is not 13 digits is simply unreadable.
-        from .sa_id import id_digits
-        return id_digits(text)
+        from .sa_id import id_digits, repair_sa_id_digits
+        digits = id_digits(text)
+        if not digits:
+            return ''
+        return repair_sa_id_digits(digits)
     if looks_like_gibberish(text):
         return ''
     if target in _NAME_TARGETS or (target or '').endswith('.name') or (target or '').endswith('.surname') or (target or '').endswith('.known_as'):
-        cleaned = first_name_words(text)
-        return cleaned if plausible_person_name(cleaned) else ''
+        cleaned = first_name_words(split_glued_name_caps(text))
+        if not plausible_person_name(cleaned):
+            return ''
+        return title_case_name(cleaned)
     if target in _PLACE_TARGETS:
         # One or two words after the label, not the rest of the page.
         clipped = ' '.join(text.split()[:4])

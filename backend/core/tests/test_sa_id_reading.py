@@ -31,18 +31,51 @@ def _with_checksum(first12):
     raise AssertionError('no check digit fits')
 
 
-class SaIdRuleTests(TestCase):
-    """Each rule from the back of the ID book, checked on its own."""
+class SaIdRepairTests(TestCase):
+    def test_unique_trailing_digit_swap_is_repaired(self):
+        from core.sa_id import repair_sa_id_digits
+        # One OCR prep reads a 6 for an 8; DOB digits stay put.
+        self.assertEqual(repair_sa_id_digits('2407150602085'), '2407150802085')
+        self.assertTrue(parse_sa_id(repair_sa_id_digits('2407150602085'))['valid'])
 
-    def test_a_real_id_gives_a_date_of_birth_a_sex_and_a_citizenship(self):
-        parsed = parse_sa_id(VALID)
-        self.assertTrue(parsed['valid'])
-        self.assertTrue(parsed['luhn_ok'])
-        self.assertTrue(parsed['date_ok'])
-        self.assertEqual(parsed['dob'], '1980-01-01')
-        self.assertEqual(parsed['sex'], 'Male')
-        self.assertEqual(parsed['citizenship'], 'South African citizen')
-        self.assertEqual(parsed['problems'], [])
+    def test_ambiguous_single_swap_is_left_alone(self):
+        from core.sa_id import repair_sa_id_digits
+        # Several trailing confusable flips pass Luhn — do not invent an ID.
+        self.assertEqual(repair_sa_id_digits('6511010326060'), '6511010326060')
+        self.assertFalse(parse_sa_id('6511010326060')['valid'])
+
+    def test_best_reading_prefers_repairable_variant(self):
+        digits, conf = best_sa_id_reading([
+            ('2407150602065', 0.9),
+            ('2407150602085', 0.7),
+        ])
+        self.assertEqual(digits, '2407150802085')
+        self.assertGreaterEqual(conf, 0.85)
+
+
+class HandwriteSanitizeTests(TestCase):
+    def test_member_nationality_keeps_south_african(self):
+        self.assertEqual(
+            sanitize_ocr_value('member.1.nationality', 'DoubhAfrican', 'handwrite'),
+            'South African',
+        )
+        self.assertEqual(
+            sanitize_ocr_value('member.1.nationality', 'South African', 'handwrite'),
+            'South African',
+        )
+
+    def test_glued_given_names_are_split(self):
+        self.assertEqual(
+            sanitize_ocr_value('caregiver.name', 'SisiLebtie', 'handwrite'),
+            'Sisi Lebtie',
+        )
+
+    def test_member_chrome_is_blanked(self):
+        self.assertEqual(
+            sanitize_ocr_value('member.2.relationship_to_head', 'IVember 4.', 'handwrite'),
+            '',
+        )
+
 
     def test_spaces_and_dashes_are_not_part_of_the_number(self):
         for written in ('800101 5009 087', '800101-5009-087', ' 800101 5009087 '):

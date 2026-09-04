@@ -1,0 +1,57 @@
+================================================================================
+OVC-CaseFile - Scan Intake PHASE 7
+Handwriting OCR: empty cells, closed vocab, SA ID repair, name cleanup
+================================================================================
+
+Atlas version remains word-c01-v2.0 (Official Word C01 blanks).
+
+
+================================================================================
+1. EMPTY / RULING-NOISE CELLS
+================================================================================
+
+Known As and Describe stay blank when the crop has almost no ink beyond the
+printed table rules (ink gate). Ruling-line removal and smash rules blank
+"te re ee" / "eee" style noise and table chrome such as "IVember 4.".
+
+
+================================================================================
+2. CLOSED VOCAB MUST SURVIVE CLEANUP
+================================================================================
+
+Bug: member nationality OCR near-misses were matched to "South African", then
+_clean_fields re-sanitized and blanked the value because "South African" is
+also a printed form label.
+
+Fix: sanitize / vocab keep closed-list canonicals; _clean_fields does not
+re-sanitize a field that already has vocab_match + value.
+
+
+================================================================================
+3. NAME READING
+================================================================================
+
+* Split glued CamelCase OCR ("SisiLebtie" → "Sisi Lebtie").
+* Ensemble of plain + ruling-stripped + CLAHE preps; keep the best non-gibberish.
+* Title-case after sanitize.
+
+
+================================================================================
+4. SA ID DIGITS
+================================================================================
+
+* Extra 2× upscale prep (often recovers 8 that plain prep reads as 6).
+* Unique single-digit confusable repair with DOB digits frozen (first six).
+* Ambiguous repairs left for staff Confirm — never invent an ID.
+* best_sa_id_reading prefers a variant that becomes valid after that repair.
+
+Example: 2407150602085 → 2407150802085 (Moholoza member 1).
+
+
+================================================================================
+5. GEO / RELATIONSHIP HEURISTICS
+================================================================================
+
+* "Wesb Daina" → West Rand.
+* Stronger South African / Grandchild near-miss shapes.
+* Grandmother requires "moth" (not bare "mot") to avoid false matches.

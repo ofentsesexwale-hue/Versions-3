@@ -10,6 +10,20 @@ from datetime import date
 SA_ID_LENGTH = 13
 MAX_AGE_YEARS = 120
 
+# OCR on freehand digit grids swaps these often. Used only to repair a 13-digit
+# reading that already failed the SA ID rules, and only when exactly one
+# repaired candidate is valid — never to invent an ID from ambiguity.
+_DIGIT_CONFUSABLE = {
+    '0': '689',
+    '1': '7',
+    '3': '8',
+    '5': '6',
+    '6': '085',
+    '7': '1',
+    '8': '0639',
+    '9': '08',
+}
+
 CITIZENSHIP = {
     '0': 'South African citizen',
     '1': 'Permanent resident',
@@ -41,6 +55,36 @@ def id_digits(raw):
     """
     digits = digits_only(raw)
     return digits if len(digits) == SA_ID_LENGTH else ''
+
+
+def repair_sa_id_digits(raw, today=None):
+    """Fix a single common OCR digit swap when the checksum already fails.
+
+    Keeps the date-of-birth digits (first six) fixed — those are usually the
+    clearest handwriting — and only tries one substitution in the trailing
+    seven digits from the confusable map. Returns a repaired ID only when
+    exactly one valid candidate appears; otherwise returns the original
+    13-digit string unchanged (or '' if the input was not 13 digits).
+
+    Two-digit repairs are not attempted: they invent plausible-looking IDs.
+    """
+    digits = digits_only(raw)
+    if len(digits) != SA_ID_LENGTH:
+        return ''
+    if parse_sa_id(digits, today=today)['valid']:
+        return digits
+
+    found = []
+    for i in range(6, SA_ID_LENGTH):
+        ch = digits[i]
+        for alt in _DIGIT_CONFUSABLE.get(ch, ''):
+            trial = digits[:i] + alt + digits[i + 1:]
+            if parse_sa_id(trial, today=today)['valid']:
+                found.append(trial)
+    uniq = list(dict.fromkeys(found))
+    if len(uniq) == 1:
+        return uniq[0]
+    return digits
 
 
 def _dob_from_digits(digits, today=None):

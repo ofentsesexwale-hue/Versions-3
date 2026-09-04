@@ -116,4 +116,21 @@ def match_geo_field(target, raw):
     names = GEO_LISTS.get(target or '') or ()
     if not names:
         return None, 0.0
-    return match_closed_value(raw, names)
+    hit, score = match_closed_value(raw, names, min_score=MIN_SCORE)
+    if hit:
+        return hit, score
+    blob = _alnum(raw)
+    if not blob:
+        return None, score
+    # Handwritten "West Rand" often comes back as Wesb / Wesb Daina / RANDWEST.
+    if 'West Rand' in names and blob.startswith('wes') and (
+        'rand' in blob or 'ran' in blob or 'dain' in blob or 'dan' in blob or 'bda' in blob
+    ):
+        return 'West Rand', round(max(score, 0.72), 3)
+    if 'West Rand' in names and 'randwest' in blob:
+        return 'West Rand', round(max(score, 0.72), 3)
+    if 'Westonaria' in names and (
+        'weston' in blob or 'westonar' in blob or 'weslon' in blob or 'neslon' in blob
+    ):
+        return 'Westonaria', round(max(score, 0.72), 3)
+    return None, score

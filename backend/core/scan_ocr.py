@@ -7,7 +7,7 @@ from PIL import Image, ImageFilter, ImageOps
 
 from .form_atlas import fields_for, has_geometry
 from .official_blanks import ATLAS_VERSION, blank_path
-from .sa_id import SA_ID_LENGTH, parse_sa_id
+from .sa_id import SA_ID_LENGTH, parse_sa_id, repair_sa_id_digits
 from .scan_align import TICK_MARKED, TICK_UNREADABLE
 from .scan_templates import classify_text, extract_fields
 from .scan_text import looks_like_gibberish, sanitize_ocr_value
@@ -170,15 +170,90 @@ def _prepare_line_crop(crop, kind):
     return image
 
 
+def _remove_ruling_lines(image):
+    """Blank printed table rules so RapidOCR does not turn them into letters."""
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return image
+    gray = np.array(image.convert('L'))
+    _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    h, w = bw.shape
+    hk = cv2.getStructuringElement(cv2.MORPH_RECT, (max(24, w // 6), 1))
+    vk = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(10, h // 2)))
+    mask = cv2.bitwise_or(
+        cv2.morphologyEx(bw, cv2.MORPH_OPEN, hk),
+        cv2.morphologyEx(bw, cv2.MORPH_OPEN, vk),
+    )
+    mask = cv2.dilate(mask, np.ones((2, 2), np.uint8), iterations=1)
+    cleaned = gray.copy()
+    cleaned[mask > 0] = 255
+    return Image.fromarray(cleaned).convert('RGB')
+
+
+def _handwrite_variants(crop):
+    """Ruling-stripped padded preps (caller also tries the plain prep)."""
+    base = ImageOps.exif_transpose(crop.convert('RGB'))
+    variants = []
+    cleaned = _remove_ruling_lines(base)
+    for source in (cleaned, base):
+        width, height = source.size
+        pad = max(14, (56 - height) // 2)
+        padded = Image.new('RGB', (width, height + pad * 2), (255, 255, 255))
+        padded.paste(source, (0, pad))
+        big = padded.resize((padded.width * 3, padded.height * 3), Image.Resampling.LANCZOS)
+        variants.append(ImageOps.autocontrast(big))
+        # Mild contrast stretch helps faint freehand without inventing strokes.
+        try:
+            import cv2
+            import numpy as np
+            gray = np.array(big.convert('L'))
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            boosted = Image.fromarray(clahe.apply(gray)).convert('RGB')
+            variants.append(ImageOps.autocontrast(boosted))
+        except Exception:
+            pass
+    # Deduplicate by size/mode only; content differs.
+    return variants[:4]
+
+
+# Blank Known As / Describe cells still pick up ruling noise or the previous
+# row's descenders. Only those often-empty targets use the ink gate.
+EMPTY_CELL_INK_MAX = 0.045
+_EMPTY_INK_SUFFIXES = ('known_as', 'disability_description')
+
+
+def _crop_has_handwriting(crop, reference=None, target=''):
+    if reference is None:
+        return True
+    short = (target or '').rsplit('.', 1)[-1]
+    if short not in _EMPTY_INK_SUFFIXES and not (target or '').endswith('_describe'):
+        return True
+    from .scan_align import ink_fill_ratio
+    return ink_fill_ratio(crop, reference, inset=0.12) > EMPTY_CELL_INK_MAX
+
+
+def _score_handwrite_candidate(text, conf):
+    letters = ''.join(ch for ch in (text or '') if ch.isalpha())
+    if not letters:
+        return None
+    if looks_like_gibberish(text):
+        return None
+    # Prefer engine confidence, then longer letter runs (full names beat scraps).
+    return (float(conf or 0), len(letters))
+
+
 def best_sa_id_reading(readings):
     """Pick the best 13-digit ID among what the engines saw.
 
     An SA ID is handwritten digits in a printed cell grid, which both engines
     misread in different ways, so the checksum is the tie-breaker rather than
     either engine's own confidence. Order of preference: a reading that passes
-    every SA ID rule, then any 13-digit reading, then engine confidence. If no
-    reading is 13 digits long the field is unreadable and stays empty - a
-    partial digit string is never an ID.
+    every SA ID rule (including after a unique single-digit OCR repair), then
+    any 13-digit reading, then engine confidence. If no reading is 13 digits
+    long the field is unreadable and stays empty - a partial digit string is
+    never an ID.
     """
     candidates = []
     seen = set()
@@ -198,35 +273,103 @@ def best_sa_id_reading(readings):
     best, best_rank = '', None
     for digits, conf in candidates:
         trimmed = digits[:SA_ID_LENGTH]
-        parsed = parse_sa_id(trimmed)
+        if len(trimmed) != SA_ID_LENGTH:
+            continue
+        repaired = repair_sa_id_digits(trimmed)
+        parsed = parse_sa_id(repaired)
+        chosen = repaired if parsed['valid'] else trimmed
         rank = (
             0 if parsed['valid'] else 1,
-            0 if parsed['is_sa_length'] else 1,
+            0 if parse_sa_id(chosen)['is_sa_length'] else 1,
             -conf,
         )
         if best_rank is None or rank < best_rank:
-            best, best_rank = trimmed, rank
+            best, best_rank = chosen, rank
     if len(best) != SA_ID_LENGTH:
         return '', 0.2
     return best, (0.9 if parse_sa_id(best)['valid'] else 0.55)
 
 
-def _ocr_crop(crop, kind, reference=None):
+def _ocr_sa_id_variants(crop):
+    """Digit readings from plain, ruling-stripped, and extra-upscaled preps."""
+    readings = []
+    prepared = _prepare_line_crop(crop, 'sa_id')
+    from .scan_engines import read_line
+
+    def _add_image(image):
+        rapid_text, rapid_conf = read_line(image.convert('RGB'))
+        readings.append((rapid_text, rapid_conf))
+        try:
+            import pytesseract
+            cfg = '--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789'
+            text = pytesseract.image_to_string(
+                ImageOps.autocontrast(image.convert('L')), config=cfg,
+            )
+            digits = ''.join(ch for ch in (text or '') if ch.isdigit())
+            if digits:
+                readings.append((digits, 0.55))
+        except Exception:
+            pass
+
+    _add_image(prepared)
+    # Extra scale often recovers an 8 that plain prep reads as 6.
+    bigger = prepared.resize(
+        (prepared.width * 2, prepared.height * 2), Image.Resampling.LANCZOS,
+    )
+    _add_image(ImageOps.autocontrast(bigger.filter(ImageFilter.SHARPEN)))
+    for image in _handwrite_variants(crop):
+        _add_image(image)
+    digits, conf = best_sa_id_reading(readings)
+    if digits:
+        repaired = repair_sa_id_digits(digits)
+        if repaired and repaired != digits and parse_sa_id(repaired)['valid']:
+            return repaired, 0.85
+    return digits, conf
+
+
+def _ocr_handwrite_variants(crop):
+    """Plain padded prep plus ruling-stripped / CLAHE retries; keep the best reading."""
+    from .scan_engines import read_line
+    prepared = _prepare_line_crop(crop, 'handwrite')
+    best_text, best_conf = read_line(prepared)
+    best_score = _score_handwrite_candidate(best_text, best_conf)
+    if best_score is None:
+        best_text, best_conf = '', 0.0
+    for image in _handwrite_variants(crop):
+        text, conf = read_line(image)
+        score = _score_handwrite_candidate(text, conf)
+        if score is None:
+            continue
+        if best_score is None or score > best_score:
+            best_text, best_conf, best_score = text, conf, score
+    if not best_text:
+        return '', 0.0
+    return best_text, max(float(best_conf or 0), 0.2)
+
+
+def _ocr_crop(crop, kind, reference=None, target=''):
     if kind == 'checkbox':
         from .scan_align import checkbox_state
         state, _ratio = checkbox_state(crop, reference)
         if state == TICK_UNREADABLE:
             return '', 0.45
         return ('X' if state == TICK_MARKED else ''), 0.8
+    if kind == 'handwrite' and not _crop_has_handwriting(crop, reference, target=target):
+        return '', 0.6
+    if kind == 'sa_id':
+        return _ocr_sa_id_variants(crop)
+    if kind == 'handwrite':
+        text, mean = _ocr_handwrite_variants(crop)
+        if not text:
+            return '', mean or 0.0
+        if mean < 0.22 and len(''.join(ch for ch in text if ch.isalpha())) < 3:
+            return '', mean
+        return text, max(float(mean or 0), 0.2)
     prepared = _prepare_line_crop(crop, kind)
     from .scan_engines import read_line
     rapid_text, rapid_conf = read_line(prepared)
-    if kind == 'handwrite' and looks_like_gibberish(rapid_text):
-        rapid_text, rapid_conf = '', 0.0
-    psm = 8 if kind == 'sa_id' else 7
+    psm = 7
     cfg = f'--oem 1 --psm {psm}'
-    if kind == 'sa_id':
-        cfg += ' -c tessedit_char_whitelist=0123456789'
     tess_text, tess_conf = '', 0.0
     try:
         import pytesseract
@@ -244,30 +387,17 @@ def _ocr_crop(crop, kind, reference=None):
                 c = -1
             if not token or c < 0:
                 continue
-            if kind == 'sa_id':
-                token = ''.join(ch for ch in token if ch.isdigit())
-            if kind == 'handwrite' and looks_like_gibberish(token):
-                continue
             if token:
                 words.append(token)
                 confs.append(c / 100.0)
         tess_text = ' '.join(words)
         tess_conf = sum(confs) / len(confs) if confs else 0.0
-        if kind == 'sa_id':
-            tess_text = ''.join(ch for ch in tess_text if ch.isdigit())[:13]
     except Exception:
         pass
-    if kind == 'sa_id':
-        return best_sa_id_reading([(tess_text, tess_conf), (rapid_text, rapid_conf)])
-    # Prefer RapidOCR on names/handwriting; Tesseract only if RapidOCR is empty.
-    if rapid_text and (kind == 'handwrite' or rapid_conf >= tess_conf or not tess_text):
+    if rapid_text and (rapid_conf >= tess_conf or not tess_text):
         text, mean = rapid_text, rapid_conf
     else:
         text, mean = tess_text, tess_conf
-    if kind == 'handwrite' and not text:
-        return '', mean
-    if kind == 'handwrite' and mean < 0.22 and len(''.join(ch for ch in text if ch.isalpha())) < 3:
-        return '', mean
     if kind == 'narrative':
         mean = min(mean or 0.4, 0.4)
     if not text:
@@ -378,14 +508,34 @@ def _blank_reference(form_type, page_index):
 def _apply_geo_vocab(item):
     """Replace a closed-list OCR near-miss, or flag it if nothing is close."""
     from .service_area import GEO_LISTS, match_geo_field
+    from .scan_vocab import CLOSED_TEXT, match_closed_text
 
     target = item.get('target') or ''
-    if target not in GEO_LISTS:
-        return item
     if item.get('vocab_match'):
         return item
     raw = (item.get('ocr_raw') or item.get('value') or '').strip()
     if not raw:
+        return item
+
+    if target in CLOSED_TEXT:
+        hit, score = match_closed_text(target, raw)
+        item['ocr_raw'] = raw
+        if hit:
+            item['value'] = hit
+            item['vocab_match'] = hit
+            item['vocab_score'] = score
+            item['low_confidence'] = False
+            item['confidence'] = round(max(float(item.get('confidence') or 0), float(score or 0)), 2)
+        else:
+            item['vocab_match'] = ''
+            item['low_confidence'] = True
+            flag = 'Not close to a known value — check this value.'
+            note = item.get('note') or ''
+            if flag not in note:
+                item['note'] = f'{note}; {flag}' if note else flag
+        return item
+
+    if target not in GEO_LISTS:
         return item
     hit, score = match_geo_field(target, raw)
     item['ocr_raw'] = raw
@@ -411,20 +561,23 @@ def _atlas_fields(form_type, aligned, page_index):
     out = []
     for spec in fields_for(form_type, page_index):
         crop = crop_box(aligned, spec['box'])
+        reference = crop_box(blank, spec['box']) if blank is not None else None
         tick, ratio = None, 0.0
         if spec['kind'] == 'checkbox':
-            reference = crop_box(blank, spec['box']) if blank is not None else None
             tick, ratio = checkbox_state(crop, reference)
             value = ''
             conf = 0.45 if tick == TICK_UNREADABLE else 0.8
         else:
-            value, conf = _ocr_crop(crop, spec['kind'])
-        value = sanitize_ocr_value(spec.get('target') or '', value, spec['kind'])
+            raw_value, conf = _ocr_crop(
+                crop, spec['kind'], reference=reference, target=spec.get('target') or '',
+            )
+            value = sanitize_ocr_value(spec.get('target') or '', raw_value, spec['kind'])
         option = spec.get('option')
         if spec['kind'] == 'checkbox':
             # The group resolver decides which option wins; on its own a box
             # only knows whether it carries a mark.
             value = option if (option and tick == TICK_MARKED) else ''
+            raw_value = value
         id_problems = []
         if spec['kind'] == 'sa_id' and value:
             parsed = parse_sa_id(value)
@@ -434,6 +587,7 @@ def _atlas_fields(form_type, aligned, page_index):
         item = {
             'label': spec['label'],
             'value': value,
+            'ocr_raw': (raw_value if spec['kind'] != 'checkbox' else '') or value,
             'target': spec.get('target') or '',
             'kind': spec['kind'],
             'page': spec['page'],
@@ -753,7 +907,16 @@ def _clean_fields(fields):
     cleaned = []
     for item in fields or []:
         item = dict(item)
-        item['value'] = sanitize_ocr_value(item.get('target') or '', item.get('value') or '', item.get('kind'))
+        if item.get('vocab_match') and (item.get('value') or '').strip():
+            # Vocab already replaced a near-miss with a canonical value. Re-running
+            # sanitize would blank 'South African' as a printed form label.
+            cleaned.append(item)
+            continue
+        raw = (item.get('ocr_raw') or item.get('value') or '')
+        item['ocr_raw'] = raw
+        item['value'] = sanitize_ocr_value(item.get('target') or '', raw, item.get('kind'))
+        item.pop('vocab_match', None)
+        item.pop('vocab_score', None)
         _apply_geo_vocab(item)
         cleaned.append(item)
     return cleaned

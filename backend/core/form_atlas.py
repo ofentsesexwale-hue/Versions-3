@@ -139,7 +139,7 @@ def _c01_member(page, slot, id_ticks, id_box, name, surname, known, nationality,
         _f(p + 'id_type', 'Type of ID', page, id_ticks[0], 'checkbox', option='SA ID Number', group=p + 'id_type'),
         _f(p + 'id_type', 'Type of ID', page, id_ticks[1], 'checkbox', option='Passport Number', group=p + 'id_type'),
         _f(p + 'id_type', 'Type of ID', page, id_ticks[2], 'checkbox', option='Permit', group=p + 'id_type'),
-        _id_cells(p + 'id_number', 'ID Number', page, *_word_cell(id_box, x=0.015, y=0.08)),
+        _id_cells(p + 'id_number', 'ID Number', page, *_word_cell(id_box, x=0.015)),
         _f(p + 'name', 'Name', page, _word_cell(name), 'handwrite'),
         _f(p + 'surname', 'Surname', page, _word_cell(surname), 'handwrite'),
         _f(p + 'known_as', 'Known As', page, _word_cell(known), 'handwrite'),
@@ -159,16 +159,18 @@ def _c01_member(page, slot, id_ticks, id_box, name, surname, known, nationality,
     ]
 
 
-def _word_cell(box, x=0.02, y=0.06, grow_y=0.0025):
-    """Inset a Word-table value cell without clipping handwriting tops.
+def _word_cell(box, x=0.02, grow_top=0.0015, grow_bottom=0.0035):
+    """Crop a Word-table value cell with a little vertical room for ink.
 
-    Official C01 rows are only ~25px tall at scale 2.0. The old PDF inset ate
-    the ascenders; a light vertical grow plus a shallow inset keeps ink inside.
+    Measured cells are ~25px tall and handwriting often touches both rulings.
+    Growing mostly downward recovers names like Sisi Lettie without pulling as
+    much ink from the row above (Known As stays empty via the ink gate).
     """
     x0, y0, x1, y1 = box
-    y0 = max(0.0, y0 - grow_y)
-    y1 = min(1.0, y1 + grow_y)
-    return _inset((x0, y0, x1, y1), x, y)
+    y0 = max(0.0, y0 - grow_top)
+    y1 = min(1.0, y1 + grow_bottom)
+    dx = (x1 - x0) * x
+    return _box(x0 + dx, y0, x1 - dx, y1)
 
 
 def _build_fields():
@@ -202,7 +204,7 @@ def _build_fields():
         _f('caregiver.id_type', 'Type of ID', 0, (0.6709, 0.2180, 0.6835, 0.2269), 'checkbox',
            option='Permit', group='caregiver.id_type'),
         _id_cells('caregiver.id_number', 'ID Number', 0,
-                  *_word_cell((0.2754, 0.2328, 0.7200, 0.2488), x=0.015, y=0.08)),
+                  *_word_cell((0.2754, 0.2328, 0.7200, 0.2488), x=0.015)),
         _f('caregiver.organisation_beneficiary_number', 'Organisation beneficiary', 0,
            _word_cell((0.2754, 0.2506, 0.9673, 0.2785)), 'printed'),
         _f('caregiver.headship_type', 'Headship', 0, (0.4005, 0.2821, 0.4131, 0.2912), 'checkbox',
