@@ -74,6 +74,7 @@ class C03MemberTargetingTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {Token.objects.create(user=self.user).key}')
 
     def test_c03_atlas_targets_a_member_not_the_caregiver(self):
+        # Official Word C03 has one "Name of child" cell (no separate Surname).
         identity = [
             f['target'] for f in fields_for('c03')
             if f['target'] in (
@@ -83,8 +84,9 @@ class C03MemberTargetingTests(TestCase):
         ]
         self.assertEqual(
             sorted(identity),
-            ['member.0.id_number', 'member.0.name', 'member.0.surname'],
+            ['member.0.id_number', 'member.0.name'],
         )
+        self.assertFalse(any(f['target'].startswith('caregiver.') for f in fields_for('c03')))
 
     def test_c02_atlas_stays_on_the_caregiver(self):
         # Official Word C02 has one Name cell (given+surname together), not a

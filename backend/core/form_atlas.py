@@ -1,8 +1,8 @@
 """One field atlas for fill, print, and Scan Intake.
 
 Boxes are normalised 0–1 on the official blank PNG (same file print uses).
-C01 and C02 geometry is measured on Official Word blanks. Other forms still
-use the NPO PDF blanks. Do not rename field labels.
+C01–C03 geometry is measured on Official Word blanks (C03 page 1 only).
+Other forms still use the NPO PDF blanks. Do not rename field labels.
 """
 from functools import lru_cache
 
@@ -48,9 +48,10 @@ ATLAS_FORMS = {
         'official_title': 'C03 CHILD Beneficiary Assessment',
         'header': 'ccg',
         'orientation': 'landscape',
-        'keywords': ['C03', 'C 03', 'CHILD BENEFICIARY', 'CCG FORM'],
+        'keywords': ['C03', 'C 03', 'CHILD BENEFICIARY', 'CHILD Beneficiary', 'CCG FORM'],
         'checklist_item': ('intake_form', 'C03'),
-        'geometry': 'pdf',
+        # Boxes measured on C03_Child_Beneficiary_Assessment.docx page 1 blank.
+        'geometry': 'word',
         'identity_only': True,
     },
     'family_care_plan': {
@@ -392,18 +393,19 @@ def _build_fields():
     ]
     # C03 is the child beneficiary sheet. Identity writes to a member slot
     # (allocated at save), never to caregiver.* — that is the head of household
-    # on C01 / the adult on C02.
+    # on C01 / the adult on C02. Official Word has one "Name of child" cell.
+    # Only page 1 is blanked (trailing blank Word page is ignored).
     c03 = [
-        _f('__display.cycw_name', 'CYCW/CCG Name', 0,
-           _inset((0.1835, 0.1540, 0.4994, 0.1690), 0.03, 0.10), 'handwrite'),
-        _f('member.0.id_number', 'Beneficiary ID', 0,
-           _inset((0.1829, 0.1700, 0.4994, 0.1850), 0.03, 0.10), 'sa_id'),
-        _f('member.0.name', 'Name', 0,
-           _inset((0.1823, 0.1860, 0.4988, 0.2015), 0.03, 0.10), 'handwrite'),
-        _f('member.0.surname', 'Surname', 0,
-           _inset((0.1817, 0.2018, 0.4988, 0.2180), 0.03, 0.10), 'handwrite'),
-        _f('household.org_household_number', 'HH number', 0,
-           _inset((0.1811, 0.2180, 0.4988, 0.2340), 0.03, 0.10), 'printed'),
+        _f('__display.organisation', 'Organisation / Project', 0,
+           _word_cell((0.1150, 0.1100, 0.4900, 0.1270)), 'printed'),
+        _f('__display.personnel', 'Personnel Name', 0,
+           _word_cell((0.1150, 0.1270, 0.4900, 0.1440)), 'printed'),
+        _f('household.org_household_number', 'Org Household Number', 0,
+           _word_cell((0.1150, 0.1440, 0.4900, 0.1600)), 'printed'),
+        _f('member.0.name', 'Name of child', 0,
+           _word_cell((0.1150, 0.1600, 0.4900, 0.1770)), 'handwrite'),
+        _id_cells('member.0.id_number', 'ID number', 0,
+                  *_word_cell((0.1150, 0.1780, 0.4900, 0.2150), x=0.01)),
     ]
     fcp = [
         _f('caregiver.surname', 'Family Name', 0, (0.08, 0.05, 0.34, 0.12), 'handwrite'),

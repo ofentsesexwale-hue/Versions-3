@@ -82,7 +82,7 @@ class OfficialFormValuesView(APIView):
 
 
 def print_official(request, form):
-    """Official print: C01/C02 are filled Word files; other atlas forms stay on canvas for now."""
+    """Official print: C01/C02/C03 are filled Word files; other atlas forms stay on canvas for now."""
     user = _auth_user(request)
     if not user:
         return HttpResponse('Authentication required.', status=401)
@@ -93,20 +93,24 @@ def print_official(request, form):
     if not household:
         raise Http404('No household in scope')
 
-    # Phase 1+: C01 and C02 print into official Word templates — never the NPO PDF.
-    if form in ('c01', 'c02'):
+    # Phase 1+: C01–C03 print into official Word templates — never the NPO PDF.
+    if form in ('c01', 'c02', 'c03'):
         from django.http import HttpResponse as DjangoResponse
-        from .word_forms import fill_c01_docx, fill_c02_docx, values_from_household
+        from .word_forms import fill_c01_docx, fill_c02_docx, fill_c03_docx, values_from_household
 
         values = values_from_household(household)
         if form == 'c01':
             payload = fill_c01_docx(values)
             filename = f"C01_{household.org_household_number or household.pk}.docx"
             label = 'C01'
-        else:
+        elif form == 'c02':
             payload = fill_c02_docx(values)
             filename = f"C02_{household.org_household_number or household.pk}.docx"
             label = 'C02'
+        else:
+            payload = fill_c03_docx(values, member_slot=request.GET.get('member'))
+            filename = f"C03_{household.org_household_number or household.pk}.docx"
+            label = 'C03'
         log_action(user, 'printed', f'Printed official {label} Word for Household #{household.pk}')
         response = DjangoResponse(
             payload,

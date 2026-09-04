@@ -37,12 +37,15 @@
     },
     "c03:0": {
       "file": "c03_p0.png",
-      "pdf_page": 7,
-      "rotate": 90,
+      "rotate": 0,
       "width": 1684,
-      "height": 1190,
-      "sha256": "c8f72b65c861550fcd52afc33392a4f56e13c7077fbf4d9bcc8cb976a9d57e9b",
-      "orientation": "landscape"
+      "height": 1191,
+      "sha256": "33e0ced14936e8919936c7a2d3ec2d2094780ecda4ed3c9089b5896df4bc8e46",
+      "orientation": "landscape",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/C03_Child_Beneficiary_Assessment.docx",
+      "note": "Page 1 only; trailing blank Word page ignored"
     },
     "intake:0": {
       "file": "intake_p0.png",
@@ -104,5 +107,7 @@
   "c01_source": "Official_C01_Template.docx",
   "c01_source_docx": "docs/official/dsd-source/Official_C01_Template.docx",
   "c02_source": "C02_Adult_Assessment_Form.docx",
-  "c02_source_docx": "docs/official/dsd-source/C02_Adult_Assessment_Form.docx"
+  "c02_source_docx": "docs/official/dsd-source/C02_Adult_Assessment_Form.docx",
+  "c03_source": "C03_Child_Beneficiary_Assessment.docx",
+  "c03_source_docx": "docs/official/dsd-source/C03_Child_Beneficiary_Assessment.docx"
 }

@@ -1,8 +1,7 @@
 """Fill official DSD Word templates. Do not overlay the NPO PDF.
 
-The NPO case-management PDF is a file-order guide only. Print for C01 writes
-into ``docs/official/dsd-source/Official_C01_Template.docx``. Print for C02
-writes into ``docs/official/dsd-source/C02_Adult_Assessment_Form.docx``.
+The NPO case-management PDF is a file-order guide only. Print for C01–C03
+writes into the Official Word templates under ``docs/official/dsd-source/``.
 """
 from __future__ import annotations
 
@@ -15,6 +14,7 @@ from docx.table import _Cell
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OFFICIAL_C01 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'Official_C01_Template.docx'
 OFFICIAL_C02 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C02_Adult_Assessment_Form.docx'
+OFFICIAL_C03 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C03_Child_Beneficiary_Assessment.docx'
 
 EMPTY_BOX = '☐'
 MARKED_BOX = '☑'
@@ -26,6 +26,10 @@ def official_c01_path() -> Path:
 
 def official_c02_path() -> Path:
     return OFFICIAL_C02
+
+
+def official_c03_path() -> Path:
+    return OFFICIAL_C03
 
 
 def _tc_cell(table, row_index: int, cell_index: int) -> _Cell:
@@ -305,6 +309,74 @@ def fill_c02_docx(values: dict | None = None, template_path: Path | None = None)
     if len(doc.tables) < 2:
         raise ValueError('Official C02 template does not have the expected header table')
     _fill_c02_header(doc.tables[1], values)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _child_display_name(values: dict, slot: int = 0) -> str:
+    p = f'member.{slot}.'
+    name = (values.get(p + 'name') or '').strip()
+    surname = (values.get(p + 'surname') or '').strip()
+    return ' '.join(part for part in (name, surname) if part)
+
+
+def _resolve_member_slot(values: dict, requested=None) -> int:
+    if requested is not None and str(requested).strip() != '':
+        try:
+            return max(0, int(requested))
+        except (TypeError, ValueError):
+            pass
+    for i in range(8):
+        p = f'member.{i}.'
+        if values.get(p + 'id_number') or values.get(p + 'name') or values.get(p + 'surname'):
+            return i
+    return 0
+
+
+def _fill_c03_header(table, values: dict, slot: int = 0):
+    """Identity header on C03_Child_Beneficiary_Assessment.docx (table 1, page 1)."""
+    p = f'member.{slot}.'
+    org = (
+        values.get('__display.organisation')
+        or values.get('organisation.name')
+        or ''
+    )
+    personnel = (
+        values.get('__display.personnel')
+        or values.get('__display.cycw_name')
+        or ''
+    )
+    org_hh = values.get('household.org_household_number') or ''
+    full_name = _child_display_name(values, slot)
+    id_number = values.get(p + 'id_number') or ''
+
+    _clear_cell(_tc_cell(table, 0, 1), org)
+    _clear_cell(_tc_cell(table, 1, 1), personnel)
+    _clear_cell(_tc_cell(table, 2, 1), org_hh)
+    _clear_cell(_tc_cell(table, 3, 1), full_name)
+    _clear_cell(_tc_cell(table, 4, 1), id_number)
+
+
+def fill_c03_docx(
+    values: dict | None = None,
+    template_path: Path | None = None,
+    member_slot=None,
+) -> bytes:
+    """Return a filled Official C03 .docx (bytes) for one child beneficiary.
+
+    Only page 1 of the Word template is used (LibreOffice exports one page;
+    any trailing blank page in Word is ignored). Assessment ticks stay blank.
+    """
+    path = Path(template_path or official_c03_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official C03 template missing: {path}')
+    values = values or {}
+    slot = _resolve_member_slot(values, member_slot)
+    doc = Document(str(path))
+    if len(doc.tables) < 2:
+        raise ValueError('Official C03 template does not have the expected header table')
+    _fill_c03_header(doc.tables[1], values, slot=slot)
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()

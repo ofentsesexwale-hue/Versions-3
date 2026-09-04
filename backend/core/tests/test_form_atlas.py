@@ -33,12 +33,15 @@ class AtlasGeometryTests(TestCase):
         self.assertTrue(has_geometry('intake'))
         self.assertEqual(form_meta('c01')['geometry'], 'word')
         self.assertEqual(form_meta('c02')['geometry'], 'word')
+        self.assertEqual(form_meta('c03')['geometry'], 'word')
         self.assertEqual(form_meta('c01')['pages'], 2)
         self.assertEqual(form_meta('intake')['pages'], 3)
         self.assertTrue(any(f['target'] == 'caregiver.id_number' and f['kind'] == 'sa_id' for f in fields_for('c01')))
         self.assertEqual(fields_for('c01', 0)[0]['label'], 'Org Household Nr')
         self.assertEqual(fields_for('intake', 0)[1]['label'], 'Primary Client Surname')
         self.assertEqual(load_meta()['pages']['c02:0'].get('source'), 'docx')
+        self.assertEqual(load_meta()['pages']['c03:0'].get('source'), 'docx')
+        self.assertEqual(load_meta()['pages']['c03:0'].get('docx_page'), 0)
 
     def test_blank_png_hash_matches_repo_files(self):
         meta = load_meta()
@@ -143,6 +146,13 @@ class OfficialFormApiTests(TestCase):
             c02['Content-Type'],
         )
         self.assertNotIn(b'official-payload', c02.content)
+        c03 = self.client.get(f'/api/print/c03/?household_id={hid}&token={token}')
+        self.assertEqual(c03.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            c03['Content-Type'],
+        )
+        self.assertNotIn(b'official-payload', c03.content)
         cow = self.client.get(f'/api/print/cow2_note/?household_id={hid}&token={token}')
         self.assertEqual(cow.status_code, 200)
         self.assertIn(b'official-payload', cow.content)

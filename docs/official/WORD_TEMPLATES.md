@@ -133,8 +133,10 @@ open; Form 22 to be completed; Child using drugs; Child drinking alcohol.
 
 Services after this assessment / Comments.
 
-Scan atlas today maps identity onto `member.N.*`. Assessment ticks should be
-mapped later.
+Scan atlas today maps identity onto `member.0.name` + `member.0.id_number`
+(Official Word has one “Name of child” cell). Only **page 1** of the Word
+file is blanked for Scan Intake — a trailing blank page in the `.docx` is
+ignored. Assessment ticks should be mapped later.
 
 ---
 

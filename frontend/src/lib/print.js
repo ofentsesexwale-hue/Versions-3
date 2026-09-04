@@ -12,6 +12,7 @@ export const DSD_FORMS = [
   { key: "checklist", label: "Case File Checklist", group: "Case file" },
   { key: "c01", label: "C01 Household Details", group: "Intake & assessment" },
   { key: "c02", label: "C02 Adult Assessment", group: "Intake & assessment" },
+  { key: "c03", label: "C03 Child Beneficiary Assessment", group: "Intake & assessment" },
   { key: "intake", label: "CW 05 Intake Form", group: "Intake & assessment" },
   { key: "reporter", label: "CW 02 Reporter Form", group: "Intake & assessment" },
   { key: "assessment", label: "CW 09 Assessment, Planning & Contracting", group: "Intake & assessment" },

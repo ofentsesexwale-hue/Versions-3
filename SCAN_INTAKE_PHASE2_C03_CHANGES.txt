@@ -1,0 +1,37 @@
+================================================================================
+OVC-CaseFile - Print / Scan PHASE 2 for C03
+Official Word C03 (page 1) replaces the NPO PDF blank
+================================================================================
+
+Source of truth
+---------------
+docs/official/dsd-source/C03_Child_Beneficiary_Assessment.docx
+
+(Replaced with the office upload C03_Child_Beneficiary_Assessment_43d4.docx.)
+
+Page 2 of 2 in Word is blank and cannot be removed by staff. LibreOffice
+export yields **one** printable page. Scan blank + atlas use **page 1 only**.
+
+
+Phase 1 — print
+---------------
+* word_forms.fill_c03_docx fills Organisation, Personnel, Org HH #,
+  Name of child (= member name + surname), ID number.
+* Optional ?member=N selects which household member (default: first with data).
+* Assessment Yes/No/DK grids stay blank.
+* /api/print/c03/ downloads a .docx (never official_canvas).
+* Print menu lists "C03 Child Beneficiary Assessment".
+
+
+Phase 2 — blanks + atlas
+------------------------
+* Blank PNG: LibreOffice → PDF → pypdfium2 scale 2.0 → c03_p0.png (1684×1191).
+* blanks.json c03:0 source=docx; ATLAS_VERSION word-c01-c02-c03-v2.2.
+* form_atlas C03 geometry='word'; targets stay on member.0.* (not caregiver).
+* Word has one Name-of-child cell (no separate Surname row).
+
+
+Still later
+-----------
+Map Yes/No/DK assessment ticks. Re-photograph a filled Official Word C03 for
+handwriting fixtures (c03_mpilo.jpg is the older NPO sheet).
