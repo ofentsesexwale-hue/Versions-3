@@ -50,7 +50,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-[440px]">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 w-full max-w-[220px] overflow-hidden rounded-[1.75rem] bg-[#f7f0e4] shadow-[0_10px_32px_rgba(63,58,50,0.10)] ring-1 ring-white/70">
+          <div className="w-full max-w-[220px] overflow-hidden rounded-[1.75rem] bg-[#f7f0e4] shadow-[0_10px_32px_rgba(63,58,50,0.10)] ring-1 ring-white/70">
             <img
               src={brandingLogo}
               alt="Sebueng Itumeleng"
@@ -58,7 +58,6 @@ export default function Login() {
               data-testid="login-org-logo"
             />
           </div>
-          <h1 className="text-[28px] font-semibold tracking-tight">Welcome!!!</h1>
         </div>
         <div className="glass-strong rounded-[1.75rem] p-6 sm:p-7">
           <form onSubmit={submit} className="space-y-4">
