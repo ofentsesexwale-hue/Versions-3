@@ -16,7 +16,8 @@ Sheet-by-sheet field lists below were read from the Word XML in
 
 | File | Templates inside | Paper |
 | --- | --- | --- |
-| `CCG_Form_C01.docx` | Household / family details (C01 v.1.2) | A4 portrait |
+| `Official_C01_Template.docx` | Household / family details (C01 v.1.2) — **canonical print blank** | A4 portrait |
+| `CCG_Form_C01.docx` | Earlier CCG C01 copy (kept for reference) | A4 portrait |
 | `C02_Adult_Assessment_Form.docx` | Adult / caregiver assessment (C02) | A4 **landscape** |
 | `C03_Child_Beneficiary_Assessment.docx` | Child beneficiary assessment (C03) | A4 **landscape** |
 | `CW_05_Intake_Form_28082019.docx` | Intake register (CW 05) | A4 portrait |
