@@ -52,7 +52,15 @@ def _get_nested(household, target):
 def values_for_household(household):
     values = {}
     seen = set()
-    for field in fields_for('c01') + fields_for('intake') + fields_for('c02') + fields_for('c03') + fields_for('family_care_plan') + fields_for('hiv_risk') + fields_for('consent') + fields_for('client_referral') + fields_for('hivstat') + fields_for('cow2_note'):
+    for field in (
+        fields_for('c01') + fields_for('intake') + fields_for('c02') + fields_for('c03')
+        + fields_for('family_care_plan') + fields_for('hiv_risk') + fields_for('consent')
+        + fields_for('client_referral') + fields_for('hivstat') + fields_for('monthly_report')
+        + fields_for('educational') + fields_for('site_visit') + fields_for('exit')
+        + fields_for('checklist') + fields_for('content_page') + fields_for('termination')
+        + fields_for('internal_referral') + fields_for('referral') + fields_for('cow2_note')
+        + fields_for('process_note')
+    ):
         target = field.get('target')
         if not target or target in seen:
             continue

@@ -1,0 +1,22 @@
+================================================================================
+OVC-CaseFile - Print / Scan PHASE 2 for remaining Official Word pack
+================================================================================
+
+Migrated this round (print key → Official Word source)
+------------------------------------------------------
+monthly_report     → C06_Monthly_Household_Services_Report.docx
+educational        → Educational_Progress_Record.docx
+site_visit         → Site_Visit_Form.docx (split from 04_Process_Notes.docx)
+exit               → Family_Exit_Form.docx (split from 04_Process_Notes.docx)
+checklist          → NPO_Check_List.docx
+content_page       → Content_Page.docx
+process_note       → CW_11_Process_note_28082019.docx (from official .doc)
+termination        → CW_13_Termination_report_28082019.docx (from official .doc)
+internal_referral  → CW_4a_Internal_Referral_form_28082019.docx (from official .doc)
+referral           → CW_4b_External_Referral_form_28082019.docx (from official .doc)
+
+The original .doc files remain in dsd-source/; LibreOffice companions (.docx)
+are what print/fill/blank rendering use.
+
+ATLAS_VERSION: word-remaining-pack-v2.5
+Identity headers only; narrative grids / ticks stay blank for paper.

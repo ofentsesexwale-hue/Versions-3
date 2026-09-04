@@ -91,6 +91,16 @@ WORD_PRINT_FORMS = {
     'consent': ('fill_consent_docx', 'HIV_Consent', 'HIV Consent Forms'),
     'client_referral': ('fill_client_referral_docx', 'Client_Referral', 'Client Referral Form'),
     'hivstat': ('fill_hivstat_docx', 'HTS', 'HTS Tracking Form'),
+    'monthly_report': ('fill_c06_docx', 'C06', 'C06 Monthly Services'),
+    'educational': ('fill_educational_docx', 'Educational', 'Educational Progress Record'),
+    'site_visit': ('fill_site_visit_docx', 'Site_Visit', 'Site Visit Form'),
+    'exit': ('fill_exit_docx', 'Family_Exit', 'Family Exit Form'),
+    'checklist': ('fill_checklist_docx', 'NPO_Check_List', 'NPO Check List'),
+    'content_page': ('fill_content_page_docx', 'Content_Page', 'Content Page'),
+    'process_note': ('fill_process_note_docx', 'CW11', 'CW 11 Process Note'),
+    'termination': ('fill_termination_docx', 'CW13', 'CW 13 Termination'),
+    'internal_referral': ('fill_internal_referral_docx', 'CW4A', 'CW 4a Internal Referral'),
+    'referral': ('fill_referral_docx', 'CW4B', 'CW 4b External Referral'),
 }
 
 

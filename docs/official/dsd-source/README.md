@@ -22,10 +22,14 @@ is a guide for file order only — do not overlay it. Field-level inventory:
 | C06 / CO6 | `C06_Monthly_Household_Services_Report.docx` | Landscape monthly services grid v2.0 |
 | FCP | `1Family_Care_Plan.docx` | Landscape; two pages |
 | Educational | `Educational_Progress_Record.docx` | Landscape school terms |
-| Process notes | `04_Process_Notes.docx` | **Two templates:** Site Visit form and Family Exit form |
+| Process notes | `04_Process_Notes.docx` | **Two templates:** Site Visit form and Family Exit form — also split as `Site_Visit_Form.docx` / `Family_Exit_Form.docx` |
 | Content page | `Content_Page.docx` | Household file index |
 | NPO check list | `NPO_Check_List.docx` | Supervisor Yes/No evidence table |
 | HIV pack | `DSD_HIV_Risk_Assessment_FULL_PACK.docx` | **Six sheets** in one file (see below) |
+| CW 11 (fillable) | `CW_11_Process_note_28082019.docx` | LibreOffice conversion of the official `.doc` |
+| CW 13 (fillable) | `CW_13_Termination_report_28082019.docx` | LibreOffice conversion of the official `.doc` |
+| CW 4a (fillable) | `CW_4a_Internal_Referral_form_28082019.docx` | LibreOffice conversion of the official `.doc` |
+| CW 4b (fillable) | `CW_4b_External_Referral_form_28082019.docx` | LibreOffice conversion of the official `.doc` |
 
 ### HIV pack sheets (`DSD_HIV_Risk_Assessment_FULL_PACK.docx`)
 

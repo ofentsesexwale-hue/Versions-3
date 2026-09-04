@@ -9,7 +9,8 @@ export const ORG_NAME = "Sebueng Itumeleng";
 // Per-household DSD forms (official Department of Social Development templates).
 export const DSD_FORMS = [
   { key: "full", label: "Full Case File", group: "Case file" },
-  { key: "checklist", label: "Case File Checklist", group: "Case file" },
+  { key: "checklist", label: "NPO Check List", group: "Case file" },
+  { key: "content_page", label: "Content Page", group: "Case file" },
   { key: "c01", label: "C01 Household Details", group: "Intake & assessment" },
   { key: "c02", label: "C02 Adult Assessment", group: "Intake & assessment" },
   { key: "c03", label: "C03 Child Beneficiary Assessment", group: "Intake & assessment" },
@@ -24,7 +25,8 @@ export const DSD_FORMS = [
   { key: "site_visit", label: "Site Visit Form", group: "Process notes" },
   { key: "evaluation", label: "CW 12 Evaluation", group: "Process notes" },
   { key: "group_work", label: "GRW Group Work Session", group: "Process notes" },
-  { key: "referral", label: "CW 04B External Referral", group: "Referral & health" },
+  { key: "internal_referral", label: "CW 4a Internal Referral", group: "Referral & health" },
+  { key: "referral", label: "CW 4b External Referral", group: "Referral & health" },
   { key: "client_referral", label: "Client Referral Form (HIV pack)", group: "Referral & health" },
   { key: "hiv_risk", label: "HIV Risk Assessment", group: "Referral & health" },
   { key: "hivstat", label: "HTS Tracking / Beneficiary Details", group: "Referral & health" },

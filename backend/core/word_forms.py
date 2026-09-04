@@ -1,8 +1,8 @@
 """Fill official DSD Word templates. Do not overlay the NPO PDF.
 
-The NPO case-management PDF is a file-order guide only. Print for C01–C03,
-CW 05, Family Care Plan, and the HIV pack sheets writes into Official Word
-templates under ``docs/official/dsd-source/``.
+The NPO case-management PDF is a file-order guide only. Official print writes
+into Word templates under ``docs/official/dsd-source/`` (``.docx`` fill targets;
+``.doc`` originals are converted once to companion ``.docx`` files).
 """
 from __future__ import annotations
 
@@ -25,6 +25,16 @@ OFFICIAL_HIV_RISK = DS / 'HIV_Risk_Assessment_Form.docx'
 OFFICIAL_HIV_CONSENT = DS / 'HIV_Consent_Forms.docx'
 OFFICIAL_HIV_REFERRAL = DS / 'HIV_Client_Referral_Form.docx'
 OFFICIAL_HIV_HTS = DS / 'HIV_HTS_Tracking_Form.docx'
+OFFICIAL_C06 = DS / 'C06_Monthly_Household_Services_Report.docx'
+OFFICIAL_EDUCATIONAL = DS / 'Educational_Progress_Record.docx'
+OFFICIAL_SITE_VISIT = DS / 'Site_Visit_Form.docx'
+OFFICIAL_EXIT = DS / 'Family_Exit_Form.docx'
+OFFICIAL_CHECKLIST = DS / 'NPO_Check_List.docx'
+OFFICIAL_CONTENT_PAGE = DS / 'Content_Page.docx'
+OFFICIAL_CW11 = DS / 'CW_11_Process_note_28082019.docx'
+OFFICIAL_CW13 = DS / 'CW_13_Termination_report_28082019.docx'
+OFFICIAL_CW4A = DS / 'CW_4a_Internal_Referral_form_28082019.docx'
+OFFICIAL_CW4B = DS / 'CW_4b_External_Referral_form_28082019.docx'
 
 EMPTY_BOX = '☐'
 MARKED_BOX = '☑'
@@ -68,6 +78,46 @@ def official_hiv_referral_path() -> Path:
 
 def official_hiv_hts_path() -> Path:
     return OFFICIAL_HIV_HTS
+
+
+def official_c06_path() -> Path:
+    return OFFICIAL_C06
+
+
+def official_educational_path() -> Path:
+    return OFFICIAL_EDUCATIONAL
+
+
+def official_site_visit_path() -> Path:
+    return OFFICIAL_SITE_VISIT
+
+
+def official_exit_path() -> Path:
+    return OFFICIAL_EXIT
+
+
+def official_checklist_path() -> Path:
+    return OFFICIAL_CHECKLIST
+
+
+def official_content_page_path() -> Path:
+    return OFFICIAL_CONTENT_PAGE
+
+
+def official_cw11_path() -> Path:
+    return OFFICIAL_CW11
+
+
+def official_cw13_path() -> Path:
+    return OFFICIAL_CW13
+
+
+def official_cw4a_path() -> Path:
+    return OFFICIAL_CW4A
+
+
+def official_cw4b_path() -> Path:
+    return OFFICIAL_CW4B
 
 
 # Alias used by print/scan code (atlas key is ``intake``).
@@ -656,6 +706,212 @@ def fill_hivstat_docx(values: dict | None = None, template_path: Path | None = N
             digits = f'{d}{m}{y}'
         _write_char_row(doc.tables[4], 0, digits, start_col=1)
     _write_char_row(doc.tables[5], 0, values.get('member.0.id_number') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _replace_dotted_line(text: str, value: str) -> str:
+    value = (value or '').strip()
+    if not value:
+        return text
+    if '.' * 10 in text:
+        return text.replace('.' * 10, value, 1) if '.' * 60 not in text else re.sub(r'\.{10,}', value, text, count=1)
+    return _fill_underscore_line(text, value)
+
+
+def fill_c06_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill C06 header (CCG name / month stay blank for paper capture)."""
+    path = Path(template_path or official_c06_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official C06 missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    # Identity is in the services grid header row cells when present; keep sheet blank
+    # except org household number hint in paragraph if pattern matches.
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('CCG Name:'):
+            personnel = values.get('__display.personnel') or ''
+            if personnel:
+                p.text = _fill_underscore_line(t, personnel)
+            break
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+fill_monthly_report_docx = fill_c06_docx
+
+
+def fill_educational_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_educational_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official Educational Progress Record missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    family = values.get('caregiver.surname') or ''
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('Family name:'):
+            p.text = _fill_underscore_line(t, family)
+            break
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_site_visit_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_site_visit_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official Site Visit Form missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    caregiver = _person_display_name(values, 'caregiver')
+    family = values.get('caregiver.surname') or ''
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('Name of care giver:'):
+            p.text = _replace_dotted_line(t, caregiver)
+        elif t.startswith('Family:'):
+            p.text = _replace_dotted_line(t, family)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_exit_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_exit_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official Family Exit Form missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    family = values.get('caregiver.surname') or ''
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('Family Name:'):
+            p.text = _replace_dotted_line(t, family)
+        elif t.startswith('Registration Date:'):
+            p.text = _replace_dotted_line(t, values.get('household.date_registered') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_checklist_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_checklist_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official NPO Check List missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    org = values.get('__display.organisation') or ''
+    personnel = values.get('__display.personnel') or ''
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('Name of the Organisation:'):
+            p.text = _fill_underscore_line(t, org)
+        elif "Practitioner's name and surname:" in t:
+            p.text = _fill_underscore_line(t, personnel)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_content_page_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_content_page_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official Content Page missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    hh = values.get('household.org_household_number') or ''
+    family = values.get('caregiver.surname') or ''
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if 'Household Number' in t:
+            filled = _fill_underscore_line(t, hh)
+            if family and 'family' in filled.lower():
+                filled = filled.replace('family', f'{family} family', 1)
+            p.text = filled
+            break
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_process_note_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill CW 11 identity row (converted from the official .doc)."""
+    path = Path(template_path or official_cw11_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official CW 11 missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    table = doc.tables[0]
+    surname = values.get('process_note.client_surname') or values.get('caregiver.surname') or values.get('member.0.surname') or ''
+    first = values.get('process_note.client_first_name') or values.get('caregiver.name') or values.get('member.0.name') or ''
+    ident = values.get('process_note.client_id_number') or values.get('caregiver.id_number') or values.get('member.0.id_number') or ''
+    file_no = values.get('process_note.file_no') or values.get('household.org_household_number') or ''
+    _clear_cell(_tc_cell(table, 1, 0), surname)
+    _clear_cell(_tc_cell(table, 1, 1), first)
+    _clear_cell(_tc_cell(table, 1, 2), ident)
+    _clear_cell(_tc_cell(table, 1, 3), file_no)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_termination_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_cw13_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official CW 13 missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    table = doc.tables[0]
+    surname = values.get('caregiver.surname') or values.get('member.0.surname') or ''
+    first = values.get('caregiver.name') or values.get('member.0.name') or ''
+    ident = values.get('caregiver.id_number') or values.get('member.0.id_number') or ''
+    file_no = values.get('household.org_household_number') or ''
+    _clear_cell(_tc_cell(table, 1, 0), surname)
+    _clear_cell(_tc_cell(table, 1, 1), first)
+    _clear_cell(_tc_cell(table, 1, 2), ident)
+    _clear_cell(_tc_cell(table, 1, 3), file_no)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_internal_referral_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    path = Path(template_path or official_cw4a_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official CW 4a missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    table = doc.tables[2]
+    name = _person_display_name(values, 'member.0') or _person_display_name(values, 'caregiver')
+    ident = values.get('member.0.id_number') or values.get('caregiver.id_number') or ''
+    # Row 1: DSD ref | Identity; Row 2: Client name | Contact
+    _clear_cell(_tc_cell(table, 1, 1), values.get('household.org_household_number') or '')
+    _clear_cell(_tc_cell(table, 1, 3), ident)
+    _clear_cell(_tc_cell(table, 2, 1), name)
+    _clear_cell(_tc_cell(table, 2, 3), values.get('caregiver.cell_number') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_referral_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill CW 4b External Referral client identity (converted from official .doc)."""
+    path = Path(template_path or official_cw4b_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official CW 4b missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    table = doc.tables[3]
+    name = _person_display_name(values, 'member.0') or _person_display_name(values, 'caregiver')
+    ident = values.get('member.0.id_number') or values.get('caregiver.id_number') or ''
+    _clear_cell(_tc_cell(table, 1, 1), name)
+    _clear_cell(_tc_cell(table, 1, 3), values.get('caregiver.cell_number') or '')
+    _clear_cell(_tc_cell(table, 2, 1), values.get('household.org_household_number') or '')
+    _clear_cell(_tc_cell(table, 2, 3), ident)
     buf = BytesIO()
     doc.save(buf)
     return buf.getvalue()
