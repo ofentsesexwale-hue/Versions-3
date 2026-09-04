@@ -1,0 +1,43 @@
+================================================================================
+OVC-CaseFile - Print / Scan PHASE 2 for Family Care Plan + HIV pack
+Official Word templates replace NPO PDF / HTML invents
+================================================================================
+
+Sources
+-------
+docs/official/dsd-source/1Family_Care_Plan.docx
+  (upload 1Family_Care_Plan_d7c3.docx — replaced older dsd-source copy)
+
+docs/official/dsd-source/DSD_HIV_Risk_Assessment_FULL_PACK.docx
+  (byte-identical to upload DSD_HIV_Risk_Assessment_FULL_PACK_64dc.docx)
+
+Split sheets (from the full pack, so each print key downloads only its form):
+  HIV_Risk_Assessment_Form.docx     → print/atlas key ``hiv_risk``
+  HIV_Consent_Forms.docx            → ``consent`` (caregiver consent + child assent)
+  HIV_Client_Referral_Form.docx     → ``client_referral`` (not CW 04B)
+  HIV_HTS_Tracking_Form.docx        → ``hivstat``
+  HIV_Caregiver_Consent.docx / HIV_Child_Assent.docx kept as single-sheet copies
+
+
+Phase 1 — print
+---------------
+* fill_fcp_docx: Family Name, Registration number, Date of Registration.
+* fill_hiv_risk_docx: org / caregiver / child identity header.
+* fill_consent_docx: caregiver + child identity lines on both consent sheets.
+* fill_client_referral_docx: organisation + client name/DOB on Part A.
+* fill_hivstat_docx: First name / Surname / DOB / ID character boxes.
+* Screening ticks, needs grids, and signatures stay blank for paper.
+
+
+Phase 2 — blanks + atlas
+------------------------
+* LibreOffice → PDF → pypdfium2 scale 2.0 blanks.
+* family_care_plan: 2 landscape pages; hiv_risk: 3; consent: 2;
+  client_referral: 2 (instructions + landscape form); hivstat: 1.
+* ATLAS_VERSION word-c01-c02-c03-cw05-fcp-hiv-v2.4.
+* CW 04B External Referral remains the separate ``referral`` HTML/Word path.
+
+
+Still later
+-----------
+Richer FCP needs/actions grid OCR; HIV Part 1–3 tick atlas; HTS status ticks.

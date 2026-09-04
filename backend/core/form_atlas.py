@@ -1,8 +1,8 @@
 """One field atlas for fill, print, and Scan Intake.
 
 Boxes are normalised 0–1 on the official blank PNG (same file print uses).
-C01–C03 and CW 05 geometry is measured on Official Word blanks (C03 page 1
-only). Other forms still use the NPO PDF blanks. Do not rename field labels.
+C01–C03, CW 05, Family Care Plan, and HIV-pack sheets use Official Word
+blanks. Other forms still use the NPO PDF blanks. Do not rename field labels.
 """
 from functools import lru_cache
 
@@ -62,8 +62,49 @@ ATLAS_FORMS = {
         'orientation': 'landscape',
         'keywords': ['FAMILY CARE PLAN', 'FAMILY REGISTRATION', 'IDENTIFIED NEEDS'],
         'checklist_item': ('family_care_plan', 'Family Care Plan'),
-        'geometry': 'pdf',
+        # Boxes measured on 1Family_Care_Plan.docx blank PNGs (scale 2.0).
+        'geometry': 'word',
         'header_only': True,
+    },
+    'hiv_risk': {
+        'title': 'HIV Risk Assessment',
+        'official_title': 'HIV RISK ASSESSMENT FORM',
+        'header': 'dsd',
+        'orientation': 'portrait',
+        'keywords': ['HIV RISK ASSESSMENT', 'PART 1: HIV SCREENING', 'RISK INDICATORS'],
+        'checklist_item': ('family_care_plan', 'Risk Assessment Form'),
+        'geometry': 'word',
+        'identity_only': True,
+    },
+    'consent': {
+        'title': 'HIV Consent Forms',
+        'official_title': 'Primary Caregiver Consent / Child Assent for HIV Testing',
+        'header': 'dsd',
+        'orientation': 'portrait',
+        'keywords': ['CAREGIVER CONSENT', 'CHILD ASSENT', 'HIV TESTING', 'SUPPORTIVE REFERRAL'],
+        'checklist_item': ('family_care_plan', 'Consent form'),
+        'geometry': 'word',
+        'identity_only': True,
+    },
+    'client_referral': {
+        'title': 'Client Referral Form',
+        'official_title': 'CLIENT REFERRAL FORM',
+        'header': 'dsd',
+        'orientation': 'portrait',
+        'keywords': ['CLIENT REFERRAL FORM', 'PART A', 'PART B', 'CODES FOR SERVICES'],
+        'checklist_item': ('referral_form', 'Referral form'),
+        'geometry': 'word',
+        'identity_only': True,
+    },
+    'hivstat': {
+        'title': 'HTS Tracking / Beneficiary Details',
+        'official_title': 'HTS Tracking Form — Beneficiary Details',
+        'header': 'dsd',
+        'orientation': 'portrait',
+        'keywords': ['HTS TRACKING', 'BENEFICIARY DETAILS', 'VIRAL LOAD', 'ON ART'],
+        'checklist_item': ('family_care_plan', 'Risk Assessment Form'),
+        'geometry': 'word',
+        'identity_only': True,
     },
     'cow2_note': {
         'title': 'COW 02: Community Work Process Note',
@@ -423,9 +464,54 @@ def _build_fields():
                   *_word_cell((0.1150, 0.1780, 0.4900, 0.2150), x=0.01)),
     ]
     fcp = [
-        _f('caregiver.surname', 'Family Name', 0, (0.08, 0.05, 0.34, 0.12), 'handwrite'),
-        _f('household.org_household_number', 'Family Registration number', 0, (0.38, 0.05, 0.62, 0.12), 'printed'),
-        _f('household.date_registered', 'Date of Registration', 0, (0.68, 0.05, 0.92, 0.12), 'date'),
+        # Measured on 1Family_Care_Plan.docx blank (1684×1191 landscape).
+        _f('caregiver.surname', 'Family Name', 0,
+           _word_cell((0.1574, 0.0806, 0.4958, 0.0932), x=0.01), 'handwrite'),
+        _f('household.org_household_number', 'Family Registration number', 0,
+           _word_cell((0.6360, 0.0806, 0.9745, 0.0932), x=0.01), 'printed'),
+        _f('household.date_registered', 'Date of Registration', 0,
+           _word_cell((0.1574, 0.0974, 0.4958, 0.1159), x=0.01), 'date'),
+    ]
+    hiv_risk = [
+        _f('__display.organisation', 'Organisation/Service Point', 0,
+           _word_cell((0.2500, 0.1320, 0.4900, 0.1480)), 'printed'),
+        _f('caregiver.name', "Parent's/Legal Guardian/Caregiver Full Name", 0,
+           _word_cell((0.2500, 0.1550, 0.4900, 0.1820)), 'handwrite'),
+        _f('caregiver.cell_number', "Parent's/Legal Guardian Contact Details", 0,
+           _word_cell((0.5200, 0.1550, 0.9500, 0.1820)), 'printed'),
+        _f('member.0.name', "Child's Full Name", 0,
+           _word_cell((0.2500, 0.1880, 0.4900, 0.2050)), 'handwrite'),
+        _f('member.0.id_number', "Child's ID Number/Date of Birth", 0,
+           _word_cell((0.2500, 0.2080, 0.4900, 0.2280)), 'printed'),
+    ]
+    consent = [
+        _f('caregiver.name', 'Parent/Guardian/Caregiver name', 0,
+           _word_cell((0.1200, 0.1450, 0.8800, 0.1650)), 'handwrite'),
+        _f('member.0.name', 'Child 1 name', 0,
+           _word_cell((0.1200, 0.1750, 0.6200, 0.1950)), 'handwrite'),
+        _f('member.0.date_of_birth', 'Child 1 date of birth', 0,
+           _word_cell((0.6500, 0.1750, 0.9000, 0.1950)), 'date'),
+        _f('household.town', 'Residential Area', 0,
+           _word_cell((0.2800, 0.2350, 0.9000, 0.2550)), 'printed'),
+    ]
+    client_referral = [
+        # Landscape CLIENT REFERRAL FORM page (blank page 1).
+        _f('__display.organisation', 'Name of organisation', 1,
+           _word_cell((0.2200, 0.0800, 0.7000, 0.1100)), 'printed'),
+        _f('member.0.name', 'Client Name', 1,
+           _word_cell((0.0800, 0.2000, 0.4500, 0.2350)), 'handwrite'),
+        _f('member.0.date_of_birth', 'Date of Birth', 1,
+           _word_cell((0.0800, 0.2350, 0.3500, 0.2650)), 'date'),
+    ]
+    hivstat = [
+        _f('member.0.name', 'First Name', 0,
+           _word_cell((0.1800, 0.1450, 0.9000, 0.1750)), 'handwrite'),
+        _f('member.0.surname', 'Surname', 0,
+           _word_cell((0.1800, 0.1800, 0.9000, 0.2100)), 'handwrite'),
+        _f('member.0.date_of_birth', 'Date of Birth', 0,
+           _word_cell((0.1800, 0.2150, 0.5500, 0.2450)), 'date'),
+        _f('member.0.id_number', 'ID Number', 0,
+           _word_cell((0.1800, 0.2500, 0.7500, 0.2800)), 'printed'),
     ]
     return {
         'c01': c01,
@@ -433,6 +519,10 @@ def _build_fields():
         'c02': c02,
         'c03': c03,
         'family_care_plan': fcp,
+        'hiv_risk': hiv_risk,
+        'consent': consent,
+        'client_referral': client_referral,
+        'hivstat': hivstat,
         'cow2_note': cow2,
         'process_note': [
             _f('process_note.client_surname', 'Client(s) Surname', 0, (0.28, 0.18, 0.50, 0.22), 'handwrite'),

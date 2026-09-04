@@ -1,10 +1,12 @@
 """Fill official DSD Word templates. Do not overlay the NPO PDF.
 
-The NPO case-management PDF is a file-order guide only. Print for C01–C03 and
-CW 05 writes into the Official Word templates under ``docs/official/dsd-source/``.
+The NPO case-management PDF is a file-order guide only. Print for C01–C03,
+CW 05, Family Care Plan, and the HIV pack sheets writes into Official Word
+templates under ``docs/official/dsd-source/``.
 """
 from __future__ import annotations
 
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -12,10 +14,17 @@ from docx import Document
 from docx.table import _Cell
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OFFICIAL_C01 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'Official_C01_Template.docx'
-OFFICIAL_C02 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C02_Adult_Assessment_Form.docx'
-OFFICIAL_C03 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'C03_Child_Beneficiary_Assessment.docx'
-OFFICIAL_CW05 = REPO_ROOT / 'docs' / 'official' / 'dsd-source' / 'CW_05_Intake_Form_28082019.docx'
+DS = REPO_ROOT / 'docs' / 'official' / 'dsd-source'
+OFFICIAL_C01 = DS / 'Official_C01_Template.docx'
+OFFICIAL_C02 = DS / 'C02_Adult_Assessment_Form.docx'
+OFFICIAL_C03 = DS / 'C03_Child_Beneficiary_Assessment.docx'
+OFFICIAL_CW05 = DS / 'CW_05_Intake_Form_28082019.docx'
+OFFICIAL_FCP = DS / '1Family_Care_Plan.docx'
+OFFICIAL_HIV_PACK = DS / 'DSD_HIV_Risk_Assessment_FULL_PACK.docx'
+OFFICIAL_HIV_RISK = DS / 'HIV_Risk_Assessment_Form.docx'
+OFFICIAL_HIV_CONSENT = DS / 'HIV_Consent_Forms.docx'
+OFFICIAL_HIV_REFERRAL = DS / 'HIV_Client_Referral_Form.docx'
+OFFICIAL_HIV_HTS = DS / 'HIV_HTS_Tracking_Form.docx'
 
 EMPTY_BOX = '☐'
 MARKED_BOX = '☑'
@@ -35,6 +44,30 @@ def official_c03_path() -> Path:
 
 def official_cw05_path() -> Path:
     return OFFICIAL_CW05
+
+
+def official_fcp_path() -> Path:
+    return OFFICIAL_FCP
+
+
+def official_hiv_pack_path() -> Path:
+    return OFFICIAL_HIV_PACK
+
+
+def official_hiv_risk_path() -> Path:
+    return OFFICIAL_HIV_RISK
+
+
+def official_hiv_consent_path() -> Path:
+    return OFFICIAL_HIV_CONSENT
+
+
+def official_hiv_referral_path() -> Path:
+    return OFFICIAL_HIV_REFERRAL
+
+
+def official_hiv_hts_path() -> Path:
+    return OFFICIAL_HIV_HTS
 
 
 # Alias used by print/scan code (atlas key is ``intake``).
@@ -421,6 +454,211 @@ def fill_cw05_docx(values: dict | None = None, template_path: Path | None = None
 
 # Atlas / print key for CW 05 is ``intake``.
 fill_intake_docx = fill_cw05_docx
+
+
+def _person_display_name(values: dict, prefix: str) -> str:
+    name = (values.get(f'{prefix}.name') or '').strip()
+    surname = (values.get(f'{prefix}.surname') or '').strip()
+    return ' '.join(p for p in (name, surname) if p)
+
+
+def _fill_underscore_line(text: str, value: str, min_underscores: int = 8) -> str:
+    """Replace the first long underscore run with ``value`` (padded)."""
+    value = (value or '').strip()
+    if not value or '_' * min_underscores not in text:
+        return text
+    return re.sub(r'_{' + str(min_underscores) + r',}', value, text, count=1)
+
+
+def _write_char_row(table, row_index: int, text: str, start_col: int = 1):
+    """Write characters into consecutive empty boxes after a label cell."""
+    text = (text or '').strip()
+    if not text:
+        return
+    row = table.rows[row_index]
+    tcs = row._tr.tc_lst
+    for i, ch in enumerate(text.replace(' ', '')):
+        col = start_col + i
+        if col >= len(tcs):
+            break
+        _clear_cell(_Cell(tcs[col], table), ch)
+
+
+def fill_fcp_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill Family Care Plan identity header; needs/actions grid stays blank."""
+    path = Path(template_path or official_fcp_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official Family Care Plan missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    table = doc.tables[0]
+    family = (
+        values.get('caregiver.surname')
+        or values.get('__display.family_name')
+        or ''
+    )
+    _clear_cell(_tc_cell(table, 0, 1), family)
+    _clear_cell(_tc_cell(table, 0, 3), values.get('household.org_household_number') or '')
+    _clear_cell(_tc_cell(table, 1, 1), values.get('household.date_registered') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+fill_family_care_plan_docx = fill_fcp_docx
+
+
+def fill_hiv_risk_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill HIV Risk Assessment identity header; Parts 1–3 stay blank for paper."""
+    path = Path(template_path or official_hiv_risk_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official HIV Risk Assessment missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    # Tables: 0 header banner, 1 title, 2 identity grid.
+    table = doc.tables[2]
+    _clear_cell(_tc_cell(table, 0, 1), values.get('__display.organisation') or '')
+    _clear_cell(_tc_cell(table, 0, 3), values.get('__display.job_title') or 'Social Auxiliary Worker')
+    _clear_cell(_tc_cell(table, 1, 1), _person_display_name(values, 'caregiver'))
+    contact = values.get('caregiver.cell_number') or values.get('household.contact') or ''
+    _clear_cell(_tc_cell(table, 1, 3), contact)
+    child = _person_display_name(values, 'member.0')
+    _clear_cell(_tc_cell(table, 2, 1), child)
+    _clear_cell(_tc_cell(table, 2, 3), '')
+    id_or_dob = values.get('member.0.id_number') or values.get('member.0.date_of_birth') or ''
+    _clear_cell(_tc_cell(table, 3, 1), id_or_dob)
+    _clear_cell(_tc_cell(table, 3, 3), values.get('hiv.assessment_date') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_consent_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill caregiver consent + child assent identity lines from the HIV pack."""
+    path = Path(template_path or official_hiv_consent_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official HIV consent forms missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    caregiver = _person_display_name(values, 'caregiver')
+    child = _person_display_name(values, 'member.0')
+    child_dob = values.get('member.0.date_of_birth') or ''
+    area = values.get('household.town') or values.get('household.street') or ''
+    # First "I, ____ Parent/Guardian..." paragraph.
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('I,') and 'Parent/Guardian/Caregiver' in t:
+            p.text = _fill_underscore_line(t, caregiver)
+            break
+    # Child 1 / DOB lines on caregiver consent.
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('Child 1'):
+            filled = t
+            if child:
+                filled = filled.replace('............................................', child, 1)
+            if child_dob:
+                filled = filled.replace('....................', child_dob, 1)
+            p.text = filled
+            break
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('from (Residential Area)'):
+            p.text = t.replace('............................................................', area or '....')
+            break
+    # Child assent opening line.
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('I,') and 'grant permission for my social' in t:
+            p.text = _fill_underscore_line(t, child or caregiver)
+            break
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('Date of Birth (Child)'):
+            p.text = _fill_underscore_line(t, child_dob)
+            break
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('From (Residential Area)'):
+            p.text = _fill_underscore_line(t, area)
+            break
+    # Signature identity numbers where blank cells follow labels.
+    for table in doc.tables:
+        if not table.rows:
+            continue
+        tcs = table.rows[0]._tr.tc_lst
+        if len(tcs) < 2:
+            continue
+        label = (_Cell(tcs[0], table).text or '').strip()
+        if label.startswith('Parent/Guardian/Caregiver'):
+            _clear_cell(_Cell(tcs[1], table), values.get('caregiver.id_number') or '')
+        elif label.startswith('Child/Adolescent/Youth'):
+            _clear_cell(_Cell(tcs[1], table), values.get('member.0.id_number') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_client_referral_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill HIV-pack Client Referral Form org + client name on Part A."""
+    path = Path(template_path or official_hiv_referral_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official Client Referral Form missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    org = values.get('__display.organisation') or ''
+    client = _person_display_name(values, 'member.0') or _person_display_name(values, 'caregiver')
+    dob = values.get('member.0.date_of_birth') or ''
+    for p in doc.paragraphs:
+        t = p.text or ''
+        if t.startswith('NAME OF ORGANISATION:'):
+            p.text = _fill_underscore_line(t, org)
+            break
+    # Part A left cell holds Date / Ref / Client Name / DOB lines.
+    part_a = doc.tables[2]
+    cell = _tc_cell(part_a, 1, 0)
+    text = cell.text
+    if client:
+        text = text.replace(
+            'Client Name: ________________________________________________',
+            f'Client Name: {client}',
+            1,
+        )
+    if dob:
+        text = text.replace(
+            'Date of Birth: ____________________',
+            f'Date of Birth: {dob}',
+            1,
+        )
+    _clear_cell(cell, text)
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def fill_hivstat_docx(values: dict | None = None, template_path: Path | None = None) -> bytes:
+    """Fill HTS Tracking / Beneficiary Details identity boxes."""
+    path = Path(template_path or official_hiv_hts_path())
+    if not path.exists():
+        raise FileNotFoundError(f'Official HTS Tracking Form missing: {path}')
+    values = values or {}
+    doc = Document(str(path))
+    # tables[2]=First Name, [3]=Surname, [4]=DOB, [5]=ID Number
+    _write_char_row(doc.tables[2], 0, values.get('member.0.name') or '')
+    _write_char_row(doc.tables[3], 0, values.get('member.0.surname') or '')
+    dob = (values.get('member.0.date_of_birth') or '').replace('-', '').replace('/', '')
+    # DOB row: label + D D M M Y Y Y Y boxes (skip label).
+    if dob:
+        digits = ''.join(ch for ch in dob if ch.isdigit())
+        # Prefer YYMMDD from ISO yyyy-mm-dd → ddmmyyyy
+        if len(digits) == 8 and values.get('member.0.date_of_birth', '').count('-') == 2:
+            y, m, d = values['member.0.date_of_birth'].split('-')
+            digits = f'{d}{m}{y}'
+        _write_char_row(doc.tables[4], 0, digits, start_col=1)
+    _write_char_row(doc.tables[5], 0, values.get('member.0.id_number') or '')
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
 
 
 def values_from_household(household) -> dict:

@@ -27,16 +27,24 @@ class AtlasGeometryTests(TestCase):
                 self.assertLess(y0, y1, field)
                 self.assertIn(field['kind'], {'sa_id', 'handwrite', 'printed', 'checkbox', 'date', 'narrative'})
 
-    def test_c01_c02_c03_and_cw05_use_word_geometry(self):
+    def test_c01_c02_c03_cw05_fcp_and_hiv_use_word_geometry(self):
         self.assertTrue(has_geometry('c01'))
         self.assertTrue(has_geometry('c02'))
         self.assertTrue(has_geometry('intake'))
+        self.assertTrue(has_geometry('family_care_plan'))
+        self.assertTrue(has_geometry('hiv_risk'))
         self.assertEqual(form_meta('c01')['geometry'], 'word')
         self.assertEqual(form_meta('c02')['geometry'], 'word')
         self.assertEqual(form_meta('c03')['geometry'], 'word')
         self.assertEqual(form_meta('intake')['geometry'], 'word')
+        self.assertEqual(form_meta('family_care_plan')['geometry'], 'word')
+        self.assertEqual(form_meta('hiv_risk')['geometry'], 'word')
+        self.assertEqual(form_meta('consent')['geometry'], 'word')
+        self.assertEqual(form_meta('client_referral')['geometry'], 'word')
+        self.assertEqual(form_meta('hivstat')['geometry'], 'word')
         self.assertEqual(form_meta('c01')['pages'], 2)
         self.assertEqual(form_meta('intake')['pages'], 4)
+        self.assertEqual(form_meta('family_care_plan')['pages'], 2)
         self.assertTrue(any(f['target'] == 'caregiver.id_number' and f['kind'] == 'sa_id' for f in fields_for('c01')))
         self.assertEqual(fields_for('c01', 0)[0]['label'], 'Org Household Nr')
         self.assertEqual(fields_for('intake', 0)[1]['label'], 'Primary Client Surname')
@@ -45,6 +53,9 @@ class AtlasGeometryTests(TestCase):
         self.assertEqual(load_meta()['pages']['c03:0'].get('docx_page'), 0)
         self.assertEqual(load_meta()['pages']['intake:0'].get('source'), 'docx')
         self.assertEqual(load_meta()['pages']['intake:3'].get('docx_page'), 3)
+        self.assertEqual(load_meta()['pages']['family_care_plan:0'].get('source'), 'docx')
+        self.assertEqual(load_meta()['pages']['hiv_risk:0'].get('source'), 'docx')
+        self.assertEqual(load_meta()['pages']['hivstat:0'].get('source'), 'docx')
 
     def test_blank_png_hash_matches_repo_files(self):
         meta = load_meta()

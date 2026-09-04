@@ -81,8 +81,21 @@ class OfficialFormValuesView(APIView):
         })
 
 
+WORD_PRINT_FORMS = {
+    'c01': ('fill_c01_docx', 'C01', 'C01'),
+    'c02': ('fill_c02_docx', 'C02', 'C02'),
+    'c03': ('fill_c03_docx', 'C03', 'C03'),
+    'intake': ('fill_cw05_docx', 'CW05', 'CW 05'),
+    'family_care_plan': ('fill_fcp_docx', 'FCP', 'Family Care Plan'),
+    'hiv_risk': ('fill_hiv_risk_docx', 'HIV_Risk', 'HIV Risk Assessment'),
+    'consent': ('fill_consent_docx', 'HIV_Consent', 'HIV Consent Forms'),
+    'client_referral': ('fill_client_referral_docx', 'Client_Referral', 'Client Referral Form'),
+    'hivstat': ('fill_hivstat_docx', 'HTS', 'HTS Tracking Form'),
+}
+
+
 def print_official(request, form):
-    """Official print: C01–C03 and CW 05 are filled Word files; other atlas forms stay on canvas."""
+    """Official print: Word forms download filled .docx; other atlas forms stay on canvas."""
     user = _auth_user(request)
     if not user:
         return HttpResponse('Authentication required.', status=401)
@@ -94,30 +107,19 @@ def print_official(request, form):
         raise Http404('No household in scope')
 
     # Phase 1+: official Word templates — never the NPO PDF overlay.
-    if form in ('c01', 'c02', 'c03', 'intake'):
+    if form in WORD_PRINT_FORMS:
         from django.http import HttpResponse as DjangoResponse
-        from .word_forms import (
-            fill_c01_docx, fill_c02_docx, fill_c03_docx, fill_cw05_docx,
-            values_from_household,
-        )
+        from . import word_forms
+        from .word_forms import values_from_household
 
         values = values_from_household(household)
-        if form == 'c01':
-            payload = fill_c01_docx(values)
-            filename = f"C01_{household.org_household_number or household.pk}.docx"
-            label = 'C01'
-        elif form == 'c02':
-            payload = fill_c02_docx(values)
-            filename = f"C02_{household.org_household_number or household.pk}.docx"
-            label = 'C02'
-        elif form == 'c03':
-            payload = fill_c03_docx(values, member_slot=request.GET.get('member'))
-            filename = f"C03_{household.org_household_number or household.pk}.docx"
-            label = 'C03'
+        fill_name, file_stem, label = WORD_PRINT_FORMS[form]
+        fill_fn = getattr(word_forms, fill_name)
+        if form == 'c03':
+            payload = fill_fn(values, member_slot=request.GET.get('member'))
         else:
-            payload = fill_cw05_docx(values)
-            filename = f"CW05_{household.org_household_number or household.pk}.docx"
-            label = 'CW 05'
+            payload = fill_fn(values)
+        filename = f"{file_stem}_{household.org_household_number or household.pk}.docx"
         log_action(user, 'printed', f'Printed official {label} Word for Household #{household.pk}')
         response = DjangoResponse(
             payload,

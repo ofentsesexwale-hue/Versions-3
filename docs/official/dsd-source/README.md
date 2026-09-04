@@ -29,6 +29,17 @@ is a guide for file order only — do not overlay it. Field-level inventory:
 
 ### HIV pack sheets (`DSD_HIV_Risk_Assessment_FULL_PACK.docx`)
 
+Split copies used for print/scan (same content as the pack ranges):
+
+| Sheet | Split file | Print / atlas key |
+| --- | --- | --- |
+| 1. HIV RISK ASSESSMENT FORM | `HIV_Risk_Assessment_Form.docx` | `hiv_risk` |
+| 2–3. Caregiver consent + Child assent | `HIV_Consent_Forms.docx` | `consent` |
+| 4. Client Referral Form | `HIV_Client_Referral_Form.docx` | `client_referral` |
+| 5–6. HTS Tracking / Beneficiary Details | `HIV_HTS_Tracking_Form.docx` | `hivstat` |
+
+Also kept: `HIV_Caregiver_Consent.docx`, `HIV_Child_Assent.docx` (single sheets).
+
 1. HIV RISK ASSESSMENT FORM (Parts 1–3: screening, risk indicators, action)
 2. Primary Caregiver Consent to Supportive Referral for HIV Testing
 3. Child Assent Form for referral for HIV Testing

@@ -47,15 +47,6 @@
       "source_docx": "docs/official/dsd-source/C03_Child_Beneficiary_Assessment.docx",
       "note": "Page 1 only; trailing blank Word page ignored"
     },
-    "family_care_plan:0": {
-      "file": "family_care_plan_p0.png",
-      "pdf_page": 12,
-      "rotate": 90,
-      "width": 1684,
-      "height": 1190,
-      "sha256": "7be4077ea1f4a2d6b5ae932e55c789e8bd9c1104850f9b8ce46f31b0c5749b70",
-      "orientation": "landscape"
-    },
     "cow2_note:0": {
       "file": "cow2_p0.png",
       "pdf_page": 1,
@@ -119,6 +110,116 @@
       "docx_page": 3,
       "source": "docx",
       "source_docx": "docs/official/dsd-source/CW_05_Intake_Form_28082019.docx"
+    },
+    "family_care_plan:0": {
+      "file": "family_care_plan_p0.png",
+      "rotate": 0,
+      "width": 1684,
+      "height": 1191,
+      "sha256": "cd1cfe67e22458c37eb665ec399c0355f5812509af881e848450ce148d14f085",
+      "orientation": "landscape",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/1Family_Care_Plan.docx"
+    },
+    "family_care_plan:1": {
+      "file": "family_care_plan_p1.png",
+      "rotate": 0,
+      "width": 1684,
+      "height": 1191,
+      "sha256": "c57b6fe0eeead5d99bdeffb29d628f14b27451e14b75de9a79308f32bd9ebbaf",
+      "orientation": "landscape",
+      "docx_page": 1,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/1Family_Care_Plan.docx"
+    },
+    "hiv_risk:0": {
+      "file": "hiv_risk_p0.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "1e8be093cf6be605fa8df53121e24d556148643f60c05a8eadf7acc33ed78b33",
+      "orientation": "portrait",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Risk_Assessment_Form.docx"
+    },
+    "hiv_risk:1": {
+      "file": "hiv_risk_p1.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "11c0f709d1c7ecb6553e50c40cd283ba0a17955d3587cf7fd9cafa81cab372b6",
+      "orientation": "portrait",
+      "docx_page": 1,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Risk_Assessment_Form.docx"
+    },
+    "hiv_risk:2": {
+      "file": "hiv_risk_p2.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "df4386ff1bd5d0098452b93c84f4b3bed167d279f13a9fe5bd929a376abefd6f",
+      "orientation": "portrait",
+      "docx_page": 2,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Risk_Assessment_Form.docx"
+    },
+    "consent:0": {
+      "file": "consent_p0.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "91b93422f61e0f687f62f8dc88b32cd309e15727efc1d9d5c191a92c78cc12ee",
+      "orientation": "portrait",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Consent_Forms.docx"
+    },
+    "consent:1": {
+      "file": "consent_p1.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "b56670d3e9efe1d4ea8845f6b59b1beb483ba0e47530ea123663fcbb4254dd16",
+      "orientation": "portrait",
+      "docx_page": 1,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Consent_Forms.docx"
+    },
+    "client_referral:0": {
+      "file": "client_referral_p0.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "ee9c0fbdc91f7fd13710abb0e95a58aa54df8bd7a14f0fd400a1a8f4977de68c",
+      "orientation": "portrait",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Client_Referral_Form.docx"
+    },
+    "client_referral:1": {
+      "file": "client_referral_p1.png",
+      "rotate": 0,
+      "width": 1684,
+      "height": 1191,
+      "sha256": "092e50631411a1e722f39c97bacdfd85662d80b6b6e274b4c2febcf1a0c95b45",
+      "orientation": "landscape",
+      "docx_page": 1,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_Client_Referral_Form.docx"
+    },
+    "hivstat:0": {
+      "file": "hivstat_p0.png",
+      "rotate": 0,
+      "width": 1191,
+      "height": 1684,
+      "sha256": "3e775b566f906ec57a50f684c51df2aec09127bed3977684d0221764d6b51e3e",
+      "orientation": "portrait",
+      "docx_page": 0,
+      "source": "docx",
+      "source_docx": "docs/official/dsd-source/HIV_HTS_Tracking_Form.docx"
     }
   },
   "c01_source": "Official_C01_Template.docx",
@@ -128,5 +229,9 @@
   "c03_source": "C03_Child_Beneficiary_Assessment.docx",
   "c03_source_docx": "docs/official/dsd-source/C03_Child_Beneficiary_Assessment.docx",
   "cw05_source": "CW_05_Intake_Form_28082019.docx",
-  "cw05_source_docx": "docs/official/dsd-source/CW_05_Intake_Form_28082019.docx"
+  "cw05_source_docx": "docs/official/dsd-source/CW_05_Intake_Form_28082019.docx",
+  "fcp_source": "1Family_Care_Plan.docx",
+  "fcp_source_docx": "docs/official/dsd-source/1Family_Care_Plan.docx",
+  "hiv_pack_source": "DSD_HIV_Risk_Assessment_FULL_PACK.docx",
+  "hiv_pack_source_docx": "docs/official/dsd-source/DSD_HIV_Risk_Assessment_FULL_PACK.docx"
 }

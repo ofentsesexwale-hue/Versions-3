@@ -169,7 +169,8 @@ Not on the current print/scan atlas.
   includes redoing the HIV risk assessment.
 - Signatures: parent/guardian; practitioner (caregiver / SAW / SW).
 
-Not on the current print/scan atlas (legacy HTML print still exists).
+**Word print + Word blanks** (`family_care_plan`): identity header is filled;
+needs/actions grid stays blank for paper / later atlas work.
 
 ---
 
@@ -232,7 +233,10 @@ form. Word sections: portrait, then landscape, then portrait.
 
 Household member HIV fields already in the app (`hiv_status`, `on_art`,
 `last_viral_load`, `hiv_test_date`, `hiv_risk_notes`) correspond to this pack.
-There is **no atlas** yet.
+
+**Word print + Word blanks** use split sheet files (see `dsd-source/README.md`):
+`hiv_risk`, `consent`, `client_referral`, `hivstat`. Identity headers are
+filled; Part 1–3 ticks and HTS status ticks stay blank for paper.
 
 ### 1. HIV RISK ASSESSMENT FORM
 
