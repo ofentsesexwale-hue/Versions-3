@@ -131,3 +131,10 @@ watchfiles==1.2.0
 websockets==16.1.1
 yarl==1.24.5
 zipp==4.1.0
+# Handwriting OCR (TrOCR primary, Qwen2.5-VL 4-bit fallback)
+transformers>=4.49
+torch>=2.1
+accelerate
+bitsandbytes
+qwen-vl-utils
+Pillow

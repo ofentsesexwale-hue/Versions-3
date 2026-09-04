@@ -1,7 +1,7 @@
-"""Second local OCR engine so Tesseract is not the only reader.
+"""Printed-label and ID-grid OCR (RapidOCR).
 
-RapidOCR (ONNX) stays on this PC. It is used for handwritten names and
-printed lines. Tesseract still reads ID digits and form titles.
+RapidOCR (ONNX) stays on this PC for printed labels, form titles, and SA ID
+cell grids. Handwriting crops use TrOCR + Qwen in ``scan_handwrite_engines``.
 """
 from __future__ import annotations
 

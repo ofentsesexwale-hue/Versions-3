@@ -79,6 +79,42 @@ class ScanIntakeTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data.get('rapidocr'), r.data)
 
+    def test_engine_status_reports_trocr_and_qwen_flags(self):
+        r = self.client.get('/api/scan-intake/engine/')
+        self.assertEqual(r.status_code, 200)
+        # Loaded / ready / error keys must be present for the status panel.
+        for key in ('trocr', 'trocr_ready', 'trocr_error', 'qwen', 'qwen_ready', 'qwen_error'):
+            self.assertIn(key, r.data, r.data)
+        self.assertIn('TrOCR', r.data.get('message') or '')
+        self.assertIn('Qwen', r.data.get('message') or '')
+
+    def test_handwrite_path_uses_trocr_not_rapidocr(self):
+        from unittest.mock import patch
+        from PIL import Image
+        from core.scan_ocr import _ocr_handwrite_variants
+
+        crop = Image.new('RGB', (200, 40), 'white')
+        with patch('core.scan_handwrite_engines.read_handwriting', return_value=('Hallie', 0.88, 'trocr')) as hw, \
+             patch('core.scan_engines.read_line') as rapid:
+            text, conf = _ocr_handwrite_variants(crop)
+        self.assertEqual(text, 'Hallie')
+        self.assertGreaterEqual(conf, 0.72)
+        self.assertTrue(hw.called)
+        rapid.assert_not_called()
+
+    def test_handwrite_falls_back_to_qwen_when_trocr_weak(self):
+        from core.scan_handwrite_engines import read_handwriting, TROCR_LOW_CONF
+        from unittest.mock import patch
+        from PIL import Image
+
+        crop = Image.new('RGB', (120, 40), 'white')
+        with patch('core.scan_handwrite_engines.read_trocr', return_value=('', 0.0)), \
+             patch('core.scan_handwrite_engines.read_qwen', return_value=('Motswaledi', 0.7)):
+            text, conf, name = read_handwriting(crop)
+        self.assertEqual(text, 'Motswaledi')
+        self.assertEqual(name, 'qwen')
+        self.assertGreater(conf, TROCR_LOW_CONF)
+
     def test_intake_without_c01_still_classifies(self):
         form, conf = classify_text(INTAKE_TEXT)
         self.assertEqual(form, 'intake')

@@ -268,12 +268,45 @@ export default function ScanIntake() {
               iPhone photos work as HEIC or JPEG. Fill the paper in the frame (avoid the desk). Upload only the pages that exist in that file. Printed names and ID numbers read better than pencil.
             </p>
             {engine && (
-              <p
-                className={`text-sm ${engine.rapidocr ? "text-emerald-800" : "border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950"}`}
-                data-testid="scan-engine-status"
-              >
-                {engine.message}
-              </p>
+              <div className="space-y-2 text-sm" data-testid="scan-engine-status">
+                <p
+                  className={
+                    engine.trocr || engine.trocr_ready || engine.rapidocr
+                      ? "text-emerald-800"
+                      : "border border-amber-300 bg-amber-50 px-3 py-2 text-amber-950"
+                  }
+                >
+                  {engine.message}
+                </p>
+                <ul className="grid gap-1 sm:grid-cols-2 text-slate-700">
+                  <li data-testid="scan-engine-trocr">
+                    TrOCR (handwriting):{" "}
+                    {engine.trocr
+                      ? "loaded"
+                      : engine.trocr_ready
+                        ? "ready — loads on first crop"
+                        : engine.trocr_error
+                          ? `not loaded (${engine.trocr_error})`
+                          : "not loaded"}
+                  </li>
+                  <li data-testid="scan-engine-qwen">
+                    Qwen2.5-VL (fallback):{" "}
+                    {engine.qwen
+                      ? "loaded"
+                      : engine.qwen_ready
+                        ? "ready — loads when TrOCR is weak"
+                        : engine.qwen_error
+                          ? `not loaded (${engine.qwen_error})`
+                          : "not loaded"}
+                  </li>
+                  <li data-testid="scan-engine-rapidocr">
+                    RapidOCR (printed / ID): {engine.rapidocr ? "loaded" : "not loaded"}
+                  </li>
+                  <li data-testid="scan-engine-tesseract">
+                    Tesseract (printed / ID): {engine.tesseract ? "loaded" : "not loaded"}
+                  </li>
+                </ul>
+              </div>
             )}
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-medium">
