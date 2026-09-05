@@ -120,29 +120,70 @@ class ScanIntakeTests(TestCase):
         self.assertEqual(name, 'lightonocr')
         self.assertGreater(conf, TROCR_LOW_CONF)
 
-    def test_preprocess_handwriting_crop_runs_akincal_steps(self):
+    def test_preprocess_handwriting_crop_is_mild_not_binarized(self):
         from unittest.mock import patch
         from PIL import Image
         from core import scan_handwrite_engines as hw
 
         crop = Image.new('RGB', (80, 24), 'white')
-        order = []
-
-        def _track(name):
-            def _fn(image, quality=None):
-                order.append(name)
-                return image.convert('RGB') if hasattr(image, 'convert') else image
-            return _fn
-
-        with patch.object(hw, 'fix_polarity', side_effect=_track('polarity')), \
-             patch.object(hw, 'deskew_image', side_effect=_track('deskew')), \
-             patch.object(hw, 'reduce_noise', side_effect=_track('noise')), \
-             patch.object(hw, 'enhance_clahe', side_effect=_track('clahe')), \
-             patch.object(hw, 'adaptive_binarize', side_effect=_track('binarize')), \
-             patch.object(hw, 'analyze_image_quality', return_value={'blur': 200, 'contrast': 50, 'noise': 5}):
+        with patch.object(hw, 'fix_polarity') as polarity, \
+             patch.object(hw, 'deskew_image') as deskew, \
+             patch.object(hw, 'reduce_noise') as noise, \
+             patch.object(hw, 'enhance_clahe') as clahe, \
+             patch.object(hw, 'adaptive_binarize') as binarize:
             out = hw.preprocess_handwriting_crop(crop)
-        self.assertEqual(order, ['polarity', 'deskew', 'noise', 'clahe', 'binarize'])
-        self.assertEqual(out.size, crop.size)
+        # First-pass prep must not run hard akincal/OCR steps.
+        polarity.assert_not_called()
+        deskew.assert_not_called()
+        noise.assert_not_called()
+        clahe.assert_not_called()
+        binarize.assert_not_called()
+        self.assertEqual(out.mode, 'RGB')
+        # Short rows are padded / upscaled, not left as a thin strip.
+        self.assertGreaterEqual(out.size[1], 48)
+
+    def test_hard_handwriting_variant_rejects_sludge(self):
+        from PIL import Image, ImageDraw
+        from core.scan_handwrite_engines import (
+            hard_variant_is_usable,
+            preprocess_handwriting_crop,
+        )
+
+        crop = Image.new('RGB', (200, 40), (245, 245, 245))
+        draw = ImageDraw.Draw(crop)
+        draw.text((20, 10), 'Motswaledi', fill=(30, 30, 30))
+        mild = preprocess_handwriting_crop(crop)
+        sludge = Image.new('RGB', mild.size, (0, 0, 0))
+        blank = Image.new('RGB', mild.size, (255, 255, 255))
+        self.assertFalse(hard_variant_is_usable(mild, sludge))
+        self.assertFalse(hard_variant_is_usable(mild, blank))
+
+    def test_handwrite_tries_mild_before_hard_variants(self):
+        from unittest.mock import patch
+        from PIL import Image
+        from core.scan_handwrite_engines import read_handwriting
+
+        crop = Image.new('RGB', (120, 40), 'white')
+        mild = Image.new('RGB', (360, 120), 'white')
+        hard = Image.new('RGB', (360, 120), 'black')
+        trocr_images = []
+
+        def _trocr(image, cancel=None, session_id=None, *, preprocessed=False):
+            trocr_images.append(image)
+            # Strong hit on the first (mild) pass — hard variants must not run.
+            return ('Motswaledi', 0.9)
+
+        with patch('core.scan_handwrite_engines.preprocess_handwriting_crop', return_value=mild) as prep, \
+             patch('core.scan_handwrite_engines.handwriting_fallback_variants', return_value=[hard]) as variants, \
+             patch('core.scan_handwrite_engines.read_trocr', side_effect=_trocr), \
+             patch('core.scan_handwrite_engines.read_lightonocr') as lighton:
+            text, conf, name = read_handwriting(crop)
+        self.assertEqual(text, 'Motswaledi')
+        self.assertEqual(name, 'trocr')
+        prep.assert_called()
+        variants.assert_not_called()
+        lighton.assert_not_called()
+        self.assertEqual(trocr_images[0], mild)
 
     def test_handwrite_session_cancel_stops_progress(self):
         from core.scan_handwrite_engines import (

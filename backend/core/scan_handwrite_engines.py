@@ -4,10 +4,15 @@ TrOCR (microsoft/trocr-base-handwritten) is the primary reader for every
 handwriting crop. LightOnOCR-2-1B (lightonai/LightOnOCR-2-1B) is the
 fallback when TrOCR returns empty or low-confidence text.
 
-Every crop is preprocessed first (ported from akincal/OCR): polarity
-detection, noise reduction, CLAHE contrast, auto-deskew, and adaptive
-thresholding. Inference runs on background worker threads with cooperative
-cancel so the UI can abort when the window closes or a new scan starts.
+The first pass always uses a mild original crop (EXIF-orient, pad short
+rows, upscale, mild autocontrast) — never polarity invert or adaptive
+thresholding. Harder akincal/OCR steps (CLAHE, denoise, deskew, adaptive
+threshold, polarity) are optional fallback variants only when that first
+reading is empty or low-confidence, and only if the variant still looks
+like ink rather than black/white sludge.
+
+Inference runs on background worker threads with cooperative cancel so
+the UI can abort when the window closes or a new scan starts.
 
 LightOnOCR loads on CPU only (float32, no quantization, no device_map).
 Both models download on first use via ``from_pretrained`` and cache locally.
@@ -64,7 +69,7 @@ def lightonocr_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Preprocessing — ported from github.com/akincal/OCR scripts/ocr_inference.py
+# Preprocessing — mild original first; hard akincal/OCR steps as fallbacks
 # ---------------------------------------------------------------------------
 
 def analyze_image_quality(image) -> dict:
@@ -198,31 +203,157 @@ def adaptive_binarize(image):
 
 
 def preprocess_handwriting_crop(image):
-    """Run akincal/OCR preprocess steps on every handwriting crop.
+    """Mild original-crop prep for the first TrOCR / LightOnOCR pass.
 
-    Mirrors ``scripts/ocr_inference.py`` usage order for field crops:
-    polarity → deskew → noise reduction → CLAHE → adaptive threshold.
-    (Full-page document detection / OSD orientation are skipped — crops are
-    already aligned field boxes from Scan Intake.)
+    EXIF-orient, pad short rows, upscale, mild autocontrast only.
+    Does **not** invert polarity or binarize — those hard steps live in
+    ``handwriting_fallback_variants`` and run only after a weak first read.
     """
     if image is None:
         return image
     try:
-        from PIL import ImageOps
+        from PIL import Image, ImageOps
+
         image = ImageOps.exif_transpose(image.convert('RGB'))
-        image = fix_polarity(image)
-        quality = analyze_image_quality(image)
-        image = deskew_image(image)
-        image = reduce_noise(image, quality=quality)
-        image = enhance_clahe(image, quality=quality)
-        image = adaptive_binarize(image)
-        return image
+        # Mild stretch only — keep continuous gray so strokes stay intact.
+        image = ImageOps.autocontrast(image, cutoff=0.5)
+        width, height = image.size
+        if height < 40:
+            pad = max(12, (48 - height) // 2)
+            padded = Image.new('RGB', (width, height + pad * 2), (255, 255, 255))
+            padded.paste(image, (0, pad))
+            image = padded
+            width, height = image.size
+        if height < 48:
+            scale = 48 / max(height, 1)
+            image = image.resize(
+                (max(1, int(width * scale)), 48),
+                Image.Resampling.LANCZOS,
+            )
+            width, height = image.size
+        if max(width, height) < 900:
+            image = image.resize(
+                (max(1, width * 3), max(1, height * 3)),
+                Image.Resampling.LANCZOS,
+            )
+        return image.convert('RGB')
     except Exception:
-        logger.exception('Handwriting preprocess failed; using original crop')
+        logger.exception('Mild handwriting prep failed; using original crop')
         try:
             return image.convert('RGB')
         except Exception:
             return image
+
+
+def _ink_metrics(image) -> dict:
+    """Dark-pixel fraction and ink-shaped connected-component count."""
+    import cv2
+    import numpy as np
+
+    gray = np.array(image.convert('L'))
+    if gray.size == 0:
+        return {'dark_fraction': 0.0, 'ink_components': 0}
+    binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    dark_fraction = float(np.mean(binary > 0))
+    num_labels, _labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    ink_components = 0
+    h, w = binary.shape[:2]
+    min_area = max(8, int(0.0004 * h * w))
+    max_area = int(0.35 * h * w)
+    for i in range(1, num_labels):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        bw = int(stats[i, cv2.CC_STAT_WIDTH])
+        bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+        if area < min_area or area > max_area:
+            continue
+        # Reject long ruling-line bars; keep letter-like blobs.
+        if bw > 0.65 * w and bh <= max(3, int(0.12 * h)):
+            continue
+        if bh > 0.65 * h and bw <= max(3, int(0.12 * w)):
+            continue
+        ink_components += 1
+    return {
+        'dark_fraction': dark_fraction,
+        'ink_components': ink_components,
+    }
+
+
+def hard_variant_is_usable(original, variant) -> bool:
+    """Reject hard preprocess outputs that collapse into sludge or lose ink."""
+    if variant is None or original is None:
+        return False
+    try:
+        base = _ink_metrics(original)
+        hard = _ink_metrics(variant)
+    except Exception:
+        logger.exception('Ink metrics failed; rejecting hard variant')
+        return False
+    dark = hard['dark_fraction']
+    # Mostly white (specks only) or mostly black (flooded).
+    if dark < 0.008 or dark > 0.88:
+        return False
+    # Far fewer ink-shaped components than the original mild crop.
+    base_ink = max(1, int(base['ink_components']))
+    if int(hard['ink_components']) < max(1, int(0.4 * base_ink)):
+        return False
+    return True
+
+
+def hard_preprocess_handwriting_crop(image, *, use_polarity=False, binarize=True):
+    """Optional hard akincal/OCR pipeline (never the first TrOCR input)."""
+    if image is None:
+        return image
+    try:
+        from PIL import ImageOps
+
+        image = ImageOps.exif_transpose(image.convert('RGB'))
+        if use_polarity:
+            image = fix_polarity(image)
+        quality = analyze_image_quality(image)
+        image = deskew_image(image)
+        image = reduce_noise(image, quality=quality)
+        image = enhance_clahe(image, quality=quality)
+        if binarize:
+            image = adaptive_binarize(image)
+        return image
+    except Exception:
+        logger.exception('Hard handwriting preprocess failed')
+        try:
+            return image.convert('RGB')
+        except Exception:
+            return image
+
+
+def handwriting_fallback_variants(image):
+    """Hard preprocess variants for weak first-pass reads; sludge filtered out.
+
+    Built from the mild original so scale matches the first TrOCR input.
+    """
+    mild = preprocess_handwriting_crop(image)
+    if mild is None:
+        return []
+    candidates = [
+        hard_preprocess_handwriting_crop(mild, use_polarity=False, binarize=False),
+        hard_preprocess_handwriting_crop(mild, use_polarity=False, binarize=True),
+        hard_preprocess_handwriting_crop(mild, use_polarity=True, binarize=True),
+    ]
+    usable = []
+    seen = set()
+    for variant in candidates:
+        if variant is None:
+            continue
+        try:
+            key = (variant.size, hash(variant.tobytes()[::97]))
+        except Exception:
+            key = id(variant)
+        if key in seen:
+            continue
+        seen.add(key)
+        if hard_variant_is_usable(mild, variant):
+            usable.append(variant)
+        else:
+            logger.info('Rejected hard handwriting variant (sludge / lost ink)')
+    return usable
 
 
 # ---------------------------------------------------------------------------
@@ -539,8 +670,8 @@ def _submit_inference(fn, image, cancel, session_id):
 def read_trocr(image, cancel=None, session_id=None, *, preprocessed=False):
     """Return (text, confidence) from TrOCR. Empty on failure.
 
-    Preprocesses the crop unless ``preprocessed=True`` (when the caller already
-    ran ``preprocess_handwriting_crop``).
+    Applies mild ``preprocess_handwriting_crop`` unless ``preprocessed=True``.
+    Never runs polarity/adaptive-threshold here — those are fallback-only.
     """
     if image is None:
         return '', 0.0
@@ -572,12 +703,25 @@ def read_lightonocr(image, cancel=None, session_id=None, *, preprocessed=False):
         return '', 0.0
 
 
-def read_handwriting(image, cancel=None, session_id=None, field_key=''):
-    """Primary TrOCR, then LightOnOCR fallback. Returns (text, conf, engine_name).
+def _reading_is_strong(text, conf) -> bool:
+    return bool(text) and float(conf or 0) >= TROCR_LOW_CONF
 
-    Models stay lazy: TrOCR loads on first crop; LightOnOCR loads only when
-    the fallback path actually runs. Inference runs on a background worker.
-    Preprocess runs once per crop before either engine.
+
+def _keep_best(best, text, conf, engine):
+    """Prefer non-empty higher-confidence readings."""
+    if not text:
+        return best
+    b_text, b_conf, b_engine = best
+    if not b_text or float(conf or 0) > float(b_conf or 0):
+        return text, conf, engine
+    return best
+
+
+def read_handwriting(image, cancel=None, session_id=None, field_key=''):
+    """Primary TrOCR on the mild original, then LightOnOCR, then hard variants.
+
+    Returns (text, conf, engine_name). Models stay lazy; inference runs on a
+    background worker. The first TrOCR pass never sees a thresholded crop.
     """
     if cancel is None and session_id:
         cancel = _session_cancel(session_id)
@@ -585,28 +729,49 @@ def read_handwriting(image, cancel=None, session_id=None, field_key=''):
         _set_progress(session_id, field_key, 'running')
     try:
         _check_cancel(cancel)
-        prepared = preprocess_handwriting_crop(image)
+        mild = preprocess_handwriting_crop(image)
         _check_cancel(cancel)
-        text, conf = read_trocr(prepared, cancel=cancel, session_id=session_id, preprocessed=True)
-        if text and conf >= TROCR_LOW_CONF:
+        text, conf = read_trocr(mild, cancel=cancel, session_id=session_id, preprocessed=True)
+        best = (text, conf, 'trocr') if text else ('', 0.0, 'none')
+        if _reading_is_strong(text, conf):
             if field_key:
                 _set_progress(session_id, field_key, 'done')
             return text, conf, 'trocr'
+
         _check_cancel(cancel)
         light_text, light_conf = read_lightonocr(
-            prepared, cancel=cancel, session_id=session_id, preprocessed=True,
+            mild, cancel=cancel, session_id=session_id, preprocessed=True,
         )
-        if light_text:
+        best = _keep_best(best, light_text, light_conf, 'lightonocr')
+        if _reading_is_strong(light_text, light_conf):
             if field_key:
                 _set_progress(session_id, field_key, 'done')
             return light_text, light_conf, 'lightonocr'
-        if text:
-            if field_key:
-                _set_progress(session_id, field_key, 'done')
-            return text, conf, 'trocr'
+
+        # Optional hard variants only after a weak mild-pass reading.
+        for variant in handwriting_fallback_variants(image):
+            _check_cancel(cancel)
+            v_text, v_conf = read_trocr(
+                variant, cancel=cancel, session_id=session_id, preprocessed=True,
+            )
+            best = _keep_best(best, v_text, v_conf, 'trocr')
+            if _reading_is_strong(v_text, v_conf):
+                if field_key:
+                    _set_progress(session_id, field_key, 'done')
+                return v_text, v_conf, 'trocr'
+            _check_cancel(cancel)
+            v_light, v_light_conf = read_lightonocr(
+                variant, cancel=cancel, session_id=session_id, preprocessed=True,
+            )
+            best = _keep_best(best, v_light, v_light_conf, 'lightonocr')
+            if _reading_is_strong(v_light, v_light_conf):
+                if field_key:
+                    _set_progress(session_id, field_key, 'done')
+                return v_light, v_light_conf, 'lightonocr'
+
         if field_key:
             _set_progress(session_id, field_key, 'done')
-        return '', 0.0, 'none'
+        return best
     except HandwriteCancelled:
         if field_key:
             _set_progress(session_id, field_key, 'cancelled')
