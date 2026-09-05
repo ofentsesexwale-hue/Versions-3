@@ -190,14 +190,19 @@ def scoped_household_qs(user):
 
 
 def _ensure_checklist(household):
-    """Populate the standard NPO checklist template for a household (once)."""
-    if household.checklist_items.exists():
-        return
-    items = [
+    """Ensure every CHECKLIST_TEMPLATE row exists for this household.
+
+    Creates missing rows (e.g. newly added Report card) without wiping
+    existing Yes/No ticks on older rows.
+    """
+    existing = {(i.category, i.sub_item) for i in household.checklist_items.all()}
+    to_create = [
         CaseFileChecklistItem(household=household, category=cat, sub_item=sub)
         for cat, sub in choices.CHECKLIST_TEMPLATE
+        if (cat, sub) not in existing
     ]
-    CaseFileChecklistItem.objects.bulk_create(items)
+    if to_create:
+        CaseFileChecklistItem.objects.bulk_create(to_create)
 
 
 def filter_unconfirmed(qs, field):
@@ -1528,6 +1533,11 @@ def choices_view(request):
         'marital_status': [c[0] for c in choices.MARITAL_STATUS_CHOICES],
         'headship_type': [c[0] for c in choices.HEADSHIP_TYPE_CHOICES],
         'category': [{'value': c[0], 'label': c[1]} for c in choices.CATEGORY_CHOICES],
+        'checklist_template': [
+            {'category': cat, 'sub_item': sub, 'category_label': dict(choices.CATEGORY_CHOICES).get(cat, cat)}
+            for cat, sub in choices.CHECKLIST_TEMPLATE
+        ],
+        'category_order': [c[0] for c in choices.CATEGORY_CHOICES],
         'has_evidence': ['Yes', 'No', ''],
         'problem_codes': [{'value': c[0], 'label': c[1]} for c in choices.PROBLEM_CODES],
         'intervention_codes': [{'value': c[0], 'label': c[1]} for c in choices.INTERVENTION_CODES],

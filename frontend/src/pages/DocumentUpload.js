@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -15,8 +15,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DateField } from "@/components/DateField";
+import { CATEGORY_ORDER } from "@/lib/constants";
 
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg";
+
+const CAREGIVER_VITALS = new Set(["Parents' ID's", "Death Certificates"]);
+const MEMBER_VITALS = new Set(["Birth certificates", "Clinic Card", "Report card"]);
 
 export default function DocumentUpload() {
   const [params] = useSearchParams();
@@ -30,15 +34,51 @@ export default function DocumentUpload() {
   const [targets, setTargets] = useState([]);
   const [target, setTarget] = useState("");
   const [category, setCategory] = useState("vital_document");
+  const [subItem, setSubItem] = useState("");
   const [label, setLabel] = useState("");
   const [docDate, setDocDate] = useState(new Date().toISOString().slice(0, 10));
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
 
+  const checklistByCategory = useMemo(() => {
+    const map = {};
+    (choices?.checklist_template || []).forEach((row) => {
+      if (!map[row.category]) map[row.category] = [];
+      map[row.category].push(row.sub_item);
+    });
+    return map;
+  }, [choices]);
+
+  const subItems = checklistByCategory[category] || [];
+  const categoryOptions = useMemo(() => {
+    const order = choices?.category_order || CATEGORY_ORDER;
+    const byValue = Object.fromEntries((choices?.category || []).map((c) => [c.value, c]));
+    return order.map((key) => byValue[key]).filter(Boolean);
+  }, [choices]);
+
   useEffect(() => {
     api.get("/choices/").then((r) => setChoices(r.data));
     if (preHousehold) loadHousehold(preHousehold);
   }, []);
+
+  useEffect(() => {
+    if (!subItems.length) {
+      setSubItem("");
+      return;
+    }
+    if (!subItems.includes(subItem)) setSubItem(subItems[0]);
+  }, [category, subItems.join("|")]);
+
+  useEffect(() => {
+    if (!targets.length || !subItem) return;
+    if (CAREGIVER_VITALS.has(subItem)) {
+      const cg = targets.find((t) => t.value.startsWith("caregiver:"));
+      if (cg) setTarget(cg.value);
+    } else if (MEMBER_VITALS.has(subItem)) {
+      const mem = targets.find((t) => t.value.startsWith("householdmember:"));
+      if (mem && !target.startsWith("householdmember:")) setTarget(mem.value);
+    }
+  }, [subItem, targets]);
 
   const loadHousehold = async (hid) => {
     const res = await api.get(`/households/${hid}/`);
@@ -61,7 +101,14 @@ export default function DocumentUpload() {
   const submit = async () => {
     if (!files.length) return toast.error("Choose PDF or PNG files");
     if (!category) return toast.error("Choose a category");
+    if (!subItem) return toast.error("Choose the checklist item");
     if (!target) return toast.error("Choose the beneficiary this file belongs to");
+    if (CAREGIVER_VITALS.has(subItem) && !target.startsWith("caregiver:")) {
+      return toast.error("Attach Parents' ID's and Death Certificates to the caregiver");
+    }
+    if (MEMBER_VITALS.has(subItem) && !target.startsWith("householdmember:")) {
+      return toast.error("Attach birth certificates, clinic cards, and report cards to the child");
+    }
     const [parentType, parentId] = target.split(":");
     setUploading(true);
     let ok = 0;
@@ -72,6 +119,7 @@ export default function DocumentUpload() {
         fd.append("parent_type", parentType);
         fd.append("parent_id", parentId);
         fd.append("category", category);
+        fd.append("sub_item", subItem);
         fd.append("label", label || file.name.replace(/\.[^.]+$/, ""));
         if (docDate) fd.append("date_of_document", docDate);
         await api.post("/documents/", fd);
@@ -98,7 +146,7 @@ export default function DocumentUpload() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Upload beneficiary files</h1>
         <p className="text-sm text-muted-foreground">
-          Attach PDF or PNG files to a specific person (ID copy, clinic card, school report). JPEG scans are accepted. Maximum 25 MB each. Files are stored as uploaded — nothing is edited or OCR’d.
+          Attach PDF or PNG files to a specific person (ID copy, clinic card, school report). JPEG scans are accepted. Maximum 25 MB each. Vital documents go into the vital-documents cabinet; other papers follow the physical case-file sections. Files are stored as uploaded — nothing is edited or OCR’d.
         </p>
       </div>
 
@@ -140,11 +188,20 @@ export default function DocumentUpload() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Category</Label>
+              <Label>Category (case-file section)</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger className="h-11" data-testid="upload-category-select"><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
-                  {choices.category.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                  {categoryOptions.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Checklist item</Label>
+              <Select value={subItem} onValueChange={setSubItem}>
+                <SelectTrigger className="h-11" data-testid="upload-subitem-select"><SelectValue placeholder="Select checklist item" /></SelectTrigger>
+                <SelectContent>
+                  {subItems.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

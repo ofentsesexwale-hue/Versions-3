@@ -58,14 +58,14 @@ export const CASE_STATUS_LABELS = {
 };
 
 export const CATEGORY_LABELS = {
-  intake_form: "Intake Forms",
-  family_care_plan: "Family Care Plans",
-  vital_document: "Vital Documents",
-  process_note: "Process Notes",
-  school_report: "School Visit Reports",
-  referral_form: "Referral Forms",
-  success_story: "Success Stories",
-  monthly_report: "Monthly Reports",
+  intake_form: "1. Intake Forms",
+  family_care_plan: "2. Family Care Plans",
+  vital_document: "3. Vital Documents",
+  process_note: "4. Process Notes",
+  school_report: "5. School Visit Reports",
+  referral_form: "6. Referral Forms",
+  success_story: "7. Success Stories",
+  monthly_report: "8. Monthly Reports",
 };
 
 export const CATEGORY_ORDER = [

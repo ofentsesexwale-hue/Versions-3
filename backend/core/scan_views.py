@@ -740,11 +740,13 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                 continue
             pair = CHECKLIST_FOR_FORM.get(page.form_type)
             category = pair[0] if pair else 'intake_form'
+            sub_item = pair[1] if pair else ''
             SupportingDocument.objects.create(
                 content_type=ct,
                 object_id=household.pk,
                 parent_kind='household',
                 category=category,
+                sub_item=sub_item,
                 file=page.image,
                 label=f'Scan · {form_label(page.form_type)} · page {page.index + 1}',
                 attached_name=household.org_household_number,

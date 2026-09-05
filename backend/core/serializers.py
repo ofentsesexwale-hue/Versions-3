@@ -244,13 +244,14 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
     is_pdf = serializers.SerializerMethodField()
     is_image = serializers.SerializerMethodField()
+    storage_tree = serializers.SerializerMethodField()
 
     class Meta:
         model = SupportingDocument
         fields = [
-            'id', 'parent_type', 'parent_id', 'category', 'category_display', 'file',
-            'file_name', 'view_url', 'download_url', 'is_pdf', 'is_image', 'label',
-            'attached_name', 'parent_kind',
+            'id', 'parent_type', 'parent_id', 'category', 'category_display', 'sub_item',
+            'file', 'file_name', 'view_url', 'download_url', 'is_pdf', 'is_image', 'label',
+            'attached_name', 'parent_kind', 'storage_tree',
             'date_of_document', 'uploaded_at', 'uploaded_by',
         ]
         extra_kwargs = {'file': {'write_only': True}}
@@ -271,6 +272,14 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
     def get_is_image(self, obj):
         name = (obj.file.name if obj.file else '') or ''
         return name.lower().endswith(('.png', '.jpg', '.jpeg'))
+
+    def get_storage_tree(self, obj):
+        name = (obj.file.name if obj.file else '') or ''
+        if name.startswith('vital-documents/'):
+            return 'vital'
+        if name.startswith('case-files/'):
+            return 'case_file'
+        return 'other'
 
     def validate_file(self, value):
         if value.size > settings.MAX_UPLOAD_SIZE:
@@ -298,7 +307,44 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('The file extension does not match a PNG.')
         return value
 
+    def validate(self, attrs):
+        from .document_trees import expected_parent_kind, is_vital_category, subitems_for_category
+
+        category = attrs.get('category') or getattr(self.instance, 'category', '')
+        sub_item = (attrs.get('sub_item') if 'sub_item' in attrs else None)
+        if sub_item is None:
+            sub_item = getattr(self.instance, 'sub_item', '') if self.instance else ''
+        sub_item = (sub_item or '').strip()
+
+        allowed = subitems_for_category(category) if category else []
+        if category and allowed and sub_item and sub_item not in allowed:
+            raise serializers.ValidationError({
+                'sub_item': f'"{sub_item}" is not a checklist item under {category}.',
+            })
+        if category and allowed and not sub_item:
+            # Require a checklist sub_item so Tree A/B folders stay tidy.
+            raise serializers.ValidationError({
+                'sub_item': 'Choose the checklist item this file belongs to.',
+            })
+
+        parent_type = attrs.get('parent_type')
+        required = expected_parent_kind(category, sub_item) if category else None
+        if required and parent_type and parent_type != required:
+            if required == 'caregiver':
+                raise serializers.ValidationError({
+                    'parent_type': "Attach Parents' ID's and Death Certificates to the caregiver.",
+                })
+            raise serializers.ValidationError({
+                'parent_type': 'Attach birth certificates, clinic cards, and report cards to the child.',
+            })
+        if is_vital_category(category or ''):
+            # Vital cabinet uploads must never be treated as OCR input.
+            attrs['_vital_tree'] = True
+        attrs['sub_item'] = sub_item
+        return attrs
+
     def create(self, validated_data):
+        validated_data.pop('_vital_tree', None)
         parent_type = validated_data.pop('parent_type')
         parent_id = validated_data.pop('parent_id')
         model = PARENT_MODEL_MAP[parent_type]
@@ -322,6 +368,7 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
         else:
             validated_data['attached_name'] = f'{parent.name} {parent.surname}'.strip() or parent_type
         validated_data['uploaded_by'] = request.user if request else None
+        # FileField upload_to runs on save; content_object must resolve for Tree A/B.
         return super().create(validated_data)
 
 

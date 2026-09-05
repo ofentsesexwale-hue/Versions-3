@@ -380,7 +380,9 @@ export default function HouseholdDetail() {
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-foreground">{doc.label || doc.file_name}</p>
                               <p className="text-xs text-muted-foreground">
+                                {doc.sub_item ? `${doc.sub_item} · ` : ""}
                                 {doc.attached_name ? `${doc.attached_name} · ` : ""}
+                                {doc.storage_tree === "vital" ? "Vital cabinet · " : doc.storage_tree === "case_file" ? "Case file · " : ""}
                                 {doc.is_pdf ? "PDF" : doc.is_image ? "PNG/JPEG" : "File"}
                                 {" · "}{formatDate(doc.date_of_document)} · by {doc.uploaded_by}
                               </p>

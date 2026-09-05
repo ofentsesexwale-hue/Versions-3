@@ -82,6 +82,7 @@ CHECKLIST_TEMPLATE = [
     ('vital_document', 'Clinic Card'),
     ("vital_document", "Parents' ID's"),
     ('vital_document', 'Death Certificates'),
+    ('vital_document', 'Report card'),
     ('process_note', 'House visit forms'),
     ('process_note', 'SAW Process note - CW 11'),
     ('process_note', 'Termination report / Exit forms - CW 13'),

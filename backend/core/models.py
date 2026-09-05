@@ -19,17 +19,13 @@ def digits_only(value):
 
 
 def document_upload_path(instance, filename):
-    """Store files as {model}_{object_id}_{timestamp}_{original_filename}."""
-    ts = timezone.now().strftime('%Y%m%d%H%M%S')
-    model = 'record'
-    try:
-        if instance.content_type_id:
-            model = instance.content_type.model
-    except Exception:
-        model = 'record'
-    object_id = instance.object_id or 0
-    safe_name = filename.replace('/', '_').replace('\\', '_')
-    return f"documents/{model}_{object_id}_{ts}_{safe_name}"
+    """Route uploads into Tree A (case-files) or Tree B (vital-documents).
+
+    Scan Intake pages use ``scan_page_upload_path`` instead — they must not
+    land in these trees, and Tree B uploads are never OCR'd.
+    """
+    from .document_trees import document_storage_path
+    return document_storage_path(instance, filename)
 
 
 class Household(models.Model):
@@ -202,7 +198,9 @@ class SupportingDocument(models.Model):
     content_object = GenericForeignKey('content_type', 'object_id')
 
     category = models.CharField(max_length=32, choices=choices.CATEGORY_CHOICES)
-    file = models.FileField(upload_to=document_upload_path)
+    # Checklist sub_item (e.g. C01, Birth certificates) — drives Tree A/B folders.
+    sub_item = models.CharField(max_length=255, blank=True, db_index=True)
+    file = models.FileField(upload_to=document_upload_path, max_length=500)
     label = models.CharField(max_length=255, blank=True)
     attached_name = models.CharField(max_length=255, blank=True)
     parent_kind = models.CharField(max_length=32, blank=True, db_index=True)
