@@ -193,6 +193,25 @@ export default function ScanIntake() {
     return typeof detail === "string" ? detail : "Could not read that photo";
   };
 
+  /** Prefer the real TrOCR TypeError over a bare 502 / timeout toast. */
+  const errWithEngine = async (e) => {
+    let msg = err(e);
+    const status = e?.response?.status;
+    if (e?.response && status < 500) return msg;
+    try {
+      const eng = await api.get("/scan-intake/engine/", { timeout: 15000 });
+      const te = (eng.data?.trocr_error || "").trim();
+      const le = (eng.data?.lightonocr_error || "").trim();
+      if (te) return `TrOCR failed: ${te}`;
+      if (le && /502|timed out|unreachable/i.test(msg)) {
+        return `${msg} (LightOnOCR: ${le})`;
+      }
+    } catch {
+      /* engine status unavailable — keep original message */
+    }
+    return msg;
+  };
+
   useEffect(() => {
     api.get("/scan-intake/engine/").then((res) => setEngine(res.data)).catch(() => {});
   }, []);
@@ -222,13 +241,14 @@ export default function ScanIntake() {
       const fd = new FormData();
       files.forEach((f) => fd.append("files", f));
       if (preHousehold) fd.append("household", preHousehold);
-      const res = await api.post("/scan-intake/", fd, { timeout: 300000 });
+      // First TrOCR load can take several minutes; keep the request open ≥ 10 min.
+      const res = await api.post("/scan-intake/", fd, { timeout: 600000 });
       setJob(res.data);
       jobIdRef.current = res.data.id;
       if (res.data.handwrite_pending) startHandwritePoll(res.data.id);
       toast.success(`Read ${res.data.pages?.length || 0} page(s) — check names, ID and dates before saving`);
     } catch (e) {
-      toast.error(err(e));
+      toast.error(await errWithEngine(e), { duration: 14000 });
     } finally {
       setReading(false);
     }

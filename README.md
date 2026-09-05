@@ -181,6 +181,7 @@ Bundled pins (install only torch/torchvision from `https://download.pytorch.org/
 - `torch==2.14.0+cpu`
 - `torchvision==0.29.0+cpu`
 - `transformers==4.49.0`
+- `tokenizers==0.21.4` (required with transformers 4.49 — 0.23.x breaks TrOCR with `RobertaProcessing … 'cls'`)
 - `opencv-python-headless`
 
 Build machine:

@@ -437,12 +437,7 @@ def _check_cancel(cancel) -> None:
 
 
 def _trocr_device():
-    try:
-        import torch
-        if torch.cuda.is_available():
-            return 'cuda'
-    except Exception:
-        pass
+    # Office PC builds are CPU-only (+cpu wheels). Never request CUDA here.
     return 'cpu'
 
 
@@ -456,16 +451,22 @@ def _trocr_deps_ok():
 
 
 def _lighton_deps_ok():
+    """LightOnOCR uses AutoModel + trust_remote_code (no LightOnOcr* imports)."""
     try:
         import torch  # noqa: F401
-        from transformers import LightOnOcrForConditionalGeneration, LightOnOcrProcessor  # noqa: F401
+        from transformers import AutoModel, AutoProcessor  # noqa: F401
         return True, ''
     except Exception as exc:
         return False, str(exc) or type(exc).__name__
 
 
 def _load_trocr():
-    """Lazy-load TrOCR once; download + cache on first call."""
+    """Lazy-load TrOCR once; download + cache on first call.
+
+    ``use_fast=False`` avoids tokenizers/transformers mismatches that raise
+    ``RobertaProcessing.__new__() got an unexpected keyword argument 'cls'``
+    (seen on office PCs with a mismatched tokenizers wheel).
+    """
     with _lock:
         if _trocr['model'] is not None or _trocr['tried']:
             return _trocr['model'] is not None
@@ -473,7 +474,15 @@ def _load_trocr():
         try:
             from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
-            processor = TrOCRProcessor.from_pretrained(TROCR_MODEL_ID)
+            try:
+                processor = TrOCRProcessor.from_pretrained(TROCR_MODEL_ID, use_fast=False)
+            except TypeError as exc:
+                # Older/newer tokenizers mismatch: build a slow processor explicitly.
+                logger.warning('TrOCRProcessor(use_fast=False) failed (%s); trying slow RobertaTokenizer', exc)
+                from transformers import AutoFeatureExtractor, RobertaTokenizer
+                feature_extractor = AutoFeatureExtractor.from_pretrained(TROCR_MODEL_ID)
+                tokenizer = RobertaTokenizer.from_pretrained(TROCR_MODEL_ID)
+                processor = TrOCRProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
             model = VisionEncoderDecoderModel.from_pretrained(TROCR_MODEL_ID)
             device = _trocr_device()
             model.to(device)
@@ -481,7 +490,7 @@ def _load_trocr():
             _trocr['processor'] = processor
             _trocr['model'] = model
             _trocr['error'] = ''
-            logger.info('TrOCR loaded on %s from %s', device, TROCR_MODEL_ID)
+            logger.info('TrOCR loaded on %s from %s (use_fast=False)', device, TROCR_MODEL_ID)
             return True
         except Exception as exc:
             _trocr['error'] = str(exc) or type(exc).__name__
@@ -490,20 +499,25 @@ def _load_trocr():
 
 
 def _load_lightonocr():
-    """Lazy-load LightOnOCR-2-1B on CPU only (float32, no quantization)."""
+    """Lazy-load LightOnOCR-2-1B on CPU only (float32).
+
+    Uses AutoProcessor + AutoModel + trust_remote_code so transformers 4.49
+    works without LightOnOcrForConditionalGeneration (added in newer releases).
+    Failure must never block TrOCR.
+    """
     with _lock:
         if _lighton['model'] is not None or _lighton['tried']:
             return _lighton['model'] is not None
         _lighton['tried'] = True
         try:
             import torch
-            from transformers import LightOnOcrForConditionalGeneration, LightOnOcrProcessor
+            from transformers import AutoModel, AutoProcessor
 
-            processor = LightOnOcrProcessor.from_pretrained(
+            processor = AutoProcessor.from_pretrained(
                 LIGHTON_MODEL_ID,
                 trust_remote_code=True,
             )
-            model = LightOnOcrForConditionalGeneration.from_pretrained(
+            model = AutoModel.from_pretrained(
                 LIGHTON_MODEL_ID,
                 torch_dtype=torch.float32,
                 trust_remote_code=True,
@@ -513,11 +527,11 @@ def _load_lightonocr():
             _lighton['processor'] = processor
             _lighton['model'] = model
             _lighton['error'] = ''
-            logger.info('LightOnOCR loaded on CPU (float32) from %s', LIGHTON_MODEL_ID)
+            logger.info('LightOnOCR loaded on CPU (float32) via AutoModel from %s', LIGHTON_MODEL_ID)
             return True
         except Exception as exc:
             _lighton['error'] = str(exc) or type(exc).__name__
-            logger.exception('LightOnOCR failed to load')
+            logger.exception('LightOnOCR failed to load (TrOCR-only mode continues)')
             return False
 
 
@@ -527,6 +541,22 @@ def warmup_trocr() -> bool:
 
 def warmup_lightonocr() -> bool:
     return _load_lightonocr()
+
+
+def schedule_trocr_warmup() -> None:
+    """Start TrOCR load on a daemon thread so the first Scan Intake is not cold."""
+    def _run():
+        try:
+            logger.info('Background TrOCR warmup starting')
+            ok = warmup_trocr()
+            if ok:
+                logger.info('Background TrOCR warmup finished OK')
+            else:
+                logger.warning('Background TrOCR warmup failed: %s', trocr_error())
+        except Exception:
+            logger.exception('Background TrOCR warmup crashed')
+
+    threading.Thread(target=_run, name='trocr-warmup', daemon=True).start()
 
 
 def engine_status() -> dict:

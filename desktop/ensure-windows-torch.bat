@@ -20,12 +20,13 @@ echo Installing matched CPU stack into desktop\vendor\python-win ...
 echo   torch==2.14.0+cpu
 echo   torchvision==0.29.0+cpu
 echo   transformers==4.49.0
+echo   tokenizers==0.21.4
 echo   opencv-python-headless
 vendor\python-win\python.exe -m pip install --upgrade pip
-vendor\python-win\python.exe -m pip uninstall -y torch torchvision transformers 2>nul
+vendor\python-win\python.exe -m pip uninstall -y torch torchvision transformers tokenizers 2>nul
 vendor\python-win\python.exe -m pip install torch==2.14.0+cpu torchvision==0.29.0+cpu --index-url https://download.pytorch.org/whl/cpu
-vendor\python-win\python.exe -m pip install transformers==4.49.0 opencv-python-headless pillow-heif
-vendor\python-win\python.exe -c "import torch, torchvision; from transformers import TrOCRProcessor; print(torch.__version__, torchvision.__version__, 'TrOCR OK')"
+vendor\python-win\python.exe -m pip install transformers==4.49.0 tokenizers==0.21.4 opencv-python-headless pillow-heif
+vendor\python-win\python.exe -c "import torch, torchvision, tokenizers; from transformers import TrOCRProcessor, VisionEncoderDecoderModel; print(torch.__version__, torchvision.__version__, tokenizers.__version__); TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten', use_fast=False); print('TrOCR load OK')"
 if errorlevel 1 (
   echo Install / verify failed.
   pause

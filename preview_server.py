@@ -67,7 +67,8 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
-        conn = http.client.HTTPConnection(DJANGO_HOST, DJANGO_PORT, timeout=120)
+        # First TrOCR download/load can take several minutes on the office PC.
+        conn = http.client.HTTPConnection(DJANGO_HOST, DJANGO_PORT, timeout=600)
         try:
             conn.request(self.command, self.path, body=body, headers=headers)
             resp = conn.getresponse()

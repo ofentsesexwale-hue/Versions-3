@@ -252,6 +252,43 @@ class ScanIntakeTests(TestCase):
         self.assertEqual(field['ocr_status'], 'error')
         self.assertIn('torchvision', field.get('ocr_error') or '')
 
+    def test_trocr_load_passes_use_fast_false(self):
+        """Office TrOCR load must request the slow tokenizer (avoids RobertaProcessing cls TypeError)."""
+        import sys
+        import types
+        from unittest.mock import MagicMock, patch
+        from core import scan_handwrite_engines as hw
+
+        hw._trocr.update(processor=None, model=None, error='', tried=False)
+        proc = MagicMock(name='processor')
+        model = MagicMock(name='model')
+        model.to.return_value = model
+        model.eval.return_value = model
+        model.parameters.return_value = iter([MagicMock()])
+
+        fake_tf = types.ModuleType('transformers')
+        fake_tf.TrOCRProcessor = MagicMock()
+        fake_tf.TrOCRProcessor.from_pretrained = MagicMock(return_value=proc)
+        fake_tf.VisionEncoderDecoderModel = MagicMock()
+        fake_tf.VisionEncoderDecoderModel.from_pretrained = MagicMock(return_value=model)
+
+        original = sys.modules.get('transformers')
+        sys.modules['transformers'] = fake_tf
+        try:
+            with patch.object(hw, '_trocr_device', return_value='cpu'):
+                ok = hw._load_trocr()
+        finally:
+            if original is None:
+                sys.modules.pop('transformers', None)
+            else:
+                sys.modules['transformers'] = original
+
+        self.assertTrue(ok)
+        fake_tf.TrOCRProcessor.from_pretrained.assert_called()
+        kwargs = fake_tf.TrOCRProcessor.from_pretrained.call_args.kwargs
+        self.assertEqual(kwargs.get('use_fast'), False)
+        hw._trocr.update(processor=None, model=None, error='', tried=False)
+
     def test_scan_create_returns_json_error_not_crash(self):
         from unittest.mock import patch
         from django.core.files.uploadedfile import SimpleUploadedFile
