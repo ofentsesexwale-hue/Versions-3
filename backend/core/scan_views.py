@@ -35,7 +35,14 @@ from .permissions import (
 from .form_io import apply_buckets, needs_staff_confirmation
 from .official_blanks import ATLAS_VERSION
 from .sa_id import id_digits
-from .scan_ocr import engine_status, ocr_available, process_upload
+from .scan_ocr import (
+    engine_status,
+    job_has_pending_handwrite,
+    ocr_available,
+    process_upload,
+    start_handwrite_job,
+)
+from .scan_handwrite_engines import cancel_handwrite_session
 from .scan_templates import CHECKLIST_FOR_FORM, extract_fields, form_choices, form_label
 from .serializers import CaregiverSerializer, HouseholdMemberSerializer, HouseholdSerializer
 from .views import _ensure_checklist, duplicate_id_matches, scoped_household_qs
@@ -398,6 +405,7 @@ def _job_payload(job, request):
         code = page.get('form_type')
         if code and code != 'unknown' and code not in found:
             found.append(code)
+    pending_handwrite = job_has_pending_handwrite(job)
     return {
         'id': job.id,
         'status': job.status,
@@ -406,6 +414,8 @@ def _job_payload(job, request):
         'ocr_available': ocr_available(),
         'engine': engine_status(),
         'handwriting_warning': job.handwriting_warning,
+        'handwrite_pending': pending_handwrite,
+        'handwrite_session_id': str(job.id),
         'form_types': form_choices(),
         'forms_found': [{'value': code, 'label': form_label(code)} for code in found],
         'pages': pages,
@@ -498,7 +508,7 @@ class ScanIntakeViewSet(viewsets.ViewSet):
         index = 0
         engines = set()
         for uploaded in files:
-            pages, _ = process_upload(uploaded)
+            pages, _ = process_upload(uploaded, defer_handwrite=True)
             if not pages:
                 continue
             for rendered in pages:
@@ -534,6 +544,10 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             return Response({'detail': 'Could not read any pages from that file.'}, status=400)
         job.ocr_engine = ','.join(sorted(e for e in engines if e))[:32]
         job.save(update_fields=['ocr_engine'])
+        # Handwriting OCR continues in a background worker so this response is
+        # not held open while TrOCR/LightOnOCR run. The UI polls for progress.
+        if job_has_pending_handwrite(job):
+            start_handwrite_job(job.id, session_id=str(job.id))
         log_action(request.user, 'created', f'Scan intake #{job.pk} ({index} pages)')
         return Response(_job_payload(job, request), status=201)
 
@@ -564,6 +578,27 @@ class ScanIntakeViewSet(viewsets.ViewSet):
                 return Response({'detail': 'That household is not on your caseload.'}, status=404)
             job.household = household
             job.save(update_fields=['household'])
+        return Response(_job_payload(job, request))
+
+    @action(detail=True, methods=['post'])
+    def cancel_handwrite(self, request, pk=None):
+        """Stop in-flight handwriting OCR for this scan (window closed / new scan)."""
+        _deny_edit(request.user)
+        job = ScanIntakeJob.objects.filter(pk=pk, created_by=request.user).first()
+        if not job:
+            return Response({'detail': 'Scan not found.'}, status=404)
+        cancel_handwrite_session(str(job.id))
+        # Mark any still-queued fields so the UI clears spinners.
+        for page in job.pages.all():
+            fields = list(page.fields or [])
+            changed = False
+            for field in fields:
+                if field.get('kind') == 'handwrite' and field.get('ocr_status') in ('queued', 'running'):
+                    field['ocr_status'] = 'cancelled'
+                    changed = True
+            if changed:
+                page.fields = fields
+                page.save(update_fields=['fields'])
         return Response(_job_payload(job, request))
 
     @action(detail=True, methods=['post'])

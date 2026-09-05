@@ -2,6 +2,7 @@
 from difflib import SequenceMatcher
 from functools import lru_cache
 from io import BytesIO
+import logging
 
 from PIL import Image, ImageFilter, ImageOps
 
@@ -11,6 +12,8 @@ from .sa_id import SA_ID_LENGTH, parse_sa_id, repair_sa_id_digits
 from .scan_align import TICK_MARKED, TICK_UNREADABLE
 from .scan_templates import classify_text, extract_fields
 from .scan_text import looks_like_gibberish, sanitize_ocr_value
+
+logger = logging.getLogger(__name__)
 
 # Per-box tick evidence, carried from the detector to the group resolver and
 # stripped there so it never reaches the stored page or the browser.
@@ -591,7 +594,7 @@ def _apply_geo_vocab(item):
     return item
 
 
-def _atlas_fields(form_type, aligned, page_index):
+def _atlas_fields(form_type, aligned, page_index, defer_handwrite=False):
     from .scan_align import checkbox_state, crop_box
     blank = _blank_reference(form_type, page_index)
     out = []
@@ -599,15 +602,29 @@ def _atlas_fields(form_type, aligned, page_index):
         crop = crop_box(aligned, spec['box'])
         reference = crop_box(blank, spec['box']) if blank is not None else None
         tick, ratio = None, 0.0
+        raw_value = ''
+        ocr_status = 'done'
+        ocr_engine = ''
         if spec['kind'] == 'checkbox':
             tick, ratio = checkbox_state(crop, reference)
             value = ''
             conf = 0.45 if tick == TICK_UNREADABLE else 0.8
+        elif (
+            defer_handwrite
+            and spec['kind'] == 'handwrite'
+            and _crop_has_handwriting(crop, reference, target=spec.get('target') or '')
+        ):
+            # Queue for background TrOCR/LightOnOCR so the upload request returns
+            # quickly and the UI can show per-field progress.
+            value, conf, raw_value = '', 0.0, ''
+            ocr_status = 'queued'
         else:
             raw_value, conf = _ocr_crop(
                 crop, spec['kind'], reference=reference, target=spec.get('target') or '',
             )
             value = sanitize_ocr_value(spec.get('target') or '', raw_value, spec['kind'])
+            if spec['kind'] == 'handwrite':
+                ocr_engine = 'trocr' if value else ''
         option = spec.get('option')
         if spec['kind'] == 'checkbox':
             # The group resolver decides which option wins; on its own a box
@@ -631,6 +648,8 @@ def _atlas_fields(form_type, aligned, page_index):
             'confidence': round(float(conf), 2),
             'low_confidence': float(conf) < 0.72 or spec['kind'] in ('handwrite', 'narrative') or not value,
             'confirmed': False,
+            'ocr_status': ocr_status,
+            'ocr_engine': ocr_engine,
         }
         _apply_geo_vocab(item)
         if id_problems:
@@ -958,7 +977,7 @@ def _clean_fields(fields):
     return cleaned
 
 
-def _process_one(image, pdf_text, engine, have_tess):
+def _process_one(image, pdf_text, engine, have_tess, defer_handwrite=False):
     from .scan_align import deskew_and_contrast, identify_form_page, match_blank, opencv_available
 
     alignment_failed = False
@@ -994,7 +1013,9 @@ def _process_one(image, pdf_text, engine, have_tess):
             form_conf = min(0.95, 0.45 + inliers / 80.0) if not alignment_failed else form_conf
         fields = []
         if warped is not None and has_geometry(form_type):
-            fields = _atlas_fields(form_type, warped, form_page)
+            fields = _atlas_fields(
+                form_type, warped, form_page, defer_handwrite=defer_handwrite,
+            )
             ocr_engine = (ocr_engine + '+atlas')[:32]
         elif working is not None and has_geometry(form_type) and opencv_available() and warped is None:
             path = blank_path(form_type, form_page)
@@ -1002,7 +1023,9 @@ def _process_one(image, pdf_text, engine, have_tess):
                 blank = Image.open(path)
                 warped, inliers, alignment_failed = match_blank(working, blank)
                 if warped is not None and not alignment_failed:
-                    fields = _atlas_fields(form_type, warped, form_page)
+                    fields = _atlas_fields(
+                        form_type, warped, form_page, defer_handwrite=defer_handwrite,
+                    )
                     ocr_engine = (ocr_engine + '+atlas')[:32]
         keywords = extract_fields(form_type, text, confidence=max(conf, form_conf * 0.7))
         for item in keywords:
@@ -1053,10 +1076,131 @@ def _process_one(image, pdf_text, engine, have_tess):
         }
 
 
-def process_upload(uploaded):
-    """OCR + classify one uploaded PDF or image. Returns page dicts (no files yet)."""
+def process_upload(uploaded, defer_handwrite=False):
+    """OCR + classify one uploaded PDF or image. Returns page dicts (no files yet).
+
+    When ``defer_handwrite`` is True, handwriting crops are queued with
+    ``ocr_status='queued'`` so a background worker can run TrOCR/LightOnOCR
+    without blocking the upload response.
+    """
     results = []
     have_tess = ocr_available()
     for image, pdf_text, engine in render_pages(uploaded):
-        results.append(_process_one(image, pdf_text, engine, have_tess))
+        results.append(_process_one(
+            image, pdf_text, engine, have_tess, defer_handwrite=defer_handwrite,
+        ))
     return results, have_tess
+
+
+def job_has_pending_handwrite(job) -> bool:
+    for page in job.pages.all():
+        for field in page.fields or []:
+            if field.get('kind') == 'handwrite' and field.get('ocr_status') in ('queued', 'running'):
+                return True
+    return False
+
+
+def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
+    """Background pass: OCR queued handwriting fields for one scan job.
+
+    Re-crops from each page's warped image, runs TrOCR → LightOnOCR on a
+    worker thread, and writes results back onto ``page.fields``. Honours
+    session cancel between fields.
+    """
+    from django.db import close_old_connections
+
+    from .models import ScanIntakePage
+    from .scan_align import crop_box
+    from .scan_handwrite_engines import (
+        begin_handwrite_session,
+        cancel_handwrite_session,
+        end_handwrite_session,
+        read_handwriting,
+    )
+    from .scan_text import sanitize_ocr_value
+
+    close_old_connections()
+    sid = begin_handwrite_session(session_id or str(job_id))
+    try:
+        pages = list(ScanIntakePage.objects.filter(job_id=job_id).order_by('index', 'id'))
+        for page in pages:
+            if not page.warped_image:
+                continue
+            try:
+                warped = Image.open(page.warped_image).convert('RGB')
+            except Exception:
+                logger.exception('Could not open warped image for page %s', page.pk)
+                continue
+            fields = list(page.fields or [])
+            dirty = False
+            for index, field in enumerate(fields):
+                if field.get('kind') != 'handwrite':
+                    continue
+                if field.get('ocr_status') not in ('queued', 'running'):
+                    continue
+                field_key = field.get('target') or f'page{page.index}:{index}'
+                field['ocr_status'] = 'running'
+                fields[index] = field
+                page.fields = fields
+                page.save(update_fields=['fields'])
+                dirty = True
+                bbox = field.get('bbox')
+                if not bbox:
+                    field['ocr_status'] = 'done'
+                    field['value'] = ''
+                    fields[index] = field
+                    page.fields = fields
+                    page.save(update_fields=['fields'])
+                    continue
+                try:
+                    crop = crop_box(warped, bbox)
+                    text, conf, engine = read_handwriting(
+                        crop, session_id=sid, field_key=field_key,
+                    )
+                except Exception:
+                    logger.exception('Handwrite OCR failed for %s', field_key)
+                    text, conf, engine = '', 0.0, 'none'
+                if engine == 'cancelled':
+                    field['ocr_status'] = 'cancelled'
+                    fields[index] = field
+                    page.fields = fields
+                    page.save(update_fields=['fields'])
+                    cancel_handwrite_session(sid)
+                    return
+                cleaned = sanitize_ocr_value(field.get('target') or '', text, 'handwrite')
+                field['value'] = cleaned
+                field['ocr_raw'] = text or cleaned
+                field['confidence'] = round(float(conf or 0), 2)
+                field['low_confidence'] = float(conf or 0) < 0.72 or not cleaned
+                field['ocr_status'] = 'done'
+                field['ocr_engine'] = engine if engine not in ('none', 'cancelled') else ''
+                fields[index] = field
+                page.fields = fields
+                page.save(update_fields=['fields'])
+                dirty = True
+            if dirty:
+                page.fields = fields
+                page.save(update_fields=['fields'])
+    finally:
+        end_handwrite_session(sid)
+        close_old_connections()
+
+
+def start_handwrite_job(job_id: int, session_id: str | None = None) -> str:
+    """Kick off background handwriting OCR for a job. Returns the session id.
+
+    Session creation is owned by ``process_handwrite_job`` so a cancel that
+    lands before the worker starts is not wiped by a second ``begin``.
+    """
+    import threading
+
+    sid = session_id or str(job_id)
+
+    def _run():
+        try:
+            process_handwrite_job(job_id, session_id=sid)
+        except Exception:
+            logger.exception('Background handwrite job %s failed', job_id)
+
+    threading.Thread(target=_run, name=f'handwrite-job-{job_id}', daemon=True).start()
+    return sid

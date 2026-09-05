@@ -120,6 +120,59 @@ class ScanIntakeTests(TestCase):
         self.assertEqual(name, 'lightonocr')
         self.assertGreater(conf, TROCR_LOW_CONF)
 
+    def test_preprocess_handwriting_crop_runs_akincal_steps(self):
+        from unittest.mock import patch
+        from PIL import Image
+        from core import scan_handwrite_engines as hw
+
+        crop = Image.new('RGB', (80, 24), 'white')
+        order = []
+
+        def _track(name):
+            def _fn(image, quality=None):
+                order.append(name)
+                return image.convert('RGB') if hasattr(image, 'convert') else image
+            return _fn
+
+        with patch.object(hw, 'fix_polarity', side_effect=_track('polarity')), \
+             patch.object(hw, 'deskew_image', side_effect=_track('deskew')), \
+             patch.object(hw, 'reduce_noise', side_effect=_track('noise')), \
+             patch.object(hw, 'enhance_clahe', side_effect=_track('clahe')), \
+             patch.object(hw, 'adaptive_binarize', side_effect=_track('binarize')), \
+             patch.object(hw, 'analyze_image_quality', return_value={'blur': 200, 'contrast': 50, 'noise': 5}):
+            out = hw.preprocess_handwriting_crop(crop)
+        self.assertEqual(order, ['polarity', 'deskew', 'noise', 'clahe', 'binarize'])
+        self.assertEqual(out.size, crop.size)
+
+    def test_handwrite_session_cancel_stops_progress(self):
+        from core.scan_handwrite_engines import (
+            begin_handwrite_session,
+            cancel_handwrite_session,
+            end_handwrite_session,
+            handwrite_session_progress,
+            read_handwriting,
+        )
+        from unittest.mock import patch
+        from PIL import Image
+
+        sid = begin_handwrite_session('test-cancel')
+        try:
+            crop = Image.new('RGB', (40, 20), 'white')
+            cancel_handwrite_session(sid)
+            with patch('core.scan_handwrite_engines.preprocess_handwriting_crop', side_effect=lambda im: im), \
+                 patch('core.scan_handwrite_engines.read_trocr') as trocr, \
+                 patch('core.scan_handwrite_engines.read_lightonocr') as lighton:
+                text, conf, name = read_handwriting(crop, session_id=sid, field_key='caregiver.name')
+            self.assertEqual(name, 'cancelled')
+            self.assertEqual(text, '')
+            trocr.assert_not_called()
+            lighton.assert_not_called()
+            progress = handwrite_session_progress(sid)
+            self.assertTrue(progress['cancelled'])
+            self.assertEqual(progress['fields'].get('caregiver.name'), 'cancelled')
+        finally:
+            end_handwrite_session(sid)
+
     def test_intake_without_c01_still_classifies(self):
         form, conf = classify_text(INTAKE_TEXT)
         self.assertEqual(form, 'intake')

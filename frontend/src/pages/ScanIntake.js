@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Camera, ImagePlus, Loader2, ScanLine, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -114,6 +114,44 @@ export default function ScanIntake() {
   const [openText, setOpenText] = useState({});
   const [engine, setEngine] = useState(null);
   const [duplicates, setDuplicates] = useState(null);
+  const pollRef = useRef(null);
+  const jobIdRef = useRef(null);
+
+  const stopHandwritePoll = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const cancelHandwrite = async (jobId) => {
+    stopHandwritePoll();
+    if (!jobId) return;
+    try {
+      await api.post(`/scan-intake/${jobId}/cancel_handwrite/`);
+    } catch {
+      /* window may already be gone */
+    }
+  };
+
+  const startHandwritePoll = (jobId) => {
+    stopHandwritePoll();
+    jobIdRef.current = jobId;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get(`/scan-intake/${jobId}/`);
+        setJob(res.data);
+        if (!res.data.handwrite_pending) stopHandwritePoll();
+      } catch {
+        stopHandwritePoll();
+      }
+    }, 800);
+  };
+
+  useEffect(() => () => {
+    stopHandwritePoll();
+    if (jobIdRef.current) cancelHandwrite(jobIdRef.current);
+  }, []);
 
   const err = (e) => {
     const data = e?.response?.data || {};
@@ -152,6 +190,7 @@ export default function ScanIntake() {
       toast.error("Take photos of the physical file, then upload them here");
       return;
     }
+    if (jobIdRef.current) await cancelHandwrite(jobIdRef.current);
     setReading(true);
     try {
       const fd = new FormData();
@@ -159,6 +198,8 @@ export default function ScanIntake() {
       if (preHousehold) fd.append("household", preHousehold);
       const res = await api.post("/scan-intake/", fd, { timeout: 300000 });
       setJob(res.data);
+      jobIdRef.current = res.data.id;
+      if (res.data.handwrite_pending) startHandwritePoll(res.data.id);
       toast.success(`Read ${res.data.pages?.length || 0} page(s) — check names, ID and dates before saving`);
     } catch (e) {
       toast.error(err(e));
@@ -374,6 +415,15 @@ export default function ScanIntake() {
             Empty name boxes are better than guessed letters. If a name such as Hallie was left blank, type it.
             {job?.engine?.message ? ` ${job.engine.message}.` : ""}
           </p>
+          {job.handwrite_pending && (
+            <p
+              className="flex items-center gap-2 border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950"
+              data-testid="scan-handwrite-progress"
+            >
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Reading handwriting fields in the background — you can edit printed values while this finishes.
+            </p>
+          )}
           {(job.forms_found || []).length > 0 && (
             <p className="text-sm" data-testid="scan-forms-found">
               Identified in this batch: {(job.forms_found || []).map((f) => f.label).join(', ')}.
@@ -517,12 +567,23 @@ export default function ScanIntake() {
                       )}
                       {(page.fields || []).map((field, i) => {
                         const trio = needsConfirm(field.target);
+                        const ocrBusy = field.kind === "handwrite" && ["queued", "running"].includes(field.ocr_status);
                         const inner = (
-                          <Input
-                            value={field.value || ""}
-                            onChange={(e) => setField(page.id, i, { value: e.target.value })}
-                            className={field.low_confidence ? "border-amber-400" : ""}
-                          />
+                          <div className="relative">
+                            <Input
+                              value={field.value || ""}
+                              onChange={(e) => setField(page.id, i, { value: e.target.value, ocr_status: "done" })}
+                              className={field.low_confidence ? "border-amber-400" : ""}
+                              disabled={ocrBusy}
+                              data-testid={ocrBusy ? `scan-field-ocr-${field.target}` : undefined}
+                            />
+                            {ocrBusy && (
+                              <span className="absolute inset-y-0 right-3 flex items-center gap-1 text-xs text-sky-700">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                {field.ocr_status === "running" ? "Reading…" : "Queued…"}
+                              </span>
+                            )}
+                          </div>
                         );
                         if (!trio) {
                           return (
