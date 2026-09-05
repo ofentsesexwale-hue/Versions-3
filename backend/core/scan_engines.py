@@ -1,7 +1,7 @@
 """Printed-label and ID-grid OCR (RapidOCR).
 
 RapidOCR (ONNX) stays on this PC for printed labels, form titles, and SA ID
-cell grids. Handwriting crops use TrOCR + Qwen in ``scan_handwrite_engines``.
+cell grids. Handwriting crops use TrOCR + LightOnOCR in ``scan_handwrite_engines``.
 """
 from __future__ import annotations
 

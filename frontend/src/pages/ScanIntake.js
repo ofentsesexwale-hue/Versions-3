@@ -289,14 +289,14 @@ export default function ScanIntake() {
                           ? `not loaded (${engine.trocr_error})`
                           : "not loaded"}
                   </li>
-                  <li data-testid="scan-engine-qwen">
-                    Qwen2.5-VL (fallback):{" "}
-                    {engine.qwen
+                  <li data-testid="scan-engine-lightonocr">
+                    LightOnOCR (fallback):{" "}
+                    {engine.lightonocr
                       ? "loaded"
-                      : engine.qwen_ready
+                      : engine.lightonocr_ready
                         ? "ready — loads when TrOCR is weak"
-                        : engine.qwen_error
-                          ? `not loaded (${engine.qwen_error})`
+                        : engine.lightonocr_error
+                          ? `not loaded (${engine.lightonocr_error})`
                           : "not loaded"}
                   </li>
                   <li data-testid="scan-engine-rapidocr">

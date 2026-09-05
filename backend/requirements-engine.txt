@@ -12,10 +12,7 @@ opencv-python-headless>=4.8
 python-docx==1.2.0
 Faker==40.37.0
 tzdata==2026.3
-# Handwriting OCR (TrOCR primary, Qwen2.5-VL 4-bit fallback)
-transformers>=4.49
+# Handwriting OCR (TrOCR primary, LightOnOCR-2-1B CPU fallback)
+transformers>=5.0
 torch>=2.1
-accelerate
-bitsandbytes
-qwen-vl-utils
 Pillow

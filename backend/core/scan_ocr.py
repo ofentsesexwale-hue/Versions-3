@@ -86,7 +86,7 @@ def engine_status():
     rapid = warmup()
     hw = handwrite_status()
     parts = []
-    # Handwriting path: TrOCR primary, Qwen fallback (auto-download on first crop).
+    # Handwriting path: TrOCR primary, LightOnOCR fallback (auto-download on first crop).
     if hw.get('trocr'):
         parts.append('TrOCR loaded for handwriting')
     elif hw.get('trocr_ready'):
@@ -94,13 +94,13 @@ def engine_status():
     else:
         reason = hw.get('trocr_error') or 'transformers/torch missing'
         parts.append(f'TrOCR not available: {reason}')
-    if hw.get('qwen'):
-        parts.append('Qwen2.5-VL loaded as handwriting fallback')
-    elif hw.get('qwen_ready'):
-        parts.append('Qwen2.5-VL ready as handwriting fallback (4-bit, downloads on first need)')
+    if hw.get('lightonocr'):
+        parts.append('LightOnOCR loaded as handwriting fallback')
+    elif hw.get('lightonocr_ready'):
+        parts.append('LightOnOCR ready as handwriting fallback (CPU float32, downloads on first need)')
     else:
-        reason = hw.get('qwen_error') or 'CUDA/bitsandbytes/transformers missing'
-        parts.append(f'Qwen2.5-VL fallback not available: {reason}')
+        reason = hw.get('lightonocr_error') or 'transformers/torch missing'
+        parts.append(f'LightOnOCR fallback not available: {reason}')
     # Printed labels + ID grids stay on RapidOCR + Tesseract.
     if rapid:
         parts.append('Printed labels and ID grids use RapidOCR on this PC')
@@ -130,9 +130,9 @@ def engine_status():
         'trocr': bool(hw.get('trocr')),
         'trocr_ready': bool(hw.get('trocr_ready')),
         'trocr_error': hw.get('trocr_error') or '',
-        'qwen': bool(hw.get('qwen')),
-        'qwen_ready': bool(hw.get('qwen_ready')),
-        'qwen_error': hw.get('qwen_error') or '',
+        'lightonocr': bool(hw.get('lightonocr')),
+        'lightonocr_ready': bool(hw.get('lightonocr_ready')),
+        'lightonocr_error': hw.get('lightonocr_error') or '',
         'scan_engine': bool(
             tess or cv or rapid or hw.get('trocr') or hw.get('trocr_ready')
         ),
@@ -356,8 +356,8 @@ def _ocr_sa_id_variants(crop):
 def _ocr_handwrite_variants(crop):
     """Plain padded prep plus ruling-stripped / CLAHE retries; keep the best reading.
 
-    Primary: TrOCR on every crop. Fallback: Qwen2.5-VL when TrOCR is empty or
-    low-confidence. RapidOCR/Tesseract are not used on this path.
+    Primary: TrOCR on every crop. Fallback: LightOnOCR-2-1B when TrOCR is empty
+    or low-confidence. RapidOCR/Tesseract are not used on this path.
     """
     from .scan_handwrite_engines import read_handwriting
 
@@ -366,7 +366,7 @@ def _ocr_handwrite_variants(crop):
     best_score = _score_handwrite_candidate(best_text, best_conf)
     if best_score is None:
         best_text, best_conf = '', 0.0
-    # Strong TrOCR/Qwen hit — skip extra variants.
+    # Strong TrOCR/LightOnOCR hit — skip extra variants.
     if best_text and float(best_conf or 0) >= 0.72:
         return best_text, max(float(best_conf or 0), 0.2)
     for image in _handwrite_variants(crop):
