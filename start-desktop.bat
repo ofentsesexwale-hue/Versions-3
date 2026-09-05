@@ -15,16 +15,18 @@ if not exist "backend\.venv\Scripts\python.exe" (
   echo   cd backend
   echo   py -3.12 -m venv .venv
   echo   .venv\Scripts\python.exe -m pip install -r requirements-engine.txt
-  echo   .venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+  echo   .venv\Scripts\python.exe -m pip install torch==2.14.0+cpu torchvision==0.29.0+cpu --index-url https://download.pytorch.org/whl/cpu
+  echo   .venv\Scripts\python.exe -m pip install transformers==4.49.0
   pause
   exit /b 1
 )
 
-backend\.venv\Scripts\python.exe -c "import torch" 1>nul 2>nul
+backend\.venv\Scripts\python.exe -c "import torch, torchvision; from transformers import TrOCRProcessor; print(torch.__version__, torchvision.__version__, 'TrOCR OK')" 1>nul 2>nul
 if errorlevel 1 (
-  echo Installing CPU torch into backend\.venv ...
-  backend\.venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-  backend\.venv\Scripts\python.exe -m pip install transformers pillow-heif
+  echo Installing matched CPU torch stack into backend\.venv ...
+  echo Do NOT pip into %%TEMP%% portable .exe extracts — rebuild the .exe instead.
+  backend\.venv\Scripts\python.exe -m pip install torch==2.14.0+cpu torchvision==0.29.0+cpu --index-url https://download.pytorch.org/whl/cpu
+  backend\.venv\Scripts\python.exe -m pip install transformers==4.49.0 pillow-heif opencv-python-headless
 )
 
 if exist backend\ensure_engine.py backend\.venv\Scripts\python.exe backend\ensure_engine.py
