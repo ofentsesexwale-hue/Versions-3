@@ -271,7 +271,7 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
 
     def get_is_image(self, obj):
         name = (obj.file.name if obj.file else '') or ''
-        return name.lower().endswith(('.png', '.jpg', '.jpeg'))
+        return name.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif'))
 
     def get_storage_tree(self, obj):
         name = (obj.file.name if obj.file else '') or ''
@@ -287,19 +287,38 @@ class SupportingDocumentSerializer(serializers.ModelSerializer):
                 f'File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} MB.'
             )
         name = (getattr(value, 'name', '') or '').lower()
-        allowed_ext = getattr(settings, 'ALLOWED_UPLOAD_EXTENSIONS', ('.pdf', '.png', '.jpg', '.jpeg'))
+        allowed_ext = getattr(
+            settings,
+            'ALLOWED_UPLOAD_EXTENSIONS',
+            ('.pdf', '.png', '.jpg', '.jpeg', '.heic', '.heif'),
+        )
         if not name.endswith(allowed_ext):
             raise serializers.ValidationError(
-                'Upload a PDF or PNG. JPEG scans of IDs and clinic cards are also accepted.'
+                getattr(
+                    settings,
+                    'ALLOWED_UPLOAD_TYPES',
+                    'Upload a PDF, PNG, JPEG, or HEIC/HEIF photo.',
+                )
             )
-        header = value.read(8) or b''
+        header = value.read(12) or b''
         value.seek(0)
+        from .upload_media import convert_heic_to_jpeg, looks_like_heic
+
+        if looks_like_heic(name, header):
+            try:
+                value = convert_heic_to_jpeg(value)
+            except ValueError as exc:
+                raise serializers.ValidationError(str(exc)) from exc
+            name = (getattr(value, 'name', '') or '').lower()
+            header = value.read(12) or b''
+            value.seek(0)
+
         is_pdf = header.startswith(b'%PDF')
         is_png = header.startswith(b'\x89PNG')
         is_jpeg = header.startswith(b'\xff\xd8\xff')
         if not (is_pdf or is_png or is_jpeg):
             raise serializers.ValidationError(
-                'That file is not a valid PDF or PNG (or JPEG scan).'
+                'That file is not a valid PDF, PNG, or JPEG (HEIC photos are converted to JPEG on save).'
             )
         if name.endswith('.pdf') and not is_pdf:
             raise serializers.ValidationError('The file extension does not match a PDF.')

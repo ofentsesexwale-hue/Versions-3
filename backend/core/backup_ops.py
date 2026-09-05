@@ -23,6 +23,10 @@ def sqlite_path():
 
 
 def create_backup_zip():
+    """Zip db.sqlite3 (+ wal/shm) and the full MEDIA_ROOT into one dated archive.
+
+    MEDIA_ROOT typically holds case-files/, vital-documents/, documents/, scan_intake/.
+    """
     stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
     zip_path = backup_dir() / f'ovc-backup-{stamp}.zip'
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -52,12 +56,33 @@ def list_backups():
     return rows
 
 
-def restore_from_zip(zip_path):
-    """Replace the local SQLite file and media from a backup zip created by this app."""
+def _live_data_present(db_file: Path | None, media_dest: Path) -> bool:
+    if db_file and db_file.exists() and db_file.stat().st_size > 0:
+        return True
+    if media_dest.exists():
+        try:
+            next(media_dest.rglob('*'))
+            return True
+        except StopIteration:
+            pass
+    return False
+
+
+def restore_from_zip(zip_path, *, force: bool = False):
+    """Replace the local SQLite file and media from a backup zip created by this app.
+
+    Refuses to overwrite live database/media unless ``force=True``.
+    """
     db_file = sqlite_path()
     if db_file is None:
         raise RuntimeError('Restore is only available when this office uses SQLite.')
     zip_path = Path(zip_path)
+    media_dest = Path(settings.MEDIA_ROOT)
+    if _live_data_present(db_file, media_dest) and not force:
+        raise RuntimeError(
+            'Live database or MEDIA_ROOT already has files. '
+            'Pass --force to overwrite (this replaces the office file on this PC).'
+        )
     with zipfile.ZipFile(zip_path, 'r') as zf:
         names = zf.namelist()
         db_members = [n for n in names if n.startswith('db/') and not n.endswith('/')]
@@ -82,7 +107,6 @@ def restore_from_zip(zip_path):
                 if side.exists():
                     side.unlink()
             media_src = tmp / 'media'
-            media_dest = Path(settings.MEDIA_ROOT)
             if media_src.exists():
                 if media_dest.exists():
                     shutil.rmtree(media_dest)

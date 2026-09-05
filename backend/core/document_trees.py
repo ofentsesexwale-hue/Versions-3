@@ -25,11 +25,17 @@ Tree B — Vital documents cabinet (Home Affairs / clinic originals)
 
 These trees are separate from Scan Intake OCR storage (scan_intake/).
 Vital uploads are never OCR'd — SupportingDocument stores original bytes.
+Stored basenames are prefixed YYYYMMDDHHMMSS_ so camera duplicates cannot overwrite.
 """
 from __future__ import annotations
 
+import os
 import re
-from pathlib import PurePosixPath
+import shutil
+from datetime import datetime
+from pathlib import Path, PurePosixPath
+
+from django.conf import settings
 
 from . import choices
 
@@ -93,6 +99,15 @@ def original_filename(filename: str) -> str:
     return windows_safe_name(name, fallback='upload.bin', max_len=180)
 
 
+def stamped_filename(filename: str, when: datetime | None = None) -> str:
+    """Prefix basename with YYYYMMDDHHMMSS so IMG_3701.jpg cannot overwrite itself."""
+    stamp = (when or datetime.now()).strftime('%Y%m%d%H%M%S')
+    base = original_filename(filename)
+    if re.match(r'^\d{14}_', base):
+        return base
+    return f'{stamp}_{base}'
+
+
 def category_order_keys() -> list[str]:
     """Category keys in Content Page / checklist order."""
     return [key for key, _label in choices.CATEGORY_CHOICES]
@@ -121,7 +136,7 @@ def tree_a_relative_path(household, category: str, sub_item: str, filename: str)
     )
     section = PHYSICAL_SECTION_BY_CATEGORY.get(category) or '99_Other'
     sub = windows_safe_name(sub_item or 'General', fallback='General')
-    return str(PurePosixPath('case-files', org, section, sub, original_filename(filename)))
+    return str(PurePosixPath('case-files', org, section, sub, stamped_filename(filename)))
 
 
 def _address_folder(household) -> str:
@@ -163,15 +178,13 @@ def tree_b_relative_path(household, parent, sub_item: str, filename: str) -> str
     elif isinstance(parent, HouseholdMember):
         person_folder = _child_folder(parent)
     else:
-        # Household parent with a member vital type — keep under Parent-guardian
-        # only for caregiver vitals; otherwise a generic Child folder.
         if spec and spec[0] == 'member':
             person_folder = 'Child - Unknown'
         else:
             person_folder = 'Parent-guardian'
 
     return str(PurePosixPath(
-        'vital-documents', root, address, person_folder, leaf, original_filename(filename),
+        'vital-documents', root, address, person_folder, leaf, stamped_filename(filename),
     ))
 
 
@@ -194,8 +207,6 @@ def document_storage_path(instance, filename: str) -> str:
 
     Scan Intake pages keep using ``scan_page_upload_path`` and must not call this.
     """
-    from .models import Caregiver, Household, HouseholdMember
-
     parent = None
     try:
         parent = instance.content_object
@@ -212,7 +223,53 @@ def document_storage_path(instance, filename: str) -> str:
     if household is not None:
         return tree_a_relative_path(household, category, sub_item, filename)
 
-    # Fallback before content_object is resolvable (should be rare).
     kind = getattr(instance, 'parent_kind', '') or 'record'
     oid = getattr(instance, 'object_id', None) or 0
-    return str(PurePosixPath('documents', f'{kind}_{oid}_{original_filename(filename)}'))
+    return str(PurePosixPath('documents', f'{kind}_{oid}_{stamped_filename(filename)}'))
+
+
+def hardlink_or_copy_into_tree_a(household, category: str, sub_item: str, source_path, filename: str) -> str:
+    """Hardlink (or copy) a scan page into Tree A. Leaves the source file untouched.
+
+    Returns the MEDIA_ROOT-relative path. Does not run OCR.
+    """
+    rel = tree_a_relative_path(household, category, sub_item, filename)
+    dest = Path(settings.MEDIA_ROOT) / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src = Path(source_path)
+    if not src.is_file():
+        raise FileNotFoundError(f'Scan page image missing: {src}')
+    if dest.resolve() == src.resolve():
+        return rel
+    if dest.exists():
+        stem = dest.stem
+        suffix = dest.suffix
+        n = 2
+        while dest.exists():
+            dest = dest.with_name(f'{stem}_{n}{suffix}')
+            n += 1
+        rel = str(PurePosixPath(*dest.relative_to(settings.MEDIA_ROOT).parts))
+    try:
+        os.link(src, dest)
+    except OSError:
+        shutil.copy2(src, dest)
+    return rel
+
+
+def mark_checklist_has_evidence(household, category: str, sub_item: str, user=None) -> bool:
+    """Set the matching CaseFileChecklistItem.has_evidence to Yes. Returns True if updated."""
+    if not household or not category or not sub_item:
+        return False
+    item = household.checklist_items.filter(category=category, sub_item=sub_item).first()
+    if not item:
+        return False
+    from django.utils import timezone
+
+    item.has_evidence = 'Yes'
+    update = ['has_evidence']
+    if user is not None:
+        item.checked_by = user
+        item.checked_at = timezone.now()
+        update.extend(['checked_by', 'checked_at'])
+    item.save(update_fields=update)
+    return True

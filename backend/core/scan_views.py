@@ -733,7 +733,17 @@ class ScanIntakeViewSet(viewsets.ViewSet):
         return household
 
     def _attach_pages(self, user, job, household):
+        """Copy/hardlink each page into Tree A; leave scan_intake/ originals in place.
+
+        Does not re-run OCR. SupportingDocument points at the Tree A path.
+        """
+        from pathlib import Path
+
         from django.contrib.contenttypes.models import ContentType
+        from django.conf import settings
+
+        from .document_trees import hardlink_or_copy_into_tree_a
+
         ct = ContentType.objects.get_for_model(Household)
         for page in job.pages.all():
             if not page.image:
@@ -741,33 +751,34 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             pair = CHECKLIST_FOR_FORM.get(page.form_type)
             category = pair[0] if pair else 'intake_form'
             sub_item = pair[1] if pair else ''
-            SupportingDocument.objects.create(
+            src = Path(settings.MEDIA_ROOT) / page.image.name
+            basename = Path(page.image.name).name
+            rel = hardlink_or_copy_into_tree_a(
+                household, category, sub_item, src, basename,
+            )
+            doc = SupportingDocument(
                 content_type=ct,
                 object_id=household.pk,
                 parent_kind='household',
                 category=category,
                 sub_item=sub_item,
-                file=page.image,
                 label=f'Scan · {form_label(page.form_type)} · page {page.index + 1}',
                 attached_name=household.org_household_number,
                 uploaded_by=user,
             )
+            doc.file.name = rel
+            doc.save()
 
     def _tick_checklist(self, user, job, household):
+        from .document_trees import mark_checklist_has_evidence
+
         seen = set()
-        now = timezone.now()
         for page in job.pages.all():
             pair = CHECKLIST_FOR_FORM.get(page.form_type)
             if not pair or pair in seen:
                 continue
             seen.add(pair)
-            item = household.checklist_items.filter(category=pair[0], sub_item=pair[1]).first()
-            if not item:
-                continue
-            item.has_evidence = 'Yes'
-            item.checked_by = user
-            item.checked_at = now
-            item.save(update_fields=['has_evidence', 'checked_by', 'checked_at'])
+            mark_checklist_has_evidence(household, pair[0], pair[1], user=user)
 
 
 def scan_page_image(request, job_id, page_id):

@@ -5,8 +5,11 @@ from core.backup_ops import create_backup_zip
 
 
 class Command(BaseCommand):
-    help = "Zip SQLite plus media into backend/backups/."
+    help = (
+        'Zip db.sqlite3 plus the full MEDIA_ROOT (case-files, vital-documents, '
+        'documents, scan_intake) into backend/backups/ovc-backup-YYYYMMDD-HHMMSS.zip.'
+    )
 
     def handle(self, *args, **options):
         zip_path = create_backup_zip()
-        self.stdout.write(self.style.SUCCESS(f"Wrote {zip_path}"))
+        self.stdout.write(self.style.SUCCESS(f'Wrote {zip_path}'))

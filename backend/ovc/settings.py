@@ -16,10 +16,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'insecure-local-dev-key-change-me')
+INSECURE_DEFAULT_SECRET_KEY = 'insecure-local-dev-key-change-me'
 
 # DEBUG is env-driven. Even when False the app must remain usable locally,
 # so ALLOWED_HOSTS defaults to '*' (this is an internal, offline-only tool).
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes', 'on')
+
+if not DEBUG:
+    from django.core.exceptions import ImproperlyConfigured
+
+    if not SECRET_KEY or SECRET_KEY == INSECURE_DEFAULT_SECRET_KEY:
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY must be set to a unique value when DJANGO_DEBUG is False. '
+            'Copy backend/.env.example to backend/.env and set a new secret.'
+        )
 
 _allowed = os.environ.get('DJANGO_ALLOWED_HOSTS', '*')
 ALLOWED_HOSTS = ['*'] if _allowed.strip() == '*' else [h.strip() for h in _allowed.split(',') if h.strip()]
@@ -113,13 +123,13 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Supporting documents live on the local disk (configurable, never in the DB).
 MEDIA_URL = '/api/media/'
-MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT') or str(BASE_DIR / 'media')
 
 # Max upload size for supporting documents (25 MB). Photo batches for a new
 # household can be larger in one request; extra bytes spill to a temp file.
 MAX_UPLOAD_SIZE = 25 * 1024 * 1024
-ALLOWED_UPLOAD_EXTENSIONS = ('.pdf', '.png', '.jpg', '.jpeg')
-ALLOWED_UPLOAD_TYPES = 'PDF or PNG (JPEG scans of IDs are also accepted)'
+ALLOWED_UPLOAD_EXTENSIONS = ('.pdf', '.png', '.jpg', '.jpeg', '.heic', '.heif')
+ALLOWED_UPLOAD_TYPES = 'PDF, PNG, JPEG, or HEIC/HEIF (HEIC is converted to JPEG on save)'
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 80 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE

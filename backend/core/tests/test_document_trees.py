@@ -1,16 +1,17 @@
 """Tests for Tree A (case-files) and Tree B (vital-documents) storage."""
-from io import BytesIO
-
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from core import choices
 from core.document_trees import (
     document_storage_path,
     expected_parent_kind,
+    stamped_filename,
     tree_a_relative_path,
     tree_b_relative_path,
     windows_safe_name,
@@ -70,7 +71,12 @@ class DocumentTreeStorageTests(TestCase):
     def test_tree_a_path_for_intake_form(self):
         path = tree_a_relative_path(self.hh, 'intake_form', 'C01', 'scan page.pdf')
         self.assertTrue(path.startswith('case-files/SI-0042/01_Intake_Forms/C01/'))
-        self.assertTrue(path.endswith('scan page.pdf') or path.endswith('scan_page.pdf') or 'scan' in path)
+        self.assertRegex(path.split('/')[-1], r'^\d{14}_scan.page\.pdf$|^\d{14}_scan_page\.pdf$')
+
+    def test_stamped_filename_prefixes_timestamp(self):
+        name = stamped_filename('IMG_3701.jpg')
+        self.assertRegex(name, r'^\d{14}_IMG_3701\.jpg$')
+        self.assertEqual(stamped_filename(name), name)
 
     def test_tree_b_path_for_parents_id_on_caregiver(self):
         path = tree_b_relative_path(self.hh, self.cg, "Parents' ID's", 'id-copy.png')
@@ -112,7 +118,6 @@ class DocumentTreeStorageTests(TestCase):
         item = self.hh.checklist_items.filter(sub_item='C01').first()
         item.has_evidence = 'Yes'
         item.save(update_fields=['has_evidence'])
-        # Drop Report card if present, then sync again.
         self.hh.checklist_items.filter(sub_item='Report card').delete()
         _ensure_checklist(self.hh)
         self.assertTrue(self.hh.checklist_items.filter(sub_item='Report card').exists())
@@ -123,9 +128,6 @@ class DocumentTreeStorageTests(TestCase):
 @override_settings(MEDIA_ROOT='/tmp/ovc-doc-trees-api-media')
 class DocumentUploadApiTests(TestCase):
     def setUp(self):
-        from django.contrib.auth.models import Group
-        from rest_framework.authtoken.models import Token
-
         User = get_user_model()
         Group.objects.get_or_create(name='admin')
         self.user = User.objects.create_user(
@@ -159,7 +161,6 @@ class DocumentUploadApiTests(TestCase):
         self.assertIn('C01', subs)
 
     def test_vital_upload_stores_under_vital_documents_and_rejects_wrong_parent(self):
-        # Wrong parent: birth cert on caregiver
         bad = self.client.post('/api/documents/', {
             'file': self._png('birth.png'),
             'parent_type': 'caregiver',
@@ -182,11 +183,13 @@ class DocumentUploadApiTests(TestCase):
         doc = SupportingDocument.objects.get(pk=ok.data['id'])
         self.assertTrue(doc.file.name.startswith('vital-documents/'))
         self.assertIn('Birth certificate', doc.file.name)
+        self.assertRegex(doc.file.name.split('/')[-1], r'^\d{14}_birth\.png$')
         self.assertEqual(ok.data.get('storage_tree'), 'vital')
-        # Original bytes unchanged
         doc.file.open('rb')
         self.assertEqual(doc.file.read(), TINY_PNG)
         doc.file.close()
+        item = self.hh.checklist_items.get(category='vital_document', sub_item='Birth certificates')
+        self.assertEqual(item.has_evidence, 'Yes')
 
     def test_intake_upload_stores_under_case_files(self):
         r = self.client.post('/api/documents/', {
@@ -200,4 +203,51 @@ class DocumentUploadApiTests(TestCase):
         self.assertEqual(r.status_code, 201, r.data)
         doc = SupportingDocument.objects.get(pk=r.data['id'])
         self.assertTrue(doc.file.name.startswith('case-files/SI-0099/01_Intake_Forms/C01/'))
+        self.assertRegex(doc.file.name.split('/')[-1], r'^\d{14}_c01\.png$')
         self.assertEqual(r.data.get('storage_tree'), 'case_file')
+        item = self.hh.checklist_items.get(category='intake_form', sub_item='C01')
+        self.assertEqual(item.has_evidence, 'Yes')
+
+
+@override_settings(MEDIA_ROOT='/tmp/ovc-scan-tree-a-media')
+class ScanConfirmTreeATests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        Group.objects.get_or_create(name='admin')
+        self.user = User.objects.create_user(
+            'OrphanCoordinator', password='x', is_staff=True, is_superuser=True,
+        )
+        self.user.groups.add(Group.objects.get(name='admin'))
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {Token.objects.create(user=self.user).key}')
+
+    def test_confirm_hardlinks_page_into_tree_a_and_keeps_scan_original(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from core.models import ScanIntakeJob, ScanIntakePage
+
+        job = ScanIntakeJob.objects.create(created_by=self.user, status='pending')
+        page = ScanIntakePage(
+            job=job, index=0, form_type='c01', form_confidence=0.9,
+            fields=[
+                {'label': 'Primary Client Surname', 'value': 'Dlamini', 'target': 'caregiver.surname', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'SA ID Number', 'value': '8001015009087', 'target': 'caregiver.id_number', 'confidence': 0.9, 'confirmed': True},
+                {'label': 'Date of birth (from ID)', 'value': '1980-01-01', 'target': 'caregiver.date_of_birth', 'confidence': 0.9, 'confirmed': True},
+            ],
+        )
+        page.image.save('page-c01.png', SimpleUploadedFile('page-c01.png', TINY_PNG, content_type='image/png'), save=True)
+        original = Path(settings.MEDIA_ROOT) / page.image.name
+        self.assertTrue(original.is_file())
+
+        ok = self.client.post(f'/api/scan-intake/{job.pk}/confirm/', {}, format='json')
+        self.assertEqual(ok.status_code, 200, ok.data)
+        self.assertTrue(original.is_file(), 'scan_intake original must stay in place')
+
+        doc = SupportingDocument.objects.get(object_id=ok.data['household'])
+        self.assertTrue(doc.file.name.startswith('case-files/'))
+        self.assertIn('/01_Intake_Forms/C01/', doc.file.name)
+        tree_path = Path(settings.MEDIA_ROOT) / doc.file.name
+        self.assertTrue(tree_path.is_file())
+        self.assertNotEqual(str(original.resolve()), str(tree_path.resolve()))

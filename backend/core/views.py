@@ -690,6 +690,13 @@ class SupportingDocumentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         obj = serializer.save()
+        from .document_trees import mark_checklist_has_evidence, resolve_household
+
+        household = resolve_household(obj.content_object)
+        if household is not None:
+            mark_checklist_has_evidence(
+                household, obj.category, obj.sub_item, user=self.request.user,
+            )
         log_action(self.request.user, 'created', f'Document "{obj.label}" ({obj.get_category_display()})')
 
     def perform_destroy(self, instance):
@@ -1808,7 +1815,7 @@ class BackupRestoreView(APIView):
             for chunk in upload.chunks():
                 out.write(chunk)
         try:
-            restore_from_zip(dest)
+            restore_from_zip(dest, force=True)
         except Exception as exc:
             return Response({'detail': str(exc)}, status=400)
         log_action(request.user, 'edited', f'Restored office file from {dest.name}')

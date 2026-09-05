@@ -145,3 +145,27 @@ yarn build
 ```
 
 SQLite is the default (`USE_SQLITE=true`). Use PostgreSQL only if several staff share one server.
+
+## Go live (single office PC)
+
+1. Copy `backend/.env.example` → `backend/.env`.
+2. Set a new `DJANGO_SECRET_KEY` (long random string). Leave `DJANGO_DEBUG=False`. Set `DJANGO_ALLOWED_HOSTS` for this PC.
+3. Optionally set `MEDIA_ROOT` to a dedicated folder on the office drive (leave blank to use `backend/media`).
+4. From `backend` with the venv active:
+
+```bash
+python manage.py migrate
+python manage.py disable_training_users
+python manage.py production_check
+python manage.py backup
+```
+
+`production_check` must show PASS on DEBUG, secret key, training users inactive, writable MEDIA_ROOT, and backup folder. It never deletes SI- households.
+
+Restore from a zip (will not overwrite live files unless forced):
+
+```bash
+python manage.py restore path/to/ovc-backup-YYYYMMDD-HHMMSS.zip --force
+```
+
+BitLocker disk encryption, Windows auto-lock when idle, and copying backup zips to an external drive are **manual Windows steps** — this app does not turn those on.

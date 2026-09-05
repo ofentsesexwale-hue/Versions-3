@@ -17,7 +17,7 @@ import {
 import { DateField } from "@/components/DateField";
 import { CATEGORY_ORDER } from "@/lib/constants";
 
-const ACCEPT = ".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg";
+const ACCEPT = ".pdf,.png,.jpg,.jpeg,.heic,.heif,application/pdf,image/png,image/jpeg,image/heic,image/heif";
 
 const CAREGIVER_VITALS = new Set(["Parents' ID's", "Death Certificates"]);
 const MEMBER_VITALS = new Set(["Birth certificates", "Clinic Card", "Report card"]);
@@ -99,7 +99,7 @@ export default function DocumentUpload() {
   };
 
   const submit = async () => {
-    if (!files.length) return toast.error("Choose PDF or PNG files");
+    if (!files.length) return toast.error("Choose PDF, PNG, JPEG, or HEIC files");
     if (!category) return toast.error("Choose a category");
     if (!subItem) return toast.error("Choose the checklist item");
     if (!target) return toast.error("Choose the beneficiary this file belongs to");
@@ -146,7 +146,7 @@ export default function DocumentUpload() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Upload beneficiary files</h1>
         <p className="text-sm text-muted-foreground">
-          Attach PDF or PNG files to a specific person (ID copy, clinic card, school report). JPEG scans are accepted. Maximum 25 MB each. Vital documents go into the vital-documents cabinet; other papers follow the physical case-file sections. Files are stored as uploaded — nothing is edited or OCR’d.
+          Attach PDF, PNG, JPEG, or HEIC/HEIF photos to a specific person (ID copy, clinic card, school report). HEIC is converted to JPEG on save. Maximum 25 MB each. Vital documents go into the vital-documents cabinet; other papers follow the physical case-file sections. Files are stored as uploaded — nothing is OCR’d.
         </p>
       </div>
 
@@ -214,7 +214,7 @@ export default function DocumentUpload() {
               <DateField value={docDate} onChange={setDocDate} testId="date-picker-document" />
             </div>
             <div className="space-y-1.5">
-              <Label>PDF or PNG files (you can select more than one)</Label>
+              <Label>PDF, PNG, JPEG, or HEIC files (you can select more than one)</Label>
               <Input
                 type="file"
                 multiple

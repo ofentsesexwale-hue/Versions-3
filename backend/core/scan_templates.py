@@ -18,6 +18,8 @@ CHECKLIST_FOR_FORM = {
     'hiv_risk': ('family_care_plan', 'Risk Assessment Form'),
     'hivstat': ('family_care_plan', 'Risk Assessment Form'),
     'consent': ('family_care_plan', 'Consent form'),
+    'contract': ('family_care_plan', 'Contract between family and organisation'),
+    'girl_boy_index': ('family_care_plan', 'Girl/Boy Index form'),
     'client_referral': ('referral_form', 'Referral form'),
     'process_note': ('process_note', 'SAW Process note - CW 11'),
     'termination': ('process_note', 'Termination report / Exit forms - CW 13'),
