@@ -169,3 +169,22 @@ python manage.py restore path/to/ovc-backup-YYYYMMDD-HHMMSS.zip --force
 ```
 
 BitLocker disk encryption, Windows auto-lock when idle, and copying backup zips to an external drive are **manual Windows steps** — this app does not turn those on.
+
+### Windows `.exe` and torch (8 GB office PC)
+
+`OVC-CaseFile.exe` runs the **bundled** `office/python` (from `desktop/vendor/python-win`), not `backend\.venv`. Future packs install **CPU-only** `torch` / `torchvision` / `transformers` / `pillow-heif` into that bundle (`desktop/bundle-windows-python.sh`). Model weights stay in `%USERPROFILE%\.cache\huggingface` — they are not packed into the exe.
+
+On the office PC, after replacing the exe:
+
+1. Keep a copy of the old file as `OVC-CaseFile.exe.bak`.
+2. Put the new `desktop\release\OVC-CaseFile.exe` (or repo-root copy) in `C:\Users\sebue\OVC-CaseFile\`.
+3. Open **New household** — it must not say `No module named torch`.
+
+If packing is too heavy on 8 GB RAM, use the venv launcher instead:
+
+```bat
+start-desktop.bat
+desktop\use-venv-shortcut.bat
+```
+
+That shortcut runs `backend\.venv` (where torch is already installed) and still uses the same Hugging Face cache.

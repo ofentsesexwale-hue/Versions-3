@@ -44,10 +44,14 @@ function iconPath() {
 }
 
 function pythonBin() {
+  // Packaged Windows: office/python/python.exe (from desktop/vendor/python-win).
+  // Must win over backend\.venv — staff torch installs there do not help the .exe.
   const root = repoRoot();
   const candidates = [
+    path.join(process.resourcesPath, "office", "python", "python.exe"),
     path.join(root, "python", "python.exe"),
     path.join(root, "python", "python"),
+    path.join(root, "desktop", "vendor", "python-win", "python.exe"),
     path.join(process.resourcesPath, "python", "python.exe"),
     path.join(root, "backend", ".venv", "Scripts", "python.exe"),
     path.join(root, "backend", ".venv", "bin", "python"),
@@ -57,6 +61,25 @@ function pythonBin() {
   const found = candidates.find((p) => fs.existsSync(p));
   if (found) return found;
   return process.platform === "win32" ? "python" : "python3";
+}
+
+function huggingfaceCacheEnv() {
+  // Keep TrOCR / LightOnOCR weights in the user HF cache (already ~2 GB on the office PC).
+  // Never embed model weights in the .exe.
+  let home;
+  try {
+    home = app.getPath("home");
+  } catch {
+    home = process.env.USERPROFILE || process.env.HOME || "";
+  }
+  if (!home) return {};
+  const hfHome = path.join(home, ".cache", "huggingface");
+  const hub = path.join(hfHome, "hub");
+  return {
+    HF_HOME: process.env.HF_HOME || hfHome,
+    HUGGINGFACE_HUB_CACHE: process.env.HUGGINGFACE_HUB_CACHE || hub,
+    TRANSFORMERS_CACHE: process.env.TRANSFORMERS_CACHE || hub,
+  };
 }
 
 function engineLogPath() {
@@ -108,6 +131,7 @@ function startOffice() {
   fs.writeSync(log, `\n--- ${new Date().toISOString()} python=${py} ---\n`);
   const env = {
     ...process.env,
+    ...huggingfaceCacheEnv(),
     USE_SQLITE: "true",
     PYTHONUNBUFFERED: "1",
     PATH: `${pyHome}${path.delimiter}${process.env.PATH || ""}`,
@@ -118,6 +142,7 @@ function startOffice() {
     OVC_UI_ROOT: uiRoot,
   };
   if (fs.existsSync(path.join(pyHome, "Lib"))) env.PYTHONHOME = pyHome;
+  fs.writeSync(log, `HF_HOME=${env.HF_HOME || ""}\n`);
 
   spawnSync(py, ["manage.py", "migrate", "--noinput"], { cwd: backend, env, stdio: ["ignore", log, log], windowsHide: true });
   spawnSync(py, ["manage.py", "seed_data"], { cwd: backend, env, stdio: ["ignore", log, log], windowsHide: true });
