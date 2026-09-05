@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 # Download a portable Windows Python and install the CaseFile engine into it.
-# Always installs CPU-only PyTorch (+ transformers, pillow-heif). Never CUDA/ROCm/bitsandbytes.
+# Matched CPU stack (never CUDA / ROCm / bitsandbytes):
+#   torch 2.14.x+cpu + torchvision 0.29.x+cpu  (PyTorch CPU index only)
+#   transformers==4.49.0
+#   opencv-python-headless
+# Staff must NOT pip into %TEMP% portable extracts — that breaks on restart.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/desktop/vendor/python-win"
 URL="https://github.com/astral-sh/python-build-standalone/releases/download/20260325/cpython-3.12.13+20260325-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
 WHEELS="$ROOT/desktop/vendor/win-wheels"
 SITE="$DEST/Lib/site-packages"
+
+# Exact matched pins — keep these in sync with ensure-windows-torch.bat
+TORCH_PIN='torch==2.14.0+cpu'
+TORCHVISION_PIN='torchvision==0.29.0+cpu'
+TRANSFORMERS_PIN='transformers==4.49.0'
 
 unzip_wheels() {
   mkdir -p "$SITE"
@@ -17,22 +26,39 @@ unzip_wheels() {
 }
 
 strip_disallowed_wheels() {
-  # Never ship CUDA / ROCm / bitsandbytes into the office bundle (8 GB AMD PC).
   shopt -s nullglob
-  for bad in "$WHEELS"/*cuda* "$WHEELS"/*rocm* "$WHEELS"/bitsandbytes*; do
+  for bad in "$WHEELS"/*cuda* "$WHEELS"/*rocm* "$WHEELS"/bitsandbytes* "$WHEELS"/*+cu[0-9]*; do
     [ -e "$bad" ] || continue
     echo "Removing disallowed wheel: $(basename "$bad")"
     rm -f "$bad"
   done
 }
 
+wipe_torch_stack() {
+  # Remove mismatched leftover installs (e.g. torch 2.14 + torchvision 0.26).
+  echo "Clearing previous torch / torchvision / transformers from site-packages…"
+  rm -rf \
+    "$SITE"/torch \
+    "$SITE"/torchgen \
+    "$SITE"/functorch \
+    "$SITE"/torchvision \
+    "$SITE"/transformers \
+    "$SITE"/opencv_python_headless* \
+    "$SITE"/cv2 \
+    "$SITE"/torch-*.dist-info \
+    "$SITE"/torchvision-*.dist-info \
+    "$SITE"/transformers-*.dist-info \
+    "$SITE"/opencv_python_headless-*.dist-info
+}
+
 download_engine_wheels() {
-  # Engine deps WITHOUT torch — torch must come from the CPU index only.
+  # Engine deps WITHOUT torch / torchvision / transformers — those are pinned below.
   mkdir -p "$WHEELS"
-  echo "Downloading Windows engine wheels (excluding torch)…"
+  echo "Downloading Windows engine wheels (excluding torch stack)…"
   local req
   req="$(mktemp)"
-  grep -viE '^(torch|torchvision|torchaudio)\b' "$ROOT/backend/requirements-engine.txt" > "$req" || true
+  grep -viE '^(torch|torchvision|torchaudio|transformers)\b' \
+    "$ROOT/backend/requirements-engine.txt" > "$req" || true
   "$ROOT/backend/.venv/bin/python" -m pip download \
     -r "$req" \
     -d "$WHEELS" \
@@ -55,26 +81,65 @@ download_rapidocr_wheels() {
     --no-deps
 }
 
-download_cpu_torch_wheels() {
-  # The .exe runs this bundled Python (office/python), NOT backend\.venv.
-  # LightOnOCR / TrOCR weights stay in %USERPROFILE%\.cache\huggingface — not in the .exe.
+download_matched_cpu_torch_stack() {
+  # The .exe runs this bundled Python (office/python), NOT backend\.venv and NOT %TEMP%.
+  # Model weights stay in %USERPROFILE%\.cache\huggingface.
   mkdir -p "$WHEELS"
-  echo "Downloading Windows CPU PyTorch (no CUDA / no ROCm)…"
+  # Drop any previously downloaded mismatched torch/vision/transformers wheels.
+  shopt -s nullglob
+  rm -f "$WHEELS"/torch-*.whl "$WHEELS"/torchvision-*.whl "$WHEELS"/transformers-*.whl
+
+  echo "Downloading matched CPU torch stack from download.pytorch.org/whl/cpu …"
   "$ROOT/backend/.venv/bin/python" -m pip download \
-    torch torchvision \
+    "$TORCH_PIN" "$TORCHVISION_PIN" \
     -d "$WHEELS" \
     --index-url https://download.pytorch.org/whl/cpu \
     --python-version 3.12 \
     --platform win_amd64 \
-    --only-binary=:all:
-  echo "Downloading transformers + pillow-heif for Windows…"
+    --only-binary=:all: \
+    --no-deps
+
+  echo "Downloading $TRANSFORMERS_PIN + opencv-python-headless + pillow-heif …"
   "$ROOT/backend/.venv/bin/python" -m pip download \
-    transformers pillow-heif \
+    "$TRANSFORMERS_PIN" opencv-python-headless pillow-heif \
     -d "$WHEELS" \
     --python-version 3.12 \
     --platform win_amd64 \
     --only-binary=:all:
+
   strip_disallowed_wheels
+
+  # Sanity: refuse to pack if pins did not resolve.
+  shopt -s nullglob
+  local torch_whl=( "$WHEELS"/torch-2.14.*+cpu*win*.whl )
+  local vision_whl=( "$WHEELS"/torchvision-0.29.*+cpu*win*.whl )
+  local tf_whl=( "$WHEELS"/transformers-4.49.*.whl )
+  if [ ${#torch_whl[@]} -lt 1 ] || [ ${#vision_whl[@]} -lt 1 ] || [ ${#tf_whl[@]} -lt 1 ]; then
+    echo "ERROR: matched torch/torchvision/transformers wheels missing after download." >&2
+    ls -lah "$WHEELS"/torch*.whl "$WHEELS"/transformers*.whl 2>/dev/null || true
+    exit 1
+  fi
+  echo "Using $(basename "${torch_whl[0]}") + $(basename "${vision_whl[0]}") + $(basename "${tf_whl[0]}")"
+}
+
+verify_stack_versions() {
+  # Prefer a real Windows import via Wine; fall back to METADATA checks on Linux CI.
+  if command -v wine >/dev/null 2>&1; then
+    if wine "$DEST/python.exe" -c \
+      "import torch, torchvision; from transformers import TrOCRProcessor; print(torch.__version__, torchvision.__version__, 'TrOCR OK')"; then
+      return 0
+    fi
+    echo "Wine import failed (DLL host limits) — checking installed dist-info pins…"
+  fi
+  local torch_meta vision_meta tf_meta
+  torch_meta="$(echo "$SITE"/torch-2.14.*+cpu*.dist-info/METADATA)"
+  vision_meta="$(echo "$SITE"/torchvision-0.29.*+cpu*.dist-info/METADATA)"
+  tf_meta="$(echo "$SITE"/transformers-4.49.*.dist-info/METADATA)"
+  grep -q '^Version: 2\.14\.' $torch_meta
+  grep -q '^Version: 0\.29\.' $vision_meta
+  grep -q '^Version: 4\.49\.' $tf_meta
+  test -d "$SITE/cv2" || test -d "$SITE"/opencv_python_headless-*.dist-info
+  echo "Pinned stack present: torch 2.14.x+cpu, torchvision 0.29.x+cpu, transformers 4.49.x, opencv"
 }
 
 if [ ! -x "$DEST/python.exe" ] || [ ! -d "$SITE/django" ]; then
@@ -89,12 +154,14 @@ if [ ! -x "$DEST/python.exe" ] || [ ! -d "$SITE/django" ]; then
   rm -rf "$TMP"
   download_engine_wheels
   download_rapidocr_wheels
-  download_cpu_torch_wheels
+  download_matched_cpu_torch_stack
+  wipe_torch_stack
   unzip_wheels
 else
-  echo "Windows Python already present — ensuring RapidOCR + CPU torch…"
+  echo "Windows Python already present — refreshing matched CPU torch stack…"
   download_rapidocr_wheels
-  download_cpu_torch_wheels
+  download_matched_cpu_torch_stack
+  wipe_torch_stack
   unzip_wheels
 fi
 
@@ -102,11 +169,9 @@ test -d "$SITE/django"
 test -d "$SITE/rapidocr_onnxruntime"
 test -d "$SITE/onnxruntime"
 test -d "$SITE/torch"
+test -d "$SITE/torchvision"
 test -d "$SITE/transformers"
+verify_stack_versions
 echo "Bundled Python at $DEST"
 ls -lah "$DEST/python.exe"
 du -sh "$DEST"
-if command -v wine >/dev/null 2>&1; then
-  wine "$DEST/python.exe" -c "import torch; import transformers; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())" \
-    || echo "Wine smoke import skipped (wheels are still installed for Windows)."
-fi

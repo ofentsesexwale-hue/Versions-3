@@ -134,6 +134,18 @@ export default function ScanIntake() {
     }
   };
 
+  const handwriteFieldErrors = (pages) => {
+    const msgs = [];
+    (pages || []).forEach((p) => {
+      (p.fields || []).forEach((f) => {
+        if (f.kind === "handwrite" && f.ocr_status === "error") {
+          msgs.push(f.ocr_error || `${f.label || f.target || "Field"}: handwriting OCR failed`);
+        }
+      });
+    });
+    return msgs;
+  };
+
   const startHandwritePoll = (jobId) => {
     stopHandwritePoll();
     jobIdRef.current = jobId;
@@ -141,9 +153,16 @@ export default function ScanIntake() {
       try {
         const res = await api.get(`/scan-intake/${jobId}/`);
         setJob(res.data);
-        if (!res.data.handwrite_pending) stopHandwritePoll();
-      } catch {
+        if (!res.data.handwrite_pending) {
+          stopHandwritePoll();
+          const errs = handwriteFieldErrors(res.data.pages);
+          if (errs.length) {
+            toast.error(errs[0], { duration: 12000 });
+          }
+        }
+      } catch (e) {
         stopHandwritePoll();
+        toast.error(err(e));
       }
     }, 800);
   };
@@ -155,7 +174,14 @@ export default function ScanIntake() {
 
   const err = (e) => {
     const data = e?.response?.data || {};
-    const detail = data.detail || "Could not read that photo";
+    if (!e?.response) {
+      return e?.message || "Server stopped responding while reading the scan. Check the CaseFile window and try again.";
+    }
+    const status = e.response.status;
+    const detail = data.detail
+      || (status >= 500
+        ? `Server error (${status}) while reading the scan — handwriting OCR may have failed to load.`
+        : "Could not read that photo");
     if (data.conflicts?.length) {
       const first = data.conflicts[0];
       const readings = (first.values || [])
@@ -164,7 +190,7 @@ export default function ScanIntake() {
       return `${detail} ${first.label}: ${readings}.`;
     }
     if (data.unconfirmed?.length) return `${detail} (${data.unconfirmed.join(", ")})`;
-    return detail;
+    return typeof detail === "string" ? detail : "Could not read that photo";
   };
 
   useEffect(() => {
@@ -568,20 +594,28 @@ export default function ScanIntake() {
                       {(page.fields || []).map((field, i) => {
                         const trio = needsConfirm(field.target);
                         const ocrBusy = field.kind === "handwrite" && ["queued", "running"].includes(field.ocr_status);
+                        const ocrFailed = field.kind === "handwrite" && field.ocr_status === "error";
                         const inner = (
-                          <div className="relative">
-                            <Input
-                              value={field.value || ""}
-                              onChange={(e) => setField(page.id, i, { value: e.target.value, ocr_status: "done" })}
-                              className={field.low_confidence ? "border-amber-400" : ""}
-                              disabled={ocrBusy}
-                              data-testid={ocrBusy ? `scan-field-ocr-${field.target}` : undefined}
-                            />
-                            {ocrBusy && (
-                              <span className="absolute inset-y-0 right-3 flex items-center gap-1 text-xs text-sky-700">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                {field.ocr_status === "running" ? "Reading…" : "Queued…"}
-                              </span>
+                          <div className="space-y-1">
+                            <div className="relative">
+                              <Input
+                                value={field.value || ""}
+                                onChange={(e) => setField(page.id, i, { value: e.target.value, ocr_status: "done", ocr_error: "" })}
+                                className={ocrFailed ? "border-red-500" : field.low_confidence ? "border-amber-400" : ""}
+                                disabled={ocrBusy}
+                                data-testid={ocrBusy ? `scan-field-ocr-${field.target}` : ocrFailed ? `scan-field-ocr-error-${field.target}` : undefined}
+                              />
+                              {ocrBusy && (
+                                <span className="absolute inset-y-0 right-3 flex items-center gap-1 text-xs text-sky-700">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  {field.ocr_status === "running" ? "Reading…" : "Queued…"}
+                                </span>
+                              )}
+                            </div>
+                            {ocrFailed && (
+                              <p className="text-xs text-red-700" data-testid={`scan-ocr-error-${field.target}`}>
+                                {field.ocr_error || "Handwriting OCR failed — type the value in, or rebuild the .exe with matched torch / torchvision."}
+                              </p>
                             )}
                           </div>
                         );

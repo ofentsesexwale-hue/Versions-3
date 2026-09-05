@@ -1100,12 +1100,35 @@ def job_has_pending_handwrite(job) -> bool:
     return False
 
 
+def _mark_pending_handwrite_error(job_id: int, message: str) -> None:
+    """Flip remaining queued/running handwrite fields to error with a real message."""
+    from .models import ScanIntakePage
+
+    msg = (message or 'Handwriting OCR failed').strip()[:500]
+    for page in ScanIntakePage.objects.filter(job_id=job_id):
+        fields = list(page.fields or [])
+        changed = False
+        for field in fields:
+            if field.get('kind') != 'handwrite':
+                continue
+            if field.get('ocr_status') not in ('queued', 'running'):
+                continue
+            field['ocr_status'] = 'error'
+            field['ocr_error'] = msg
+            field['low_confidence'] = True
+            changed = True
+        if changed:
+            page.fields = fields
+            page.save(update_fields=['fields'])
+
+
 def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
     """Background pass: OCR queued handwriting fields for one scan job.
 
     Re-crops from each page's warped image, runs TrOCR → LightOnOCR on a
     worker thread, and writes results back onto ``page.fields``. Honours
-    session cancel between fields.
+    session cancel between fields. Engine load failures set ``ocr_status='error'``
+    with ``ocr_error`` so the UI can show the real message (never a silent blank).
     """
     from django.db import close_old_connections
 
@@ -1115,7 +1138,10 @@ def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
         begin_handwrite_session,
         cancel_handwrite_session,
         end_handwrite_session,
+        lightonocr_error,
         read_handwriting,
+        trocr_available,
+        trocr_error,
     )
     from .scan_text import sanitize_ocr_value
 
@@ -1128,8 +1154,21 @@ def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
                 continue
             try:
                 warped = Image.open(page.warped_image).convert('RGB')
-            except Exception:
+            except Exception as exc:
                 logger.exception('Could not open warped image for page %s', page.pk)
+                fields = list(page.fields or [])
+                changed = False
+                for field in fields:
+                    if field.get('kind') == 'handwrite' and field.get('ocr_status') in (
+                        'queued', 'running',
+                    ):
+                        field['ocr_status'] = 'error'
+                        field['ocr_error'] = f'Could not open aligned page image: {exc}'[:500]
+                        field['low_confidence'] = True
+                        changed = True
+                if changed:
+                    page.fields = fields
+                    page.save(update_fields=['fields'])
                 continue
             fields = list(page.fields or [])
             dirty = False
@@ -1140,6 +1179,7 @@ def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
                     continue
                 field_key = field.get('target') or f'page{page.index}:{index}'
                 field['ocr_status'] = 'running'
+                field.pop('ocr_error', None)
                 fields[index] = field
                 page.fields = fields
                 page.save(update_fields=['fields'])
@@ -1157,9 +1197,16 @@ def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
                     text, conf, engine = read_handwriting(
                         crop, session_id=sid, field_key=field_key,
                     )
-                except Exception:
+                except Exception as exc:
                     logger.exception('Handwrite OCR failed for %s', field_key)
-                    text, conf, engine = '', 0.0, 'none'
+                    field['ocr_status'] = 'error'
+                    field['ocr_error'] = (str(exc) or type(exc).__name__)[:500]
+                    field['value'] = field.get('value') or ''
+                    field['low_confidence'] = True
+                    fields[index] = field
+                    page.fields = fields
+                    page.save(update_fields=['fields'])
+                    continue
                 if engine == 'cancelled':
                     field['ocr_status'] = 'cancelled'
                     fields[index] = field
@@ -1172,8 +1219,24 @@ def process_handwrite_job(job_id: int, session_id: str | None = None) -> None:
                 field['ocr_raw'] = text or cleaned
                 field['confidence'] = round(float(conf or 0), 2)
                 field['low_confidence'] = float(conf or 0) < 0.72 or not cleaned
-                field['ocr_status'] = 'done'
-                field['ocr_engine'] = engine if engine not in ('none', 'cancelled') else ''
+                # First TrOCR load failure (DLL / missing package / HF download):
+                # surface the real error instead of looking like an empty reading.
+                load_err = (trocr_error() or lightonocr_error() or '').strip()
+                if engine in ('none', 'error') and not cleaned and (
+                    load_err or not trocr_available()
+                ):
+                    field['ocr_status'] = 'error'
+                    field['ocr_error'] = (
+                        load_err
+                        or 'TrOCR failed to load. Rebuild OVC-CaseFile.exe with the '
+                        'matched torch/torchvision stack in office/python — do not '
+                        'pip into %TEMP% extracts.'
+                    )[:500]
+                    field['ocr_engine'] = ''
+                else:
+                    field['ocr_status'] = 'done'
+                    field['ocr_engine'] = engine if engine not in ('none', 'cancelled', 'error') else ''
+                    field.pop('ocr_error', None)
                 fields[index] = field
                 page.fields = fields
                 page.save(update_fields=['fields'])
@@ -1199,8 +1262,15 @@ def start_handwrite_job(job_id: int, session_id: str | None = None) -> str:
     def _run():
         try:
             process_handwrite_job(job_id, session_id=sid)
-        except Exception:
+        except Exception as exc:
             logger.exception('Background handwrite job %s failed', job_id)
+            try:
+                _mark_pending_handwrite_error(
+                    job_id,
+                    str(exc) or type(exc).__name__,
+                )
+            except Exception:
+                logger.exception('Could not mark handwrite errors for job %s', job_id)
 
     threading.Thread(target=_run, name=f'handwrite-job-{job_id}', daemon=True).start()
     return sid

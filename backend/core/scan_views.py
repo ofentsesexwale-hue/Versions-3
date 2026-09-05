@@ -1,6 +1,7 @@
 """Scan Intake: OCR a photographed DSD file, then confirm before any household write."""
 from io import BytesIO
 from typing import NamedTuple
+import logging
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -45,6 +46,8 @@ from .scan_ocr import (
 from .scan_handwrite_engines import cancel_handwrite_session
 from .scan_templates import CHECKLIST_FOR_FORM, extract_fields, form_choices, form_label
 from .serializers import CaregiverSerializer, HouseholdMemberSerializer, HouseholdSerializer
+
+logger = logging.getLogger(__name__)
 from .views import _ensure_checklist, duplicate_id_matches, scoped_household_qs
 
 
@@ -499,57 +502,78 @@ class ScanIntakeViewSet(viewsets.ViewSet):
             if not household:
                 return Response({'detail': 'That household is not on your caseload.'}, status=404)
 
-        job = ScanIntakeJob.objects.create(
-            created_by=request.user,
-            household=household,
-            ocr_engine='tesseract' if ocr_available() else 'pdf-text',
-            handwriting_warning=True,
-        )
-        index = 0
-        engines = set()
-        for uploaded in files:
-            pages, _ = process_upload(uploaded, defer_handwrite=True)
-            if not pages:
-                continue
-            for rendered in pages:
-                page = ScanIntakePage(
-                    job=job,
-                    index=index,
-                    original_name=getattr(uploaded, 'name', '') or '',
-                    form_type=rendered['form_type'],
-                    form_page=int(rendered.get('form_page') or 0),
-                    form_confidence=rendered['form_confidence'],
-                    ocr_text=rendered['ocr_text'],
-                    ocr_confidence=rendered['ocr_confidence'],
-                    fields=rendered['fields'],
-                    alignment_failed=bool(rendered.get('alignment_failed')),
-                    geometry_missing=bool(rendered.get('geometry_missing')),
-                    template_version=rendered.get('atlas_version') or ATLAS_VERSION,
-                )
-                page.save()
-                image = rendered.get('image')
-                if image is not None:
-                    buf = BytesIO()
-                    image.convert('RGB').save(buf, format='JPEG', quality=78)
-                    page.image.save(f'page-{index}.jpg', ContentFile(buf.getvalue()), save=True)
-                warped = rendered.get('warped')
-                if warped is not None:
-                    buf = BytesIO()
-                    warped.convert('RGB').save(buf, format='JPEG', quality=78)
-                    page.warped_image.save(f'page-{index}-aligned.jpg', ContentFile(buf.getvalue()), save=True)
-                engines.add(rendered.get('ocr_engine') or '')
-                index += 1
-        if index == 0:
-            job.delete()
-            return Response({'detail': 'Could not read any pages from that file.'}, status=400)
-        job.ocr_engine = ','.join(sorted(e for e in engines if e))[:32]
-        job.save(update_fields=['ocr_engine'])
-        # Handwriting OCR continues in a background worker so this response is
-        # not held open while TrOCR/LightOnOCR run. The UI polls for progress.
-        if job_has_pending_handwrite(job):
-            start_handwrite_job(job.id, session_id=str(job.id))
-        log_action(request.user, 'created', f'Scan intake #{job.pk} ({index} pages)')
-        return Response(_job_payload(job, request), status=201)
+        job = None
+        try:
+            job = ScanIntakeJob.objects.create(
+                created_by=request.user,
+                household=household,
+                ocr_engine='tesseract' if ocr_available() else 'pdf-text',
+                handwriting_warning=True,
+            )
+            index = 0
+            engines = set()
+            for uploaded in files:
+                try:
+                    pages, _ = process_upload(uploaded, defer_handwrite=True)
+                except Exception as exc:
+                    logger.exception('Scan upload failed for %s', getattr(uploaded, 'name', ''))
+                    raise RuntimeError(
+                        f'Could not process {getattr(uploaded, "name", "photo")}: '
+                        f'{exc}'
+                    ) from exc
+                if not pages:
+                    continue
+                for rendered in pages:
+                    page = ScanIntakePage(
+                        job=job,
+                        index=index,
+                        original_name=getattr(uploaded, 'name', '') or '',
+                        form_type=rendered['form_type'],
+                        form_page=int(rendered.get('form_page') or 0),
+                        form_confidence=rendered['form_confidence'],
+                        ocr_text=rendered['ocr_text'],
+                        ocr_confidence=rendered['ocr_confidence'],
+                        fields=rendered['fields'],
+                        alignment_failed=bool(rendered.get('alignment_failed')),
+                        geometry_missing=bool(rendered.get('geometry_missing')),
+                        template_version=rendered.get('atlas_version') or ATLAS_VERSION,
+                    )
+                    page.save()
+                    image = rendered.get('image')
+                    if image is not None:
+                        buf = BytesIO()
+                        image.convert('RGB').save(buf, format='JPEG', quality=78)
+                        page.image.save(f'page-{index}.jpg', ContentFile(buf.getvalue()), save=True)
+                    warped = rendered.get('warped')
+                    if warped is not None:
+                        buf = BytesIO()
+                        warped.convert('RGB').save(buf, format='JPEG', quality=78)
+                        page.warped_image.save(f'page-{index}-aligned.jpg', ContentFile(buf.getvalue()), save=True)
+                    engines.add(rendered.get('ocr_engine') or '')
+                    index += 1
+            if index == 0:
+                job.delete()
+                return Response({'detail': 'Could not read any pages from that file.'}, status=400)
+            job.ocr_engine = ','.join(sorted(e for e in engines if e))[:32]
+            job.save(update_fields=['ocr_engine'])
+            # Handwriting OCR continues in a background worker so this response is
+            # not held open while TrOCR/LightOnOCR run. The UI polls for progress.
+            if job_has_pending_handwrite(job):
+                start_handwrite_job(job.id, session_id=str(job.id))
+            log_action(request.user, 'created', f'Scan intake #{job.pk} ({index} pages)')
+            return Response(_job_payload(job, request), status=201)
+        except Exception as exc:
+            logger.exception('Scan intake create failed')
+            if job is not None and getattr(job, 'pk', None):
+                try:
+                    job.delete()
+                except Exception:
+                    pass
+            detail = str(exc).strip() or type(exc).__name__
+            return Response(
+                {'detail': f'Scan Intake failed: {detail}'[:800]},
+                status=500,
+            )
 
     def partial_update(self, request, pk=None):
         _deny_edit(request.user)

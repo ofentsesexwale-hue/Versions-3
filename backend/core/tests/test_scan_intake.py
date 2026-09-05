@@ -214,6 +214,55 @@ class ScanIntakeTests(TestCase):
         finally:
             end_handwrite_session(sid)
 
+    def test_handwrite_job_surfaces_trocr_load_error(self):
+        """TrOCR load failure must set ocr_status=error with a real message (not silent blank)."""
+        from django.core.files.base import ContentFile
+        from PIL import Image
+        from io import BytesIO
+        from unittest.mock import patch
+        from core.models import ScanIntakeJob, ScanIntakePage
+        from core.scan_ocr import process_handwrite_job
+
+        job = ScanIntakeJob.objects.create(created_by=self.user, ocr_engine='test')
+        buf = BytesIO()
+        Image.new('RGB', (80, 40), 'white').save(buf, format='JPEG')
+        page = ScanIntakePage.objects.create(
+            job=job,
+            index=0,
+            form_type='intake',
+            fields=[{
+                'target': 'caregiver.name',
+                'label': 'Name',
+                'kind': 'handwrite',
+                'bbox': [0.1, 0.1, 0.5, 0.3],
+                'ocr_status': 'queued',
+                'value': '',
+            }],
+        )
+        page.warped_image.save('w.jpg', ContentFile(buf.getvalue()), save=True)
+
+        with patch('core.scan_handwrite_engines.read_handwriting', return_value=('', 0.0, 'none')), \
+             patch('core.scan_handwrite_engines.trocr_error', return_value='entry point not found in torchvision\\_C.pyd'), \
+             patch('core.scan_handwrite_engines.lightonocr_error', return_value=''), \
+             patch('core.scan_handwrite_engines.trocr_available', return_value=False):
+            process_handwrite_job(job.id)
+
+        page.refresh_from_db()
+        field = page.fields[0]
+        self.assertEqual(field['ocr_status'], 'error')
+        self.assertIn('torchvision', field.get('ocr_error') or '')
+
+    def test_scan_create_returns_json_error_not_crash(self):
+        from unittest.mock import patch
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        png = SimpleUploadedFile('page.png', b'\x89PNG\r\n\x1a\n' + b'\x00' * 20, content_type='image/png')
+        with patch('core.scan_views.process_upload', side_effect=RuntimeError('simulated TrOCR DLL crash')):
+            r = self.client.post('/api/scan-intake/', {'files': png}, format='multipart')
+        self.assertEqual(r.status_code, 500)
+        self.assertIn('detail', r.data)
+        self.assertIn('TrOCR', r.data['detail'] or '')
+
     def test_intake_without_c01_still_classifies(self):
         form, conf = classify_text(INTAKE_TEXT)
         self.assertEqual(form, 'intake')

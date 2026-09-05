@@ -172,13 +172,33 @@ BitLocker disk encryption, Windows auto-lock when idle, and copying backup zips 
 
 ### Windows `.exe` and torch (8 GB office PC)
 
-`OVC-CaseFile.exe` runs the **bundled** `office/python` (from `desktop/vendor/python-win`), not `backend\.venv`. Future packs install **CPU-only** `torch` / `torchvision` / `transformers` / `pillow-heif` into that bundle (`desktop/bundle-windows-python.sh`). Model weights stay in `%USERPROFILE%\.cache\huggingface` — they are not packed into the exe.
+`OVC-CaseFile.exe` runs the **bundled** `office/python` (from `desktop/vendor/python-win`), not `backend\.venv` and not a `%TEMP%` extract.
+
+**Do not** ask staff to `pip install` into `%TEMP%` portable extracts of the `.exe`. Those folders are wiped or corrupted on restart and cause `torchvision\_C.pyd` / “entry point not found” errors. Always rebuild the exe from a matched vendor stack.
+
+Bundled pins (install only torch/torchvision from `https://download.pytorch.org/whl/cpu`):
+
+- `torch==2.14.0+cpu`
+- `torchvision==0.29.0+cpu`
+- `transformers==4.49.0`
+- `opencv-python-headless`
+
+Build machine:
+
+```bash
+desktop/bundle-windows-python.sh   # or on Windows: desktop\ensure-windows-torch.bat
+# verify:
+#   python -c "import torch, torchvision; from transformers import TrOCRProcessor; print(torch.__version__, torchvision.__version__, 'TrOCR OK')"
+cd desktop && yarn pack:win
+```
+
+Model weights stay in `%USERPROFILE%\.cache\huggingface` — they are not packed into the exe.
 
 On the office PC, after replacing the exe:
 
 1. Keep a copy of the old file as `OVC-CaseFile.exe.bak`.
 2. Put the new `desktop\release\OVC-CaseFile.exe` (or repo-root copy) in `C:\Users\sebue\OVC-CaseFile\`.
-3. Open **New household** — it must not say `No module named torch`.
+3. Open **New household** — it must not say `No module named torch`, and Scan Intake must not 502 on first TrOCR load.
 
 If packing is too heavy on 8 GB RAM, use the venv launcher instead:
 
